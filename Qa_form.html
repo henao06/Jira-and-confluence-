@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QA Testing — Hybred</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f2;min-height:100vh;padding:24px 16px 48px;color:#1a2e26}
+.container{max-width:640px;margin:0 auto}
+.header{background:#0f6e56;border-radius:14px 14px 0 0;padding:18px 24px;text-align:center}
+.header h1{color:#e1f5ee;font-size:15px;font-weight:600;letter-spacing:.1em;text-transform:uppercase}
+.header p{color:#9fe1cb;font-size:11px;margin-top:3px}
+.card{background:#fff;border:1.5px solid #d1e8df;border-top:none;border-radius:0 0 14px 14px;overflow:hidden}
+.section-title{background:#085041;color:#9fe1cb;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:7px 16px}
+.row{display:grid;grid-template-columns:148px 1fr;border-bottom:1.5px solid #e8f5f0;min-height:52px}
+.lbl{background:#e8f5f0;border-right:1.5px solid #d1e8df;padding:10px 14px;display:flex;align-items:center;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#0f6e56;line-height:1.3}
+.lbl small{font-size:9px;font-weight:400;color:#1d9e75;display:block;margin-top:2px;text-transform:none;letter-spacing:0}
+.val{padding:9px 13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.val.top{align-items:flex-start;padding-top:10px}
+input[type=text],input[type=date],textarea,select{width:100%;border:1.5px solid #d1e8df;border-radius:7px;padding:7px 10px;font-size:13px;font-family:inherit;color:#1a2e26;background:#f7fbf9;outline:none;transition:border-color .15s;resize:none}
+input[type=text]:focus,input[type=date]:focus,textarea:focus,select:focus{border-color:#1d9e75;background:#fff}
+.tc-id{font-family:monospace;font-size:14px;font-weight:600;color:#0f6e56;background:#e8f5f0;border:1.5px solid #9fe1cb;border-radius:7px;padding:6px 12px;width:130px;text-align:center;opacity:.6;transition:opacity .3s}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%}
+.steps-wrap{width:100%}
+.step-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.step-num{width:22px;height:22px;min-width:22px;background:#0f6e56;color:#fff;border-radius:50%;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.step-row input{flex:1}
+.btn-rm{width:22px;height:22px;border-radius:50%;border:1.5px solid #d1e8df;background:#fff;color:#aaa;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.btn-rm:hover{border-color:#f09595;color:#e24b4a}
+.btn-add{font-size:12px;color:#1d9e75;background:none;border:1.5px dashed #9fe1cb;border-radius:7px;padding:5px 14px;cursor:pointer;font-family:inherit;margin-top:2px;transition:all .15s}
+.btn-add:hover{background:#e8f5f0}
+.estado-wrap,.severity-wrap{display:flex;gap:7px;width:100%}
+.e-btn,.sev-btn{flex:1;padding:8px 4px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;background:#f7fbf9;color:#aaa;transition:all .15s;text-align:center}
+.e-btn{border:2px solid #e8f0ed}
+.sev-btn{border:1.5px solid #e8f0ed;font-size:11px}
+.e-btn.pass.active{border-color:#3b6d11;background:#eaf3de;color:#27500a}
+.e-btn.fail.active{border-color:#a32d2d;background:#fcebeb;color:#791f1f}
+.e-btn.block.active{border-color:#854f0b;background:#faeeda;color:#633806}
+.sev-btn.critical.active{border-color:#791f1f;background:#fcebeb;color:#791f1f}
+.sev-btn.major.active{border-color:#a32d2d;background:#fff0f0;color:#a32d2d}
+.sev-btn.medium.active{border-color:#854f0b;background:#faeeda;color:#633806}
+.sev-btn.low.active{border-color:#3b6d11;background:#eaf3de;color:#27500a}
+#row-severity{display:none}
+.retest-extra{display:none;margin-top:8px;width:100%}
+.retest-extra.show{display:block}
+.upload-area{width:100%;min-height:68px;border:2px dashed #c0dd97;border-radius:9px;background:#f7fbf9;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;padding:10px;gap:4px}
+.upload-area:hover{background:#eaf3de;border-color:#639922}
+.upload-area input{display:none}
+#preview-img{max-width:100%;max-height:150px;border-radius:7px;border:1.5px solid #d1e8df;display:none;margin-top:8px}
+.submit-wrap{padding:16px 18px;border-top:1.5px solid #e8f5f0;display:flex;gap:10px}
+.btn-submit{flex:1;background:#0f6e56;color:#e1f5ee;border:none;border-radius:9px;padding:13px 20px;font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-submit:hover{background:#1d9e75}
+.btn-submit:disabled{background:#9fe1cb;cursor:not-allowed}
+.btn-reset{background:none;border:1.5px solid #d1e8df;border-radius:9px;padding:13px 18px;font-size:13px;color:#5f5e5a;cursor:pointer;font-family:inherit}
+#toast{display:none;margin-top:14px;padding:14px 18px;border-radius:10px;font-size:13px;line-height:1.6}
+#toast.success{display:block;background:#eaf3de;border:1.5px solid #97c459;color:#27500a}
+#toast.error{display:block;background:#fcebeb;border:1.5px solid #f09595;color:#791f1f}
+#toast a{color:inherit;font-weight:700}
+#toast code{background:rgba(0,0,0,.08);padding:2px 6px;border-radius:4px;font-size:11px}
+.spinner{width:16px;height:16px;border:2px solid #9fe1cb;border-top-color:#0f6e56;border-radius:50%;animation:spin .6s linear infinite;display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+  <h1>Caso de Prueba QA — Hybred</h1>
+  <p>ISO/IEC 29119 · ISTQB · Proyecto BUGS</p>
+</div>
+
+<div class="card">
+
+  <div class="section-title">1 — Identificación</div>
+
+  <div class="row">
+    <div class="lbl">Identificador<small>Auto desde Jira</small></div>
+    <div class="val" style="gap:10px">
+      <input class="tc-id" type="text" id="tc-id" value="Cargando..." maxlength="12" readonly>
+      <span id="next-tc-banner" style="display:none;font-size:11px;font-weight:700;color:#fff;background:#0f6e56;border-radius:6px;padding:4px 10px"></span>
+    </div>
+  </div>
+  <div class="row">
+    <div class="lbl">Módulo *</div>
+    <div class="val">
+      <select id="modulo">
+        <option value="" disabled selected>Seleccionar módulo...</option>
+        <option value="APP WEB|BUGS-2">APP WEB</option>
+        <option value="MEET SERVICE|BUGS-3">MEET SERVICE</option>
+        <option value="PARENTS|BUGS-4">PARENTS</option>
+        <option value="CONTENT CREATION|BUGS-5">CONTENT CREATION</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <div class="lbl">Tipo de prueba *<small>ISO 29119</small></div>
+    <div class="val">
+      <select id="tipo-prueba">
+        <option value="" disabled selected>Seleccionar tipo...</option>
+        <option value="type-funcional">Funcional</option>
+        <option value="type-regresion">Regresión</option>
+        <option value="type-smoke">Smoke</option>
+        <option value="type-integracion">Integración</option>
+        <option value="type-uat">UAT</option>
+        <option value="type-rendimiento">Rendimiento</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <div class="lbl">Descripción *</div>
+    <div class="val"><input type="text" id="descripcion" placeholder="¿Qué se está probando?"></div>
+  </div>
+  <div class="row">
+    <div class="lbl">Historia /<br>Requerimiento<small>Trazabilidad</small></div>
+    <div class="val"><input type="text" id="historia" placeholder="Ej: US-012 o REQ-045 (opcional)"></div>
+  </div>
+
+  <div class="section-title">2 — Configuración de ejecución</div>
+
+  <div class="row">
+    <div class="lbl">Tester *<small>Quién ejecuta</small></div>
+    <div class="val"><input type="text" id="tester" placeholder="Tu nombre"></div>
+  </div>
+  <div class="row">
+    <div class="lbl">Fecha<small>Auto hoy</small></div>
+    <div class="val"><input type="date" id="fecha" style="width:170px"></div>
+  </div>
+  <div class="row">
+    <div class="lbl">Entorno *<small>ISO 29119</small></div>
+    <div class="val top" style="flex-direction:column;gap:6px">
+      <div class="two-col">
+        <select id="navegador">
+          <option value="" disabled selected>Navegador...</option>
+          <option>Chrome</option><option>Firefox</option><option>Safari</option>
+          <option>Edge</option><option>App móvil Android</option><option>App móvil iOS</option>
+        </select>
+        <select id="sistema-op">
+          <option value="" disabled selected>Sistema operativo...</option>
+          <option>Windows 11</option><option>Windows 10</option><option>macOS</option>
+          <option>Android</option><option>iOS</option><option>Linux</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="lbl">Versión / Build<small>ISO 29119</small></div>
+    <div class="val"><input type="text" id="version" placeholder="Ej: v1.2.3 / build-045"></div>
+  </div>
+  <div class="row">
+    <div class="lbl">URL / Pantalla *<small>Dónde reproducir</small></div>
+    <div class="val"><input type="text" id="url-pantalla" placeholder="Ej: https://app.hybred.edu.co/lesson/123"></div>
+  </div>
+  <div class="row">
+    <div class="lbl">Rol de usuario *<small>Cuenta de prueba</small></div>
+    <div class="val">
+      <select id="rol-usuario">
+        <option value="" disabled selected>Rol al momento de la prueba...</option>
+        <option>Estudiante</option>
+        <option>Docente</option>
+        <option>Administrador</option>
+        <option>Parent (padre/madre)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="section-title">3 — Caso de prueba</div>
+
+  <div class="row">
+    <div class="lbl">Precondiciones *</div>
+    <div class="val"><textarea id="precondiciones" rows="2" placeholder="Estado del sistema antes de ejecutar..."></textarea></div>
+  </div>
+  <div class="row">
+    <div class="lbl">Datos de entrada</div>
+    <div class="val"><textarea id="datos" rows="2" placeholder="Usuarios, parámetros, datos usados..."></textarea></div>
+  </div>
+  <div class="row">
+    <div class="lbl">Pasos a seguir *</div>
+    <div class="val top">
+      <div class="steps-wrap" id="steps-wrap">
+        <div class="step-row">
+          <div class="step-num">1</div>
+          <input type="text" placeholder="Paso 1...">
+          <button class="btn-rm" onclick="removeStep(this)">×</button>
+        </div>
+      </div>
+      <button class="btn-add" onclick="addStep()">+ Agregar paso</button>
+    </div>
+  </div>
+  <div class="row">
+    <div class="lbl">Resultado esperado *</div>
+    <div class="val"><textarea id="esperado" rows="2" placeholder="¿Qué debería pasar?"></textarea></div>
+  </div>
+  <div class="row">
+    <div class="lbl">Resultado obtenido *</div>
+    <div class="val"><textarea id="obtenido" rows="2" placeholder="¿Qué pasó realmente?"></textarea></div>
+  </div>
+  <div class="row">
+    <div class="lbl">Postcondiciones<small>ISO 29119</small></div>
+    <div class="val"><textarea id="postcondiciones" rows="2" placeholder="Estado del sistema después de la prueba..."></textarea></div>
+  </div>
+
+  <div class="section-title">4 — Resultado y clasificación</div>
+
+  <div class="row">
+    <div class="lbl">Estado *</div>
+    <div class="val">
+      <div class="estado-wrap">
+        <button class="e-btn pass"  onclick="setEstado('pass',this)">✓ Pass</button>
+        <button class="e-btn fail"  onclick="setEstado('fail',this)">✗ Fail</button>
+        <button class="e-btn block" onclick="setEstado('blocked',this)">⏸ Bloqueado</button>
+      </div>
+    </div>
+  </div>
+  <div class="row" id="row-severity">
+    <div class="lbl">Severidad *<small>Solo si Fail — ISTQB</small></div>
+    <div class="val">
+      <div class="severity-wrap">
+        <button class="sev-btn critical" onclick="setSev('severity-critico',this)">Crítico</button>
+        <button class="sev-btn major"    onclick="setSev('severity-mayor',this)">Mayor</button>
+        <button class="sev-btn medium"   onclick="setSev('severity-medio',this)">Medio</button>
+        <button class="sev-btn low"      onclick="setSev('severity-bajo',this)">Bajo</button>
+      </div>
+    </div>
+  </div>
+  <div class="row" id="row-frecuencia" style="display:none">
+    <div class="lbl">Frecuencia *<small>Solo si Fail</small></div>
+    <div class="val">
+      <div class="estado-wrap">
+        <button class="e-btn" style="font-size:11px" onclick="setFreq('Siempre',this)">Siempre</button>
+        <button class="e-btn" style="font-size:11px" onclick="setFreq('A veces',this)">A veces</button>
+        <button class="e-btn" style="font-size:11px" onclick="setFreq('Solo una vez',this)">Solo una vez</button>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="lbl">Impacto<small>En el usuario</small></div>
+    <div class="val">
+      <select id="impacto">
+        <option value="Bloquea el flujo completo">Bloquea el flujo completo</option>
+        <option value="Afecta función secundaria" selected>Afecta función secundaria</option>
+        <option value="Error visual / cosmético">Error visual / cosmético</option>
+        <option value="Pérdida de datos">Pérdida de datos</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <div class="lbl">Prioridad<small>ISTQB</small></div>
+    <div class="val">
+      <select id="prioridad">
+        <option value="Medium" selected>Medium</option>
+        <option value="Highest">Highest — Crítico</option>
+        <option value="High">High — Alto</option>
+        <option value="Low">Low — Bajo</option>
+        <option value="Lowest">Lowest — Mínimo</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <div class="lbl">¿Es re-test?<small>Historial TC</small></div>
+    <div class="val top" style="flex-direction:column;align-items:flex-start;gap:6px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="es-retest" onchange="toggleRetest(this)">
+        Sí, este TC valida un error corregido
+      </label>
+      <div class="retest-extra" id="retest-extra">
+        <input type="text" id="retest-tc" placeholder="Issue del TC anterior, ej: BUGS-7">
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="lbl">Evidencia<small>Varias imágenes</small></div>
+    <div class="val top" style="flex-direction:column;align-items:stretch;gap:8px">
+      <div class="upload-area" onclick="document.getElementById('evidence').click()">
+        <input type="file" id="evidence" accept="image/*" multiple style="display:none" onchange="previewImgs(this)">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <rect x="2" y="5" width="16" height="11" rx="2" stroke="#639922" stroke-width="1.5"/>
+          <circle cx="7" cy="10" r="2" stroke="#639922" stroke-width="1.5"/>
+          <path d="M2 14l4-4 3 3 3-4 6 5" stroke="#639922" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span style="font-size:12px;color:#5f5e5a">Clic para adjuntar imágenes (puedes seleccionar varias)</span>
+        <span id="upload-count" style="font-size:11px;color:#3b6d11;font-weight:600"></span>
+      </div>
+      <div id="previews-wrap" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+    </div>
+  </div>
+
+  <div class="submit-wrap">
+    <button class="btn-reset" onclick="resetForm()">Limpiar</button>
+    <button class="btn-submit" id="btn-submit" onclick="submitForm()">
+      <span id="btn-txt">Enviar a Jira</span>
+      <div class="spinner" id="spinner"></div>
+    </button>
+  </div>
+
+</div>
+<div id="toast"></div>
+</div>
+
+<script>
+const JIRA_BASE = window.location.origin + '/jira';
+const AUTH = '';
+let estado = '', severidad = '', frecuencia = '';
+
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('fecha').value = new Date().toISOString().split('T')[0];
+  fetchNextTC();
+});
+
+async function fetchNextTC(showBanner) {
+  const f = document.getElementById('tc-id');
+  try {
+    const jql = encodeURIComponent('project = BUGS AND summary ~ "TC-" ORDER BY created DESC');
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/search?jql=${jql}&maxResults=100&fields=summary`,
+      { headers:{ 'Authorization':AUTH, 'Accept':'application/json' }});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    let max = 0;
+    d.issues.forEach(i => {
+      const m = i.fields.summary.match(/TC-(\d+)/i);
+      if (m) max = Math.max(max, parseInt(m[1]));
+    });
+    const nextTC = `TC-${String(max+1).padStart(3,'0')}`;
+    f.value = nextTC;
+    f.removeAttribute('readonly');
+    f.style.opacity = '1';
+    if (showBanner) {
+      const b = document.getElementById('next-tc-banner');
+      if (b) { b.textContent = `Próximo: ${nextTC}`; b.style.display = 'inline-block'; }
+    }
+  } catch {
+    f.value = 'TC-001';
+    f.removeAttribute('readonly');
+    f.style.opacity = '1';
+  }
+}
+
+function setEstado(val, btn) {
+  estado = val;
+  document.querySelectorAll('.e-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const isFail = val === 'fail';
+  document.getElementById('row-severity').style.display = isFail ? 'grid' : 'none';
+  document.getElementById('row-frecuencia').style.display = isFail ? 'grid' : 'none';
+  if (!isFail) {
+    severidad = ''; frecuencia = '';
+    document.querySelectorAll('.sev-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#row-frecuencia .e-btn').forEach(b => b.classList.remove('active'));
+  }
+}
+
+function setFreq(val, btn) {
+  frecuencia = val;
+  document.querySelectorAll('#row-frecuencia .e-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active', 'pass');
+}
+
+function setSev(val, btn) {
+  severidad = val;
+  document.querySelectorAll('.sev-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function toggleRetest(cb) { document.getElementById('retest-extra').classList.toggle('show', cb.checked); }
+
+function addStep() {
+  const wrap = document.getElementById('steps-wrap');
+  const n = wrap.querySelectorAll('.step-row').length + 1;
+  const d = document.createElement('div'); d.className = 'step-row';
+  d.innerHTML = `<div class="step-num">${n}</div><input type="text" placeholder="Paso ${n}..."><button class="btn-rm" onclick="removeStep(this)">×</button>`;
+  wrap.appendChild(d);
+}
+
+function removeStep(btn) {
+  const wrap = document.getElementById('steps-wrap');
+  if (wrap.querySelectorAll('.step-row').length <= 1) return;
+  btn.closest('.step-row').remove();
+  wrap.querySelectorAll('.step-row').forEach((r,i) => { r.querySelector('.step-num').textContent = i+1; r.querySelector('input').placeholder = `Paso ${i+1}...`; });
+}
+
+function previewImgs(input) {
+  const wrap = document.getElementById('previews-wrap');
+  wrap.innerHTML = '';
+  const count = input.files.length;
+  document.getElementById('upload-count').textContent = count > 0 ? count + ' imagen' + (count > 1 ? 'es' : '') + ' seleccionada' + (count > 1 ? 's' : '') : '';
+  Array.from(input.files).forEach((file, i) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const div = document.createElement('div');
+      div.style.cssText = 'position:relative;display:inline-block';
+      const img = document.createElement('img');
+      img.src = e.target.result;
+      img.style.cssText = 'max-width:120px;max-height:90px;border-radius:7px;border:1.5px solid #d1e8df;display:block';
+      const lbl = document.createElement('div');
+      lbl.style.cssText = 'font-size:10px;color:#5f5e5a;margin-top:3px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      lbl.textContent = file.name;
+      div.appendChild(img);
+      div.appendChild(lbl);
+      wrap.appendChild(div);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function setLoading(on) {
+  document.getElementById('btn-txt').style.display = on ? 'none' : 'inline';
+  document.getElementById('spinner').style.display = on ? 'block' : 'none';
+  document.getElementById('btn-submit').disabled = on;
+}
+
+function showToast(type, html) {
+  const t = document.getElementById('toast'); t.className = type; t.innerHTML = html;
+  t.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function mkH(text, level=3) {
+  return { type:'heading', attrs:{level}, content:[{type:'text',text}] };
+}
+function mkP(text) {
+  return { type:'paragraph', content:[{type:'text',text:text||'—'}] };
+}
+function mkB(text) {
+  return { type:'paragraph', content:[{type:'text',text,marks:[{type:'strong'}]}] };
+}
+function mkRule() {
+  return { type:'rule' };
+}
+function mkPanel(panelType, content) {
+  return content;
+}
+function mkOrderedList(items) {
+  return { type:'orderedList', content: items.map(item => ({
+    type:'listItem',
+    content:[{ type:'paragraph', content:[{type:'text',text:item}] }]
+  }))};
+}
+function mkTable(rows) {
+  return { type:'table', attrs:{isNumberColumnEnabled:false,layout:'default',width:760},
+    content: rows.map(([l,v]) => ({ type:'tableRow', content:[
+      {type:'tableHeader',attrs:{background:'#E3FCEF',colwidth:[160]},content:[{type:'paragraph',content:[{type:'text',text:l,marks:[{type:'strong'}]}]}]},
+      {type:'tableCell',content:[{type:'paragraph',content:[{type:'text',text:v||'—'}]}]}
+    ]}))
+  };
+}
+
+async function submitForm() {
+  const tcId       = document.getElementById('tc-id').value.trim();
+  const moduloRaw  = document.getElementById('modulo').value;
+  const tipoPrueba = document.getElementById('tipo-prueba').value;
+  const desc       = document.getElementById('descripcion').value.trim();
+  const historia   = document.getElementById('historia').value.trim();
+  const tester     = document.getElementById('tester').value.trim();
+  const fecha      = document.getElementById('fecha').value;
+  const navegador  = document.getElementById('navegador').value;
+  const sistemaOp  = document.getElementById('sistema-op').value;
+  const version    = document.getElementById('version').value.trim();
+  const urlPantalla= document.getElementById('url-pantalla').value.trim();
+  const rolUsuario = document.getElementById('rol-usuario').value;
+  const precon     = document.getElementById('precondiciones').value.trim();
+  const datos      = document.getElementById('datos').value.trim();
+  const esperado   = document.getElementById('esperado').value.trim();
+  const obtenido   = document.getElementById('obtenido').value.trim();
+  const postcon    = document.getElementById('postcondiciones').value.trim();
+  const impacto    = document.getElementById('impacto').value;
+  const prioridad  = document.getElementById('prioridad').value;
+  const esRetest   = document.getElementById('es-retest').checked;
+  const retestTc   = document.getElementById('retest-tc').value.trim();
+  const fileInput  = document.getElementById('evidence');
+
+  if (!moduloRaw)              return showToast('error','Selecciona un módulo.');
+  if (!urlPantalla)            return showToast('error','Pega la URL o pantalla donde ocurrió la prueba.');
+  if (!rolUsuario)             return showToast('error','Selecciona el rol del usuario durante la prueba.');
+  if (!tipoPrueba)             return showToast('error','Selecciona el tipo de prueba.');
+  if (!desc)                   return showToast('error','Agrega una descripción.');
+  if (!tester)                 return showToast('error','Indica quién ejecuta la prueba.');
+  if (!navegador || !sistemaOp)return showToast('error','Completa el entorno (navegador y sistema operativo).');
+  if (!precon)                 return showToast('error','Completa las precondiciones.');
+  if (!esperado)               return showToast('error','Completa el resultado esperado.');
+  if (!obtenido)               return showToast('error','Completa el resultado obtenido.');
+  if (!estado)                 return showToast('error','Selecciona el estado: Pass, Fail o Bloqueado.');
+  if (estado==='fail'&&!severidad) return showToast('error','Selecciona la severidad del defecto.');
+  if (estado==='fail'&&!frecuencia) return showToast('error','Selecciona la frecuencia del error.');
+  if (esRetest && !retestTc)   return showToast('error','Indica el issue del TC anterior (ej: BUGS-7).');
+
+  const [moduloNombre, epicKey] = moduloRaw.split('|');
+  const tipoLabel  = {'type-funcional':'Funcional','type-regresion':'Regresión','type-smoke':'Smoke','type-integracion':'Integración','type-uat':'UAT','type-rendimiento':'Rendimiento'}[tipoPrueba]||tipoPrueba;
+  const estadoLbl  = {pass:'✅ Pass',fail:'❌ Fail',blocked:'⏸ Bloqueado'}[estado];
+  const sevLbl     = {'severity-critico':'🔴 Crítico','severity-mayor':'🟠 Mayor','severity-medio':'🟡 Medio','severity-bajo':'🟢 Bajo'}[severidad]||'—';
+  const issueType  = estado === 'fail' ? 'Error' : 'Tarea';
+  const entorno    = `${navegador} / ${sistemaOp}${version ? ' / '+version : ''}`;
+  const labels     = [tipoPrueba, `estado-${estado}`, ...(severidad?[severidad]:[]), ...(esRetest?['retest']:[])];
+  const summary    = `${tcId} | ${desc} — ${moduloNombre}`;
+
+  const steps = Array.from(document.querySelectorAll('#steps-wrap .step-row input'))
+    .map((inp,i) => inp.value.trim() ? inp.value.trim() : null).filter(Boolean);
+
+  const infoRows = [
+    ['Identificador', tcId],
+    ['Módulo', moduloNombre],
+    ['Tipo de prueba', tipoLabel],
+    ['Tester', tester],
+    ['Fecha de ejecución', fecha],
+    ['URL / Pantalla', urlPantalla],
+    ['Rol de usuario', rolUsuario],
+    ['Entorno', entorno],
+    ...(historia ? [['Historia / Req.', historia]] : []),
+    ...(esRetest  ? [['Re-test de', retestTc]] : []),
+  ];
+
+  const panelType = estado === 'pass' ? 'success' : estado === 'fail' ? 'error' : 'warning';
+
+  const resultContent = [
+    { type:'paragraph', content:[
+      {type:'text',text:'Estado: ',marks:[{type:'strong'}]},
+      {type:'text',text:estadoLbl}
+    ]},
+    ...(estado==='fail' ? [
+      { type:'paragraph', content:[
+        {type:'text',text:'Severidad: ',marks:[{type:'strong'}]},
+        {type:'text',text:sevLbl}
+      ]},
+      { type:'paragraph', content:[
+        {type:'text',text:'Frecuencia: ',marks:[{type:'strong'}]},
+        {type:'text',text:frecuencia}
+      ]},
+    ] : []),
+    { type:'paragraph', content:[
+      {type:'text',text:'Impacto: ',marks:[{type:'strong'}]},
+      {type:'text',text:impacto}
+    ]},
+    { type:'paragraph', content:[
+      {type:'text',text:'Prioridad: ',marks:[{type:'strong'}]},
+      {type:'text',text:prioridad}
+    ]},
+  ];
+
+  const description = { type:'doc', version:1, content:[
+    ...mkPanel('info', [
+      mkB('📋 Identificación del caso de prueba'),
+      mkTable(infoRows),
+    ]),
+    mkRule(),
+    mkH('Precondiciones'),
+    mkP(precon),
+    mkH('Datos de entrada'),
+    mkP(datos||'—'),
+    mkH('Pasos a seguir'),
+    steps.length > 0 ? mkOrderedList(steps) : mkP('—'),
+    mkH('Resultado esperado'),
+    mkP(esperado),
+    mkH('Resultado obtenido'),
+    mkP(obtenido),
+    ...(postcon ? [mkH('Postcondiciones'), mkP(postcon)] : []),
+    mkRule(),
+    ...mkPanel(panelType, resultContent),
+  ]};
+
+  setLoading(true);
+  document.getElementById('toast').className = '';
+
+  try {
+    const body = { fields:{
+      project:{key:'BUGS'}, summary, description,
+      issuetype:{name:issueType}, priority:{name:prioridad},
+      labels, customfield_10014:epicKey, customfield_10015:fecha,
+    }};
+
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue`, {
+      method:'POST',
+      headers:{'Authorization':AUTH,'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify(body)
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.errors ? Object.values(e.errors).join(', ') : JSON.stringify(e)); }
+
+    const created = await r.json();
+    const issueKey = created.key;
+    const issueUrl = `https://liceopinoverde.atlassian.net/browse/${issueKey}`;
+
+    if (fileInput.files.length > 0) {
+      for (const file of Array.from(fileInput.files)) {
+        const fd = new FormData(); fd.append('file', file);
+        await fetch(`${JIRA_BASE}/rest/api/3/issue/${issueKey}/attachments`, {
+          method:'POST', headers:{'Authorization':AUTH,'X-Atlassian-Token':'no-check'}, body:fd
+        });
+      }
+    }
+
+    if (esRetest && retestTc && retestTc.toUpperCase().startsWith('BUGS')) {
+      await fetch(`${JIRA_BASE}/rest/api/3/issueLink`, {
+        method:'POST',
+        headers:{'Authorization':AUTH,'Content-Type':'application/json'},
+        body:JSON.stringify({ type:{name:'Relates'}, inwardIssue:{key:issueKey}, outwardIssue:{key:retestTc.trim().toUpperCase()} })
+      });
+    }
+
+    const estadoIcon = {
+      pass: '✅ Pass',
+      fail: `❌ Fail — ${sevLbl}`,
+      blocked: '⏸ Bloqueado'
+    }[estado];
+
+    showToast('success',
+      `<div style="font-size:15px;font-weight:700;margin-bottom:6px">${estadoIcon}</div>
+      <div style="background:#fff;border:1.5px solid #97c459;border-radius:8px;padding:10px 14px;margin-bottom:10px">
+        <div style="font-size:12px;color:#5f5e5a;margin-bottom:4px">TC enviado</div>
+        <div style="font-size:20px;font-weight:700;color:#0f6e56;font-family:monospace">${tcId}</div>
+        <div style="font-size:12px;color:#5f5e5a;margin-top:2px">Issue en Jira:
+          <a href="${issueUrl}" target="_blank" style="color:#0f6e56;font-weight:700">${issueKey}</a>
+        </div>
+      </div>
+      Módulo: ${moduloNombre} &nbsp;·&nbsp; Tipo: ${tipoLabel}<br>
+      Entorno: ${entorno}<br><br>
+      <a href="${issueUrl}" target="_blank">Ver en Jira →</a>`
+    );
+    document.getElementById('tc-id').setAttribute('readonly', '');
+    document.getElementById('tc-id').style.opacity = '0.6';
+    document.getElementById('tc-id').value = 'Actualizando...';
+    fetchNextTC(true);
+
+  } catch(e) {
+    showToast('error',
+      `<strong>No se pudo conectar con Jira.</strong> Si abriste el archivo con doble clic, el navegador bloquea la solicitud por CORS.<br><br>
+      <strong>Solución:</strong> ejecuta en la carpeta del archivo:<br>
+      <code>npx serve .</code> &nbsp;o&nbsp; <code>python3 -m http.server 8080</code><br><br>
+      Error técnico: ${e.message}`
+    );
+  } finally { setLoading(false); }
+}
+
+function resetForm() {
+  ['descripcion','historia','tester','precondiciones','datos','esperado','obtenido','postcondiciones','version','url-pantalla','retest-tc'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('modulo').value = '';
+  document.getElementById('tipo-prueba').value = '';
+  document.getElementById('navegador').value = '';
+  document.getElementById('sistema-op').value = '';
+  document.getElementById('rol-usuario').value = '';
+  document.getElementById('impacto').value = 'Afecta función secundaria';
+  document.getElementById('prioridad').value = 'Medium';
+  document.getElementById('evidence').value = '';
+  document.getElementById('previews-wrap').innerHTML = '';
+  document.getElementById('upload-count').textContent = '';
+  document.getElementById('es-retest').checked = false;
+  document.getElementById('retest-extra').classList.remove('show');
+  document.getElementById('row-severity').style.display = 'none';
+  document.getElementById('row-frecuencia').style.display = 'none';
+  frecuencia = '';
+  document.getElementById('fecha').value = new Date().toISOString().split('T')[0];
+  document.querySelectorAll('.e-btn,.sev-btn').forEach(b => b.classList.remove('active'));
+  estado = ''; severidad = '';
+  document.getElementById('toast').className = '';
+}
+</script>
+</body>
+</html>
