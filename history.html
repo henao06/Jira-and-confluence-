@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Historial QA — Hybred</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="page">
+
+<!-- ── Header ── -->
+<div class="hdr">
+  <div class="hdr-icon">
+    <svg fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+      <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+    </svg>
+  </div>
+  <div class="hdr-text">
+    <h1>Historial de pruebas</h1>
+    <p>Hybred · Proyecto BUGS · ISO/IEC 29119 · ISTQB</p>
+  </div>
+  <div class="hdr-right">
+    <div class="hdr-badges">
+      <span class="badge">ISO 29119</span>
+      <span class="badge">ISTQB</span>
+    </div>
+    <a href="/" class="btn-hdr-history">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+      </svg>
+      <span>Nuevo TC</span>
+    </a>
+  </div>
+</div>
+
+<!-- ── Historial ── -->
+<div class="card">
+  <div class="history-hdr">
+    <div class="history-title">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+      </svg>
+      Casos enviados
+    </div>
+    <span class="history-count" id="history-count"></span>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="history-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Descripción</th>
+          <th>Módulo</th>
+          <th>Estado</th>
+          <th>Fecha</th>
+          <th>Issue Jira</th>
+        </tr>
+      </thead>
+      <tbody id="history-body">
+        <tr><td colspan="6"><div class="empty-state">Cargando...</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</div><!-- /page -->
+
+<script>
+async function loadHistory() {
+  const wrap    = document.getElementById('history-body');
+  const countEl = document.getElementById('history-count');
+  try {
+    const rows = await fetch('/api/history').then(r => r.json());
+    if (!rows.length) {
+      wrap.innerHTML = '<tr><td colspan="6"><div class="empty-state">Todavía no hay casos enviados.</div></td></tr>';
+      return;
+    }
+    countEl.textContent = `${rows.length} registro${rows.length > 1 ? 's' : ''}`;
+    const pillClass = { 'Pass':'pill-pass', 'Fail':'pill-fail', 'Bloqueado':'pill-blocked' };
+    wrap.innerHTML = rows.map(r => `
+      <tr>
+        <td class="tc-mono">${r.tc_id || '—'}</td>
+        <td class="desc-cell">${r.descripcion || '—'}</td>
+        <td>${r.modulo || '—'}</td>
+        <td><span class="pill ${pillClass[r.estado] || ''}">${r.estado || '—'}</span></td>
+        <td class="date-cell">${r.fecha || '—'}</td>
+        <td><a href="${r.jira_url}" target="_blank">${r.jira_key || '—'}</a></td>
+      </tr>`).join('');
+  } catch {
+    wrap.innerHTML = '<tr><td colspan="6"><div class="empty-state" style="color:#b91c1c">Error cargando historial.</div></td></tr>';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadHistory);
+</script>
+</body>
+</html>
