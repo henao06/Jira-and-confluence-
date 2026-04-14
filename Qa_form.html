@@ -86,10 +86,10 @@ input[type=text]:focus,input[type=date]:focus,textarea:focus,select:focus{border
     <div class="val">
       <select id="modulo">
         <option value="" disabled selected>Seleccionar módulo...</option>
-        <option value="APP WEB|BUGS-2">APP WEB</option>
-        <option value="MEET SERVICE|BUGS-3">MEET SERVICE</option>
-        <option value="PARENTS|BUGS-4">PARENTS</option>
-        <option value="CONTENT CREATION|BUGS-5">CONTENT CREATION</option>
+        <option value="APP WEB">APP WEB</option>
+        <option value="MEET SERVICE">MEET SERVICE</option>
+        <option value="PARENTS">PARENTS</option>
+        <option value="CONTENT CREATION">CONTENT CREATION</option>
       </select>
     </div>
   </div>
@@ -206,9 +206,9 @@ input[type=text]:focus,input[type=date]:focus,textarea:focus,select:focus{border
     <div class="lbl">Estado *</div>
     <div class="val">
       <div class="estado-wrap">
-        <button class="e-btn pass"  onclick="setEstado('pass',this)">✓ Pass</button>
-        <button class="e-btn fail"  onclick="setEstado('fail',this)">✗ Fail</button>
-        <button class="e-btn block" onclick="setEstado('blocked',this)">⏸ Bloqueado</button>
+        <button class="e-btn pass"  onclick="setEstado('pass',this)">Pass</button>
+        <button class="e-btn fail"  onclick="setEstado('fail',this)">Fail</button>
+        <button class="e-btn block" onclick="setEstado('blocked',this)">Bloqueado</button>
       </div>
     </div>
   </div>
@@ -307,31 +307,34 @@ window.addEventListener('DOMContentLoaded', () => {
   fetchNextTC();
 });
 
-async function fetchNextTC(showBanner) {
+async function fetchNextTC() {
   const f = document.getElementById('tc-id');
+  const banner = document.getElementById('next-tc-banner');
+  f.value = 'Consultando...';
   try {
-    const jql = encodeURIComponent('project = BUGS AND summary ~ "TC-" ORDER BY created DESC');
-    const r = await fetch(`${JIRA_BASE}/rest/api/3/search?jql=${jql}&maxResults=100&fields=summary`,
+    const jql = encodeURIComponent('project = BUGS ORDER BY created DESC');
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/search/jql?jql=${jql}&maxResults=200&fields=summary`,
       { headers:{ 'Authorization':AUTH, 'Accept':'application/json' }});
-    if (!r.ok) throw new Error();
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(`HTTP ${r.status}: ${JSON.stringify(err)}`);
+    }
     const d = await r.json();
     let max = 0;
-    d.issues.forEach(i => {
+    (d.issues || []).forEach(i => {
       const m = i.fields.summary.match(/TC-(\d+)/i);
       if (m) max = Math.max(max, parseInt(m[1]));
     });
-    const nextTC = `TC-${String(max+1).padStart(3,'0')}`;
-    f.value = nextTC;
+    f.value = `TC-${String(max+1).padStart(3,'0')}`;
     f.removeAttribute('readonly');
     f.style.opacity = '1';
-    if (showBanner) {
-      const b = document.getElementById('next-tc-banner');
-      if (b) { b.textContent = `Próximo: ${nextTC}`; b.style.display = 'inline-block'; }
-    }
-  } catch {
+    if (banner) banner.style.display = 'none';
+  } catch(e) {
+    console.error('[fetchNextTC]', e.message);
     f.value = 'TC-001';
     f.removeAttribute('readonly');
     f.style.opacity = '1';
+    if (banner) { banner.textContent = 'Sin conexión — editá el ID'; banner.style.display = 'inline-block'; banner.style.background = '#e24b4a'; }
   }
 }
 
@@ -482,10 +485,10 @@ async function submitForm() {
   if (estado==='fail'&&!frecuencia) return showToast('error','Selecciona la frecuencia del error.');
   if (esRetest && !retestTc)   return showToast('error','Indica el issue del TC anterior (ej: BUGS-7).');
 
-  const [moduloNombre, epicKey] = moduloRaw.split('|');
+  const moduloNombre = moduloRaw;
   const tipoLabel  = {'type-funcional':'Funcional','type-regresion':'Regresión','type-smoke':'Smoke','type-integracion':'Integración','type-uat':'UAT','type-rendimiento':'Rendimiento'}[tipoPrueba]||tipoPrueba;
-  const estadoLbl  = {pass:'✅ Pass',fail:'❌ Fail',blocked:'⏸ Bloqueado'}[estado];
-  const sevLbl     = {'severity-critico':'🔴 Crítico','severity-mayor':'🟠 Mayor','severity-medio':'🟡 Medio','severity-bajo':'🟢 Bajo'}[severidad]||'—';
+  const estadoLbl  = {pass:'Pass',fail:'Fail',blocked:'Bloqueado'}[estado];
+  const sevLbl     = {'severity-critico':'Crítico','severity-mayor':'Mayor','severity-medio':'Medio','severity-bajo':'Bajo'}[severidad]||'—';
   const issueType  = estado === 'fail' ? 'Error' : 'Tarea';
   const entorno    = `${navegador} / ${sistemaOp}${version ? ' / '+version : ''}`;
   const labels     = [tipoPrueba, `estado-${estado}`, ...(severidad?[severidad]:[]), ...(esRetest?['retest']:[])];
@@ -536,7 +539,7 @@ async function submitForm() {
 
   const description = { type:'doc', version:1, content:[
     ...mkPanel('info', [
-      mkB('📋 Identificación del caso de prueba'),
+      mkB('Identificación del caso de prueba'),
       mkTable(infoRows),
     ]),
     mkRule(),
@@ -559,10 +562,13 @@ async function submitForm() {
   document.getElementById('toast').className = '';
 
   try {
+    const moduloLabel = 'modulo-' + moduloNombre.toLowerCase().replace(/\s+/g,'-');
+    labels.push(moduloLabel);
+
     const body = { fields:{
       project:{key:'BUGS'}, summary, description,
       issuetype:{name:issueType}, priority:{name:prioridad},
-      labels, customfield_10014:epicKey, customfield_10015:fecha,
+      labels, customfield_10015:fecha,
     }};
 
     const r = await fetch(`${JIRA_BASE}/rest/api/3/issue`, {
@@ -594,9 +600,9 @@ async function submitForm() {
     }
 
     const estadoIcon = {
-      pass: '✅ Pass',
-      fail: `❌ Fail — ${sevLbl}`,
-      blocked: '⏸ Bloqueado'
+      pass: 'Pass',
+      fail: `Fail — ${sevLbl}`,
+      blocked: 'Bloqueado'
     }[estado];
 
     showToast('success',
@@ -612,10 +618,13 @@ async function submitForm() {
       Entorno: ${entorno}<br><br>
       <a href="${issueUrl}" target="_blank">Ver en Jira →</a>`
     );
-    document.getElementById('tc-id').setAttribute('readonly', '');
-    document.getElementById('tc-id').style.opacity = '0.6';
-    document.getElementById('tc-id').value = 'Actualizando...';
-    fetchNextTC(true);
+    const currentNum = parseInt(tcId.replace(/\D/g, '')) || 0;
+    const nextTC = `TC-${String(currentNum + 1).padStart(3,'0')}`;
+    document.getElementById('tc-id').value = nextTC;
+    document.getElementById('tc-id').removeAttribute('readonly');
+    document.getElementById('tc-id').style.opacity = '1';
+    const banner = document.getElementById('next-tc-banner');
+    if (banner) { banner.textContent = `Próximo: ${nextTC}`; banner.style.display = 'inline-block'; }
 
   } catch(e) {
     showToast('error',
