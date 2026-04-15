@@ -3,6 +3,7 @@
  * Ejecutar: node Server.JS
  * Luego abrir: http://localhost:3000
  * No requiere dependencias externas — solo Node.js
+ * Nuevo token se saca en https://id.atlassian.com/manage-profile/security/api-tokens
  */
 
 const http  = require('http');

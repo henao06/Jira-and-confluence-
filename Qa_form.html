@@ -149,6 +149,12 @@
         </select>
       </div>
     </div>
+    <div class="field">
+      <label class="lbl" for="asignado">Asignar a <span class="hint">Programador responsable</span></label>
+      <select id="asignado">
+        <option value="">Cargando miembros del proyecto...</option>
+      </select>
+    </div>
   </div>
 
   <!-- 3 — Caso de prueba -->
@@ -432,6 +438,7 @@ document.addEventListener('click', e => {
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('fecha').value = new Date().toISOString().split('T')[0];
   fetchNextTC();
+  fetchAssignees();
   initMemoryListeners();
 });
 
@@ -465,6 +472,24 @@ async function fetchNextTC() {
     f.removeAttribute('readonly');
     f.style.opacity = '1';
     if (banner) { banner.textContent = 'Sin conexión'; banner.style.display = 'inline-block'; banner.style.background = '#e24b4a'; }
+  }
+}
+
+/* ── Assignees ── */
+async function fetchAssignees() {
+  const sel = document.getElementById('asignado');
+  try {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/user/assignable/search?project=BUGS&maxResults=50`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const users = await r.json();
+    if (!Array.isArray(users) || users.length === 0) throw new Error('Sin usuarios');
+    sel.innerHTML = '<option value="">Sin asignar</option>' +
+      users.map(u => `<option value="${u.accountId}">${u.displayName}</option>`).join('');
+  } catch(e) {
+    console.error('[fetchAssignees]', e.message);
+    sel.innerHTML = '<option value="">No se pudieron cargar miembros</option>';
   }
 }
 
@@ -767,10 +792,12 @@ async function submitForm() {
     const moduloLabel = 'modulo-' + moduloNombre.toLowerCase().replace(/\s+/g,'-');
     labels.push(moduloLabel);
 
+    const asignado = document.getElementById('asignado').value;
     const body = { fields:{
       project:{key:'BUGS'}, summary, description,
       issuetype:{name:issueType}, priority:{name:prioridad},
       labels, customfield_10015:fecha,
+      ...(asignado ? { assignee:{ accountId: asignado } } : {}),
     }};
 
     const r = await fetch(`${JIRA_BASE}/rest/api/3/issue`, {
