@@ -1,5 +1,4 @@
 [
-
   {
     "tc_id": "TC-007",
     "descripcion": "intalar un pluglin  en /var/www/html/moodle/local y  otro en  /var/www/html/ y intentar  iniciar seción",
@@ -10,5 +9,16 @@
     "jira_key": "BUGS-18",
     "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-18",
     "created_at": "2026-04-16T13:00:47.678Z"
+  },
+  {
+    "tc_id": "TC-008",
+    "descripcion": "Verificar que la interfaz se adapta correctamente a diferentes tamaños de pantalla y dispositivos",
+    "modulo": "APP WEB",
+    "estado": "Fail",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-16",
+    "jira_key": "BUGS-19",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-19",
+    "created_at": "2026-04-16T16:03:05.752Z"
   }
 ]

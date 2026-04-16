@@ -75,6 +75,7 @@
           <option value="" disabled selected>Seleccionar tipo...</option>
           <option value="type-funcional">Funcional</option>
           <option value="type-regresion">Regresión</option>
+          <option value="type-ui">UI</option>
           <option value="type-smoke">Smoke</option>
           <option value="type-integracion">Integración</option>
           <option value="type-uat">UAT</option>
@@ -149,11 +150,19 @@
         </select>
       </div>
     </div>
-    <div class="field">
-      <label class="lbl" for="asignado">Asignar a <span class="hint">Programador responsable</span></label>
-      <select id="asignado">
-        <option value="">Cargando miembros del proyecto...</option>
-      </select>
+    <div class="row2">
+      <div class="field">
+        <label class="lbl" for="asignado">Asignar a <span class="hint">Programador responsable</span></label>
+        <select id="asignado">
+          <option value="">Cargando miembros del proyecto...</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="lbl" for="tipo-actividad">Tipo de actividad <span class="req">*</span></label>
+        <select id="tipo-actividad">
+          <option value="">Cargando tipos...</option>
+        </select>
+      </div>
     </div>
   </div>
 
@@ -171,12 +180,18 @@
   <div class="fields">
     <div class="row2">
       <div class="field">
-        <label class="lbl" for="precondiciones">Precondiciones <span class="req">*</span></label>
-        <textarea id="precondiciones" rows="3" placeholder="Estado del sistema antes de ejecutar..."></textarea>
+        <label class="lbl">Precondiciones <span class="req">*</span></label>
+        <div class="steps-list" id="precon-wrap">
+          <div class="step-row"><div class="step-num">1</div><input type="text" placeholder="Precondición 1..."><button class="btn-rm" onclick="removePrecon(this)">×</button></div>
+        </div>
+        <button class="btn-add" onclick="addPrecon()">+ Agregar precondición</button>
       </div>
       <div class="field">
-        <label class="lbl" for="datos">Datos de entrada</label>
-        <textarea id="datos" rows="3" placeholder="Usuarios, parámetros, datos usados..."></textarea>
+        <label class="lbl">Datos de entrada <span class="hint">Opcional</span></label>
+        <div class="steps-list" id="datos-wrap">
+          <div class="step-row"><div class="step-num">1</div><input type="text" placeholder="Dato 1..."><button class="btn-rm" onclick="removeDatos(this)">×</button></div>
+        </div>
+        <button class="btn-add" onclick="addDatos()">+ Agregar dato</button>
       </div>
     </div>
     <div class="field">
@@ -192,8 +207,11 @@
     </div>
     <div class="row2">
       <div class="field">
-        <label class="lbl" for="esperado">Resultado esperado <span class="req">*</span></label>
-        <textarea id="esperado" rows="3" placeholder="¿Qué debería pasar?"></textarea>
+        <label class="lbl">Resultado esperado <span class="req">*</span></label>
+        <div class="steps-list" id="esperado-wrap">
+          <div class="step-row"><div class="step-num">1</div><input type="text" placeholder="¿Qué debería pasar?"><button class="btn-rm" onclick="removeEsperado(this)">×</button></div>
+        </div>
+        <button class="btn-add" onclick="addEsperado()">+ Agregar ítem</button>
       </div>
       <div class="field">
         <label class="lbl">Resultado obtenido <span class="req">*</span></label>
@@ -208,8 +226,11 @@
       </div>
     </div>
     <div class="field">
-      <label class="lbl" for="postcondiciones">Postcondiciones <span class="hint">ISO 29119 — opcional</span></label>
-      <textarea id="postcondiciones" rows="2" placeholder="Estado del sistema después de la prueba..."></textarea>
+      <label class="lbl">Postcondiciones <span class="hint">ISO 29119 — opcional</span></label>
+      <div class="steps-list" id="postcon-wrap">
+        <div class="step-row"><div class="step-num">1</div><input type="text" placeholder="Postcondición 1..."><button class="btn-rm" onclick="removePostcon(this)">×</button></div>
+      </div>
+      <button class="btn-add" onclick="addPostcon()">+ Agregar postcondición</button>
     </div>
     <div class="field">
       <label class="lbl">Soluciones <span class="hint">Pasos para resolver el problema — opcional</span></label>
@@ -345,6 +366,17 @@
 
 </div><!-- /page -->
 
+<!-- ── Lightbox ── -->
+<div class="lb-overlay" id="lb-overlay" onclick="lbOverlayClick(event)">
+  <button class="lb-close" onclick="closeLb()" title="Cerrar">×</button>
+  <button class="lb-nav lb-prev" id="lb-prev" onclick="lbNav(-1)" title="Anterior">&#8249;</button>
+  <div class="lb-content">
+    <img id="lb-img" src="" alt="">
+    <div class="lb-name" id="lb-name"></div>
+  </div>
+  <button class="lb-nav lb-next" id="lb-next" onclick="lbNav(1)" title="Siguiente">&#8250;</button>
+</div>
+
 <!-- ── Modal ── -->
 <div class="modal-overlay" id="modal-overlay" onclick="handleOverlayClick(event)">
   <div class="modal-box" id="modal-box">
@@ -359,11 +391,11 @@ const JIRA_BASE = window.location.origin + '/jira';
 const AUTH = '';
 let estado = '', severidad = '', frecuencia = '';
 let countdownTimer = null;
+const DRAFT_KEY = 'qa_form_draft';
 
 /* ── Memoria de sesión ── */
 const sessionMemory = {};
-const MEMORY_FIELDS = ['descripcion','historia','tester','url-pantalla','version',
-                       'precondiciones','datos','esperado','postcondiciones','retest-tc'];
+const MEMORY_FIELDS = ['descripcion','historia','tester','url-pantalla','version','retest-tc'];
 
 function memSave(id, value) {
   if (!value || value.trim().length < 3) return;
@@ -387,13 +419,18 @@ function saveAllToMemory() {
     const el = document.getElementById(id);
     if (el) memSave(id, el.value);
   });
-  // Guardar pasos también
-  document.querySelectorAll('#steps-wrap .step-row input').forEach(inp => {
-    memSave('steps', inp.value);
-  });
-  // Guardar obtenido también
-  document.querySelectorAll('#obtenido-wrap .step-row input').forEach(inp => {
-    memSave('obtenido', inp.value);
+  const listFields = [
+    ['#precon-wrap',   'precondiciones'],
+    ['#datos-wrap',    'datos'],
+    ['#steps-wrap',    'steps'],
+    ['#esperado-wrap', 'esperado'],
+    ['#obtenido-wrap', 'obtenido'],
+    ['#postcon-wrap',  'postcondiciones'],
+    ['#soluc-wrap',    'soluciones'],
+    ['#sugg-wrap',     'sugerencias'],
+  ];
+  listFields.forEach(([sel, key]) => {
+    document.querySelectorAll(`${sel} .step-row input`).forEach(inp => memSave(key, inp.value));
   });
   // Guardar sugerencias también
   document.querySelectorAll('#sugg-wrap .step-row input').forEach(inp => {
@@ -458,34 +495,27 @@ function initMemoryListeners() {
   });
 }
 
-// Sugerencias en pasos (delegadas al contenedor)
+// Autocompletado en todas las listas dinámicas
+const DYNAMIC_LISTS = [
+  ['#precon-wrap',   'precondiciones'],
+  ['#datos-wrap',    'datos'],
+  ['#steps-wrap',    'steps'],
+  ['#esperado-wrap', 'esperado'],
+  ['#obtenido-wrap', 'obtenido'],
+  ['#postcon-wrap',  'postcondiciones'],
+  ['#soluc-wrap',    'soluciones'],
+  ['#sugg-wrap',     'sugerencias'],
+];
+
 document.addEventListener('focusin', e => {
-  if (e.target.closest('#steps-wrap') && e.target.tagName === 'INPUT') {
-    showSuggestions(e.target, 'steps');
-  }
-  if (e.target.closest('#obtenido-wrap') && e.target.tagName === 'INPUT') {
-    showSuggestions(e.target, 'obtenido');
-  }
-  if (e.target.closest('#sugg-wrap') && e.target.tagName === 'INPUT') {
-    showSuggestions(e.target, 'sugerencias');
-  }
-  if (e.target.closest('#soluc-wrap') && e.target.tagName === 'INPUT') {
-    showSuggestions(e.target, 'soluciones');
-  }
+  if (e.target.tagName !== 'INPUT') return;
+  const match = DYNAMIC_LISTS.find(([sel]) => e.target.closest(sel));
+  if (match) showSuggestions(e.target, match[1]);
 });
 document.addEventListener('input', e => {
-  if (e.target.closest('#steps-wrap') && e.target.tagName === 'INPUT') {
-    showSuggestions(e.target, 'steps');
-  }
-  if (e.target.closest('#obtenido-wrap') && e.target.tagName === 'INPUT') {
-    showSuggestions(e.target, 'obtenido');
-  }
-  if (e.target.closest('#sugg-wrap') && e.target.tagName === 'INPUT') {
-    showSuggestions(e.target, 'sugerencias');
-  }
-  if (e.target.closest('#soluc-wrap') && e.target.tagName === 'INPUT') {
-    showSuggestions(e.target, 'soluciones');
-  }
+  if (e.target.tagName !== 'INPUT') return;
+  const match = DYNAMIC_LISTS.find(([sel]) => e.target.closest(sel));
+  if (match) showSuggestions(e.target, match[1]);
 });
 
 document.addEventListener('click', e => {
@@ -494,10 +524,118 @@ document.addEventListener('click', e => {
   }
 });
 
+/* ── Draft persistence ── */
+function persistForm() {
+  const draft = {
+    tcId:          document.getElementById('tc-id').value,
+    modulo:        document.getElementById('modulo').value,
+    tipoPrueba:    document.getElementById('tipo-prueba').value,
+    descripcion:   document.getElementById('descripcion').value,
+    historia:      document.getElementById('historia').value,
+    tester:        document.getElementById('tester').value,
+    fecha:         document.getElementById('fecha').value,
+    navegador:     document.getElementById('navegador').value,
+    sistemaOp:     document.getElementById('sistema-op').value,
+    version:       document.getElementById('version').value,
+    urlPantalla:   document.getElementById('url-pantalla').value,
+    rolUsuario:    document.getElementById('rol-usuario').value,
+    asignado:      document.getElementById('asignado').value,
+    tipoActividad: document.getElementById('tipo-actividad').value,
+    precondiciones: Array.from(document.querySelectorAll('#precon-wrap .step-row input')).map(i => i.value),
+    datos:          Array.from(document.querySelectorAll('#datos-wrap .step-row input')).map(i => i.value),
+    esperado:       Array.from(document.querySelectorAll('#esperado-wrap .step-row input')).map(i => i.value),
+    postcondiciones:Array.from(document.querySelectorAll('#postcon-wrap .step-row input')).map(i => i.value),
+    impacto:       document.getElementById('impacto').value,
+    prioridad:     document.getElementById('prioridad').value,
+    esRetest:      document.getElementById('es-retest').checked,
+    retestTc:      document.getElementById('retest-tc').value,
+    estado, severidad, frecuencia,
+    steps:      Array.from(document.querySelectorAll('#steps-wrap .step-row input')).map(i => i.value),
+    obtenido:   Array.from(document.querySelectorAll('#obtenido-wrap .step-row input')).map(i => i.value),
+    soluciones: Array.from(document.querySelectorAll('#soluc-wrap .step-row input')).map(i => i.value),
+    sugerencias:Array.from(document.querySelectorAll('#sugg-wrap .step-row input')).map(i => i.value),
+  };
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+}
+
+function clearDraft() { localStorage.removeItem(DRAFT_KEY); }
+
+function rebuildList(wrapId, items, placeholder, removeFn) {
+  if (!items || items.length === 0) return;
+  const wrap = document.getElementById(wrapId);
+  wrap.innerHTML = '';
+  items.forEach((val, i) => {
+    const d = document.createElement('div'); d.className = 'step-row';
+    d.innerHTML = `<div class="step-num">${i+1}</div><input type="text" placeholder="${placeholder} ${i+1}..." value="${val.replace(/"/g,'&quot;')}"><button class="btn-rm" onclick="${removeFn}(this)">×</button>`;
+    wrap.appendChild(d);
+  });
+}
+
+function restoreForm() {
+  const raw = localStorage.getItem(DRAFT_KEY);
+  if (!raw) return;
+  let d;
+  try { d = JSON.parse(raw); } catch { return; }
+
+  const set = (id, val) => { if (val !== undefined && val !== null) { const el = document.getElementById(id); if (el) el.value = val; } };
+
+  if (d.tcId) set('tc-id', d.tcId);
+  set('modulo', d.modulo); set('tipo-prueba', d.tipoPrueba);
+  set('descripcion', d.descripcion); set('historia', d.historia);
+  set('tester', d.tester); set('fecha', d.fecha);
+  set('navegador', d.navegador); set('sistema-op', d.sistemaOp);
+  set('version', d.version); set('url-pantalla', d.urlPantalla);
+  set('rol-usuario', d.rolUsuario);
+  // tipo-actividad se restaura después del fetch en fetchIssueTypes
+  set('impacto', d.impacto); set('prioridad', d.prioridad);
+  set('retest-tc', d.retestTc);
+
+  if (d.esRetest) {
+    document.getElementById('es-retest').checked = true;
+    document.getElementById('retest-extra').classList.add('show');
+  }
+
+  // Listas dinámicas
+  rebuildList('precon-wrap',   d.precondiciones, 'Precondición', 'removePrecon');
+  rebuildList('datos-wrap',    d.datos,           'Dato',         'removeDatos');
+  rebuildList('steps-wrap',    d.steps,           'Paso',         'removeStep');
+  rebuildList('esperado-wrap', d.esperado,        'Ítem',         'removeEsperado');
+  rebuildList('obtenido-wrap', d.obtenido,        'Ítem',         'removeObtenido');
+  rebuildList('postcon-wrap',  d.postcondiciones, 'Postcondición','removePostcon');
+  rebuildList('soluc-wrap',    d.soluciones,      'Solución',     'removeSoluc');
+  rebuildList('sugg-wrap',     d.sugerencias,     'Sugerencia',   'removeSugg');
+
+  // Botones de estado
+  if (d.estado) {
+    const map = { pass: '.e-btn.pass', fail: '.e-btn.fail', blocked: '.e-btn.block' };
+    const btn = document.querySelector(map[d.estado]);
+    if (btn) setEstado(d.estado, btn);
+  }
+  if (d.severidad) {
+    const map = { 'severity-critico': '.sev-btn.critical', 'severity-mayor': '.sev-btn.major', 'severity-medio': '.sev-btn.medium', 'severity-bajo': '.sev-btn.low' };
+    const btn = document.querySelector(map[d.severidad]);
+    if (btn) setSev(d.severidad, btn);
+  }
+  if (d.frecuencia) {
+    document.querySelectorAll('#row-frecuencia .e-btn').forEach(btn => {
+      if (btn.textContent.trim() === d.frecuencia) setFreq(d.frecuencia, btn);
+    });
+  }
+}
+
+/* Persistir en cada interacción */
+document.addEventListener('input',  () => persistForm());
+document.addEventListener('change', () => persistForm());
+document.addEventListener('click',  e => {
+  if (e.target.matches('.e-btn, .sev-btn')) setTimeout(persistForm, 0);
+});
+
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('fecha').value = new Date().toISOString().split('T')[0];
+  restoreForm();
   fetchNextTC();
   fetchAssignees();
+  fetchIssueTypes();
   initMemoryListeners();
 });
 
@@ -521,16 +659,51 @@ async function fetchNextTC() {
       if (m) max = Math.max(max, parseInt(m[1]));
     });
     const next = `TC-${String(max+1).padStart(3,'0')}`;
-    f.value = next;
+    // Solo sobreescribir si no hay draft guardado
+    const hasDraft = (() => { try { return !!JSON.parse(localStorage.getItem(DRAFT_KEY)||'{}').tcId; } catch { return false; } })();
+    if (!hasDraft) {
+      f.value = next;
+      if (banner) { banner.textContent = `Próximo: ${next}`; banner.style.display = 'inline-block'; banner.style.background = 'var(--g7)'; }
+    } else {
+      if (banner) { banner.textContent = `Próximo Jira: ${next}`; banner.style.display = 'inline-block'; banner.style.background = 'var(--g7)'; }
+    }
     f.removeAttribute('readonly');
     f.style.opacity = '1';
-    if (banner) { banner.textContent = `Próximo: ${next}`; banner.style.display = 'inline-block'; banner.style.background = 'var(--g7)'; }
   } catch(e) {
     console.error('[fetchNextTC]', e.message);
-    f.value = 'TC-001';
+    const hasDraft = (() => { try { return !!JSON.parse(localStorage.getItem(DRAFT_KEY)||'{}').tcId; } catch { return false; } })();
+    if (!hasDraft) f.value = 'TC-001';
     f.removeAttribute('readonly');
     f.style.opacity = '1';
     if (banner) { banner.textContent = 'Sin conexión'; banner.style.display = 'inline-block'; banner.style.background = '#e24b4a'; }
+  }
+}
+
+/* ── Issue Types ── */
+async function fetchIssueTypes() {
+  const sel = document.getElementById('tipo-actividad');
+  try {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/project/BUGS`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const project = await r.json();
+    const types = (project.issueTypes || []).filter(t => !t.subtask);
+    if (types.length === 0) throw new Error('Sin tipos');
+    sel.innerHTML = types.map(t =>
+      `<option value="${t.name}" data-id="${t.id}">${t.name}</option>`
+    ).join('');
+    // Restaurar del draft
+    try { const saved = JSON.parse(localStorage.getItem(DRAFT_KEY)||'{}').tipoActividad; if (saved) sel.value = saved; } catch {}
+  } catch(e) {
+    console.error('[fetchIssueTypes]', e.message);
+    sel.innerHTML = `
+      <option value="Error">Error</option>
+      <option value="Tarea">Tarea</option>
+      <option value="Historia">Historia</option>
+      <option value="Épica">Épica</option>
+    `;
+    try { const saved = JSON.parse(localStorage.getItem(DRAFT_KEY)||'{}').tipoActividad; if (saved) sel.value = saved; } catch {}
   }
 }
 
@@ -546,6 +719,8 @@ async function fetchAssignees() {
     if (!Array.isArray(users) || users.length === 0) throw new Error('Sin usuarios');
     sel.innerHTML = '<option value="">Sin asignar</option>' +
       users.map(u => `<option value="${u.accountId}">${u.displayName}</option>`).join('');
+    // Restaurar asignado del draft
+    try { const saved = JSON.parse(localStorage.getItem(DRAFT_KEY)||'{}').asignado; if (saved) sel.value = saved; } catch {}
   } catch(e) {
     console.error('[fetchAssignees]', e.message);
     sel.innerHTML = '<option value="">No se pudieron cargar miembros</option>';
@@ -599,6 +774,41 @@ function removeStep(btn) {
     r.querySelector('input').placeholder = `Paso ${i+1}...`;
   });
 }
+
+function makeListFns(wrapId, label, removeFnName) {
+  return {
+    add() {
+      const wrap = document.getElementById(wrapId);
+      const n = wrap.querySelectorAll('.step-row').length + 1;
+      const d = document.createElement('div'); d.className = 'step-row';
+      d.innerHTML = `<div class="step-num">${n}</div><input type="text" placeholder="${label} ${n}..."><button class="btn-rm" onclick="${removeFnName}(this)">×</button>`;
+      wrap.appendChild(d);
+    },
+    remove(btn) {
+      const wrap = document.getElementById(wrapId);
+      if (wrap.querySelectorAll('.step-row').length <= 1) return;
+      btn.closest('.step-row').remove();
+      wrap.querySelectorAll('.step-row').forEach((r,i) => {
+        r.querySelector('.step-num').textContent = i+1;
+        r.querySelector('input').placeholder = `${label} ${i+1}...`;
+      });
+    }
+  };
+}
+
+const _precon  = makeListFns('precon-wrap',   'Precondición', 'removePrecon');
+const _datos   = makeListFns('datos-wrap',    'Dato',         'removeDatos');
+const _esperado= makeListFns('esperado-wrap', 'Ítem',         'removeEsperado');
+const _postcon = makeListFns('postcon-wrap',  'Postcondición','removePostcon');
+
+function addPrecon()        { _precon.add(); }
+function removePrecon(btn)  { _precon.remove(btn); }
+function addDatos()         { _datos.add(); }
+function removeDatos(btn)   { _datos.remove(btn); }
+function addEsperado()      { _esperado.add(); }
+function removeEsperado(btn){ _esperado.remove(btn); }
+function addPostcon()       { _postcon.add(); }
+function removePostcon(btn) { _postcon.remove(btn); }
 
 function addObtenido() {
   const wrap = document.getElementById('obtenido-wrap');
@@ -685,7 +895,7 @@ function renderPreviews() {
       const item = document.createElement('div');
       item.className = 'preview-item';
       item.innerHTML = `
-        <img src="${e.target.result}" title="${file.name}">
+        <img src="${e.target.result}" title="${file.name}" onclick="openLb(${i})" style="cursor:zoom-in">
         <button type="button" class="preview-remove" onclick="removeImg(${i})" title="Quitar imagen">×</button>
         <div class="preview-name">${file.name.length > 14 ? file.name.slice(0,12)+'…' : file.name}</div>
       `;
@@ -830,12 +1040,12 @@ async function submitForm() {
   const version     = document.getElementById('version').value.trim();
   const urlPantalla = document.getElementById('url-pantalla').value.trim();
   const rolUsuario  = document.getElementById('rol-usuario').value;
-  const precon      = document.getElementById('precondiciones').value.trim();
-  const datos       = document.getElementById('datos').value.trim();
-  const esperado    = document.getElementById('esperado').value.trim();
+  const precon      = Array.from(document.querySelectorAll('#precon-wrap .step-row input')).map(i => i.value.trim()).filter(Boolean);
+  const datos       = Array.from(document.querySelectorAll('#datos-wrap .step-row input')).map(i => i.value.trim()).filter(Boolean);
+  const esperado    = Array.from(document.querySelectorAll('#esperado-wrap .step-row input')).map(i => i.value.trim()).filter(Boolean);
   const obtenido    = Array.from(document.querySelectorAll('#obtenido-wrap .step-row input'))
     .map(inp => inp.value.trim()).filter(Boolean);
-  const postcon     = document.getElementById('postcondiciones').value.trim();
+  const postcon     = Array.from(document.querySelectorAll('#postcon-wrap .step-row input')).map(i => i.value.trim()).filter(Boolean);
   const impacto     = document.getElementById('impacto').value;
   const prioridad   = document.getElementById('prioridad').value;
   const soluciones  = Array.from(document.querySelectorAll('#soluc-wrap .step-row input'))
@@ -852,19 +1062,20 @@ async function submitForm() {
   if (!desc)                    return showError('Agregá una descripción.');
   if (!tester)                  return showError('Indicá quién ejecuta la prueba.');
   if (!navegador || !sistemaOp) return showError('Completá el entorno (navegador y sistema operativo).');
-  if (!precon)                  return showError('Completá las precondiciones.');
-  if (!esperado)                return showError('Completá el resultado esperado.');
+  if (precon.length === 0)      return showError('Completá las precondiciones.');
+  if (esperado.length === 0)    return showError('Completá el resultado esperado.');
   if (obtenido.length === 0)    return showError('Completá el resultado obtenido.');
+  if (!issueType)               return showError('Seleccioná el tipo de actividad.');
   if (!estado)                  return showError('Seleccioná el estado: Pass, Fail o Bloqueado.');
   if (estado==='fail'&&!severidad)  return showError('Seleccioná la severidad del defecto.');
   if (estado==='fail'&&!frecuencia) return showError('Seleccioná la frecuencia del error.');
   if (esRetest && !retestTc)    return showError('Indicá el issue del TC anterior (ej: BUGS-7).');
 
   const moduloNombre = moduloRaw;
-  const tipoLabel  = {'type-funcional':'Funcional','type-regresion':'Regresión','type-smoke':'Smoke','type-integracion':'Integración','type-uat':'UAT','type-rendimiento':'Rendimiento'}[tipoPrueba]||tipoPrueba;
+  const tipoLabel  = {'type-funcional':'Funcional','type-regresion':'Regresión','type-ui':'UI','type-smoke':'Smoke','type-integracion':'Integración','type-uat':'UAT','type-rendimiento':'Rendimiento'}[tipoPrueba]||tipoPrueba;
   const estadoLbl  = {pass:'Pass',fail:'Fail',blocked:'Bloqueado'}[estado];
   const sevLbl     = {'severity-critico':'Crítico','severity-mayor':'Mayor','severity-medio':'Medio','severity-bajo':'Bajo'}[severidad]||'—';
-  const issueType  = estado === 'fail' ? 'Error' : 'Tarea';
+  const issueType  = document.getElementById('tipo-actividad').value;
   const entorno    = `${navegador} / ${sistemaOp}${version ? ' / '+version : ''}`;
   const labels     = [tipoPrueba, `estado-${estado}`, ...(severidad?[severidad]:[]), ...(esRetest?['retest']:[])];
   const summary    = `${tcId} | ${desc} — ${moduloNombre}`;
@@ -894,12 +1105,12 @@ async function submitForm() {
   const description = { type:'doc', version:1, content:[
     ...mkPanel('info', [mkB('Identificación del caso de prueba'), mkTable(infoRows)]),
     mkRule(),
-    mkH('Precondiciones'), mkP(precon),
-    mkH('Datos de entrada'), mkP(datos||'—'),
+    mkH('Precondiciones'), mkOrderedList(precon),
+    mkH('Datos de entrada'), datos.length > 0 ? mkOrderedList(datos) : mkP('—'),
     mkH('Pasos a seguir'), steps.length > 0 ? mkOrderedList(steps) : mkP('—'),
-    mkH('Resultado esperado'), mkP(esperado),
+    mkH('Resultado esperado'), mkOrderedList(esperado),
     mkH('Resultado obtenido'), mkOrderedList(obtenido),
-    ...(postcon ? [mkH('Postcondiciones'), mkP(postcon)] : []),
+    ...(postcon.length > 0 ? [mkH('Postcondiciones'), mkOrderedList(postcon)] : []),
     ...(soluciones.length > 0  ? [mkH('Soluciones'),    mkOrderedList(soluciones)]  : []),
     ...(sugerencias.length > 0 ? [mkH('Sugerencias'),   mkOrderedList(sugerencias)] : []),
     mkRule(),
@@ -976,7 +1187,8 @@ async function submitForm() {
 /* ── Reset ── */
 // Post-envío: limpia solo lo que cambia entre TCs
 function softReset() {
-  ['descripcion','historia','precondiciones','datos','esperado','postcondiciones','retest-tc']
+  clearDraft();
+  ['descripcion','historia','retest-tc']
     .forEach(id => document.getElementById(id).value = '');
   document.getElementById('tipo-prueba').value = '';
   document.getElementById('rol-usuario').value = '';
@@ -993,9 +1205,15 @@ function softReset() {
   // Resetear steps a uno vacío
   document.getElementById('steps-wrap').innerHTML =
     `<div class="step-row"><div class="step-num">1</div><input type="text" placeholder="Paso 1..."><button class="btn-rm" onclick="removeStep(this)">×</button></div>`;
-  // Resetear obtenido a un ítem vacío
-  document.getElementById('obtenido-wrap').innerHTML =
-    `<div class="step-row"><div class="step-num">1</div><input type="text" placeholder="¿Qué pasó realmente?"><button class="btn-rm" onclick="removeObtenido(this)">×</button></div>`;
+  const resetList = (id, ph, removeFn) => {
+    document.getElementById(id).innerHTML =
+      `<div class="step-row"><div class="step-num">1</div><input type="text" placeholder="${ph}"><button class="btn-rm" onclick="${removeFn}(this)">×</button></div>`;
+  };
+  resetList('precon-wrap',   'Precondición 1...',    'removePrecon');
+  resetList('datos-wrap',    'Dato 1...',             'removeDatos');
+  resetList('esperado-wrap', '¿Qué debería pasar?',  'removeEsperado');
+  resetList('obtenido-wrap', '¿Qué pasó realmente?', 'removeObtenido');
+  resetList('postcon-wrap',  'Postcondición 1...',   'removePostcon');
   // Resetear soluciones a una vacía
   document.getElementById('soluc-wrap').innerHTML =
     `<div class="step-row"><div class="step-num">1</div><input type="text" placeholder="Solución 1..."><button class="btn-rm" onclick="removeSoluc(this)">×</button></div>`;
@@ -1006,13 +1224,56 @@ function softReset() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+/* ── Lightbox ── */
+let lbIndex = 0;
+let lbSrcs  = [];
+
+function openLb(index) {
+  // Construir lista de srcs en el orden actual de uploadedFiles
+  const imgs = document.querySelectorAll('#previews-wrap .preview-item img');
+  lbSrcs = Array.from(imgs).map(img => ({ src: img.src, name: img.title }));
+  lbIndex = index;
+  lbRender();
+  document.getElementById('lb-overlay').classList.add('show');
+  document.addEventListener('keydown', lbKeydown);
+}
+
+function closeLb() {
+  document.getElementById('lb-overlay').classList.remove('show');
+  document.removeEventListener('keydown', lbKeydown);
+}
+
+function lbRender() {
+  const { src, name } = lbSrcs[lbIndex];
+  document.getElementById('lb-img').src  = src;
+  document.getElementById('lb-name').textContent = name;
+  document.getElementById('lb-prev').style.visibility = lbIndex > 0 ? 'visible' : 'hidden';
+  document.getElementById('lb-next').style.visibility = lbIndex < lbSrcs.length - 1 ? 'visible' : 'hidden';
+}
+
+function lbNav(dir) {
+  lbIndex = Math.max(0, Math.min(lbSrcs.length - 1, lbIndex + dir));
+  lbRender();
+}
+
+function lbOverlayClick(e) {
+  if (e.target === document.getElementById('lb-overlay')) closeLb();
+}
+
+function lbKeydown(e) {
+  if (e.key === 'Escape')     closeLb();
+  if (e.key === 'ArrowLeft')  lbNav(-1);
+  if (e.key === 'ArrowRight') lbNav(1);
+}
+
 // Limpiar formulario completo (botón "Limpiar formulario")
 function resetForm() {
   softReset();
   ['tester','version','url-pantalla'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('modulo').value    = '';
-  document.getElementById('navegador').value = '';
-  document.getElementById('sistema-op').value = '';
+  document.getElementById('modulo').value         = '';
+  document.getElementById('navegador').value      = '';
+  document.getElementById('sistema-op').value     = '';
+  document.getElementById('tipo-actividad').selectedIndex = 0;
   document.getElementById('fecha').value = new Date().toISOString().split('T')[0];
 }
 </script>
