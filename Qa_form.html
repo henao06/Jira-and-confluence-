@@ -150,19 +150,11 @@
         </select>
       </div>
     </div>
-    <div class="row2">
-      <div class="field">
-        <label class="lbl" for="asignado">Asignar a <span class="hint">Programador responsable</span></label>
-        <select id="asignado">
-          <option value="">Cargando miembros del proyecto...</option>
-        </select>
-      </div>
-      <div class="field">
-        <label class="lbl" for="tipo-actividad">Tipo de actividad <span class="req">*</span></label>
-        <select id="tipo-actividad">
-          <option value="">Cargando tipos...</option>
-        </select>
-      </div>
+    <div class="field">
+      <label class="lbl" for="asignado">Asignar a <span class="hint">Programador responsable</span></label>
+      <select id="asignado">
+        <option value="">Cargando miembros del proyecto...</option>
+      </select>
     </div>
   </div>
 
@@ -393,25 +385,35 @@ let estado = '', severidad = '', frecuencia = '';
 let countdownTimer = null;
 const DRAFT_KEY = 'qa_form_draft';
 
-/* ── Memoria de sesión ── */
-const sessionMemory = {};
+/* ── Memoria persistente (localStorage) ── */
+const MEM_KEY = 'qa_field_memory';
 const MEMORY_FIELDS = ['descripcion','historia','tester','url-pantalla','version','retest-tc'];
+
+function memLoad() {
+  try { return JSON.parse(localStorage.getItem(MEM_KEY) || '{}'); } catch { return {}; }
+}
+
+function memFlush(mem) {
+  localStorage.setItem(MEM_KEY, JSON.stringify(mem));
+}
 
 function memSave(id, value) {
   if (!value || value.trim().length < 3) return;
-  if (!sessionMemory[id]) sessionMemory[id] = [];
-  const list = sessionMemory[id];
-  const idx = list.indexOf(value.trim());
-  if (idx !== -1) list.splice(idx, 1);      // mover al frente si ya existe
+  const mem  = memLoad();
+  if (!mem[id]) mem[id] = [];
+  const list = mem[id];
+  const idx  = list.indexOf(value.trim());
+  if (idx !== -1) list.splice(idx, 1);   // mover al frente si ya existe
   list.unshift(value.trim());
-  if (list.length > 8) list.pop();           // máx 8 entradas por campo
+  if (list.length > 12) list.pop();      // máx 12 entradas por campo
+  memFlush(mem);
 }
 
 function memGet(id, query) {
-  const list = sessionMemory[id] || [];
-  if (!query || query.trim().length === 0) return list.slice(0, 4);
+  const list = memLoad()[id] || [];
+  if (!query || query.trim().length === 0) return list.slice(0, 5);
   const q = query.toLowerCase();
-  return list.filter(v => v.toLowerCase().includes(q)).slice(0, 4);
+  return list.filter(v => v.toLowerCase().includes(q)).slice(0, 5);
 }
 
 function saveAllToMemory() {
@@ -540,7 +542,6 @@ function persistForm() {
     urlPantalla:   document.getElementById('url-pantalla').value,
     rolUsuario:    document.getElementById('rol-usuario').value,
     asignado:      document.getElementById('asignado').value,
-    tipoActividad: document.getElementById('tipo-actividad').value,
     precondiciones: Array.from(document.querySelectorAll('#precon-wrap .step-row input')).map(i => i.value),
     datos:          Array.from(document.querySelectorAll('#datos-wrap .step-row input')).map(i => i.value),
     esperado:       Array.from(document.querySelectorAll('#esperado-wrap .step-row input')).map(i => i.value),
@@ -559,6 +560,18 @@ function persistForm() {
 }
 
 function clearDraft() { localStorage.removeItem(DRAFT_KEY); }
+
+function sanitizeDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (d.tcId && !/^TC-\d+$/i.test(d.tcId.trim())) {
+      delete d.tcId;
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
+    }
+  } catch {}
+}
 
 function rebuildList(wrapId, items, placeholder, removeFn) {
   if (!items || items.length === 0) return;
@@ -586,7 +599,6 @@ function restoreForm() {
   set('navegador', d.navegador); set('sistema-op', d.sistemaOp);
   set('version', d.version); set('url-pantalla', d.urlPantalla);
   set('rol-usuario', d.rolUsuario);
-  // tipo-actividad se restaura después del fetch en fetchIssueTypes
   set('impacto', d.impacto); set('prioridad', d.prioridad);
   set('retest-tc', d.retestTc);
 
@@ -632,10 +644,10 @@ document.addEventListener('click',  e => {
 
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('fecha').value = new Date().toISOString().split('T')[0];
+  sanitizeDraft();
   restoreForm();
   fetchNextTC();
   fetchAssignees();
-  fetchIssueTypes();
   initMemoryListeners();
 });
 
@@ -643,7 +655,9 @@ window.addEventListener('DOMContentLoaded', () => {
 async function fetchNextTC() {
   const f = document.getElementById('tc-id');
   const banner = document.getElementById('next-tc-banner');
-  f.value = 'Consultando...';
+  const validTcId = id => /^TC-\d+$/i.test((id||'').trim());
+  const draftTcId = (() => { try { const v = JSON.parse(localStorage.getItem(DRAFT_KEY)||'{}').tcId; return validTcId(v) ? v : ''; } catch { return ''; } })();
+  if (!draftTcId) f.value = 'Consultando...';
   try {
     const jql = encodeURIComponent('project = BUGS ORDER BY created DESC');
     const r = await fetch(`${JIRA_BASE}/rest/api/3/search/jql?jql=${jql}&maxResults=200&fields=summary`,
@@ -659,53 +673,19 @@ async function fetchNextTC() {
       if (m) max = Math.max(max, parseInt(m[1]));
     });
     const next = `TC-${String(max+1).padStart(3,'0')}`;
-    // Solo sobreescribir si no hay draft guardado
-    const hasDraft = (() => { try { return !!JSON.parse(localStorage.getItem(DRAFT_KEY)||'{}').tcId; } catch { return false; } })();
-    if (!hasDraft) {
-      f.value = next;
-      if (banner) { banner.textContent = `Próximo: ${next}`; banner.style.display = 'inline-block'; banner.style.background = 'var(--g7)'; }
-    } else {
-      if (banner) { banner.textContent = `Próximo Jira: ${next}`; banner.style.display = 'inline-block'; banner.style.background = 'var(--g7)'; }
-    }
+    f.value = draftTcId || next;
+    if (banner) { banner.textContent = `Próximo: ${next}`; banner.style.display = 'inline-block'; banner.style.background = 'var(--g7)'; }
     f.removeAttribute('readonly');
     f.style.opacity = '1';
   } catch(e) {
     console.error('[fetchNextTC]', e.message);
-    const hasDraft = (() => { try { return !!JSON.parse(localStorage.getItem(DRAFT_KEY)||'{}').tcId; } catch { return false; } })();
-    if (!hasDraft) f.value = 'TC-001';
+    f.value = draftTcId || 'TC-001';
     f.removeAttribute('readonly');
     f.style.opacity = '1';
     if (banner) { banner.textContent = 'Sin conexión'; banner.style.display = 'inline-block'; banner.style.background = '#e24b4a'; }
   }
 }
 
-/* ── Issue Types ── */
-async function fetchIssueTypes() {
-  const sel = document.getElementById('tipo-actividad');
-  try {
-    const r = await fetch(`${JIRA_BASE}/rest/api/3/project/BUGS`, {
-      headers: { 'Accept': 'application/json' }
-    });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const project = await r.json();
-    const types = (project.issueTypes || []).filter(t => !t.subtask);
-    if (types.length === 0) throw new Error('Sin tipos');
-    sel.innerHTML = types.map(t =>
-      `<option value="${t.name}" data-id="${t.id}">${t.name}</option>`
-    ).join('');
-    // Restaurar del draft
-    try { const saved = JSON.parse(localStorage.getItem(DRAFT_KEY)||'{}').tipoActividad; if (saved) sel.value = saved; } catch {}
-  } catch(e) {
-    console.error('[fetchIssueTypes]', e.message);
-    sel.innerHTML = `
-      <option value="Error">Error</option>
-      <option value="Tarea">Tarea</option>
-      <option value="Historia">Historia</option>
-      <option value="Épica">Épica</option>
-    `;
-    try { const saved = JSON.parse(localStorage.getItem(DRAFT_KEY)||'{}').tipoActividad; if (saved) sel.value = saved; } catch {}
-  }
-}
 
 /* ── Assignees ── */
 async function fetchAssignees() {
@@ -1065,7 +1045,6 @@ async function submitForm() {
   if (precon.length === 0)      return showError('Completá las precondiciones.');
   if (esperado.length === 0)    return showError('Completá el resultado esperado.');
   if (obtenido.length === 0)    return showError('Completá el resultado obtenido.');
-  if (!issueType)               return showError('Seleccioná el tipo de actividad.');
   if (!estado)                  return showError('Seleccioná el estado: Pass, Fail o Bloqueado.');
   if (estado==='fail'&&!severidad)  return showError('Seleccioná la severidad del defecto.');
   if (estado==='fail'&&!frecuencia) return showError('Seleccioná la frecuencia del error.');
@@ -1075,7 +1054,7 @@ async function submitForm() {
   const tipoLabel  = {'type-funcional':'Funcional','type-regresion':'Regresión','type-ui':'UI','type-smoke':'Smoke','type-integracion':'Integración','type-uat':'UAT','type-rendimiento':'Rendimiento'}[tipoPrueba]||tipoPrueba;
   const estadoLbl  = {pass:'Pass',fail:'Fail',blocked:'Bloqueado'}[estado];
   const sevLbl     = {'severity-critico':'Crítico','severity-mayor':'Mayor','severity-medio':'Medio','severity-bajo':'Bajo'}[severidad]||'—';
-  const issueType  = document.getElementById('tipo-actividad').value;
+  const issueType = estado === 'fail' ? 'Error' : 'Tarea';
   const entorno    = `${navegador} / ${sistemaOp}${version ? ' / '+version : ''}`;
   const labels     = [tipoPrueba, `estado-${estado}`, ...(severidad?[severidad]:[]), ...(esRetest?['retest']:[])];
   const summary    = `${tcId} | ${desc} — ${moduloNombre}`;
@@ -1271,9 +1250,8 @@ function resetForm() {
   softReset();
   ['tester','version','url-pantalla'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('modulo').value         = '';
-  document.getElementById('navegador').value      = '';
-  document.getElementById('sistema-op').value     = '';
-  document.getElementById('tipo-actividad').selectedIndex = 0;
+  document.getElementById('navegador').value  = '';
+  document.getElementById('sistema-op').value = '';
   document.getElementById('fecha').value = new Date().toISOString().split('T')[0];
 }
 </script>

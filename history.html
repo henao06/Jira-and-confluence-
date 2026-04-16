@@ -5,6 +5,48 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Historial QA — Hybred</title>
 <link rel="stylesheet" href="/styles.css">
+<style>
+/* ── Transition picker ── */
+.jira-status-cell { display:flex; align-items:center; gap:6px; }
+.jira-status-pill {
+  display:inline-block; padding:2px 10px; border-radius:20px; font-size:11px;
+  font-weight:600; letter-spacing:.3px; white-space:nowrap;
+  background:var(--sur2); color:var(--txt2);
+}
+.jira-status-pill.cat-done       { background:#dcfce7; color:#15803d; }
+.jira-status-pill.cat-inprogress { background:#dbeafe; color:#1d4ed8; }
+.jira-status-pill.cat-todo       { background:#f3f4f6; color:#6b7280; }
+
+.btn-transition {
+  background:none; border:1px solid var(--bdr); border-radius:6px;
+  color:var(--txt2); font-size:11px; padding:2px 7px; cursor:pointer;
+  white-space:nowrap; transition:background .15s, border-color .15s;
+}
+.btn-transition:hover { background:var(--sur2); border-color:var(--g7); color:var(--g7); }
+.btn-transition:disabled { opacity:.4; cursor:default; }
+
+.trans-popover {
+  position:absolute; z-index:200;
+  background:#1e2430; border:1px solid #374151; border-radius:10px;
+  box-shadow:0 12px 32px rgba(0,0,0,.45);
+  min-width:200px; padding:6px 0; margin-top:4px;
+}
+.trans-popover-item {
+  padding:10px 16px; font-size:13px; font-weight:500;
+  cursor:pointer; color:#f1f5f9;
+  transition:background .1s;
+  display:flex; align-items:center; gap:8px;
+}
+.trans-popover-item::before {
+  content:''; width:7px; height:7px; border-radius:50%;
+  background:#4dbf94; flex-shrink:0;
+}
+.trans-popover-item:hover { background:#2d3748; }
+.trans-popover-item.loading { color:#94a3b8; cursor:default; }
+.trans-popover-item.loading::before { background:#475569; }
+
+.status-loading { font-size:11px; color:var(--txt3); }
+</style>
 </head>
 <body>
 <div class="page">
@@ -52,13 +94,14 @@
           <th>ID</th>
           <th>Descripción</th>
           <th>Módulo</th>
-          <th>Estado</th>
+          <th>Estado QA</th>
+          <th>Estado Jira</th>
           <th>Fecha</th>
           <th>Issue Jira</th>
         </tr>
       </thead>
       <tbody id="history-body">
-        <tr><td colspan="6"><div class="empty-state">Cargando...</div></td></tr>
+        <tr><td colspan="7"><div class="empty-state">Cargando...</div></td></tr>
       </tbody>
     </table>
   </div>
@@ -66,31 +109,189 @@
 
 </div><!-- /page -->
 
+<!-- Popover de transiciones -->
+<div id="trans-popover" class="trans-popover" style="display:none"></div>
+
 <script>
+const JIRA_BASE = window.location.origin + '/jira';
+const AUTH = '';
+
+// ── Estado Jira cache ──────────────────────────────────────────────────────
+const jiraStatusCache = {};  // key → { name, category }
+
+function statusPillClass(category) {
+  if (!category) return '';
+  const c = category.toLowerCase();
+  if (c.includes('done') || c.includes('complete')) return 'cat-done';
+  if (c.includes('progress') || c.includes('review')) return 'cat-inprogress';
+  return 'cat-todo';
+}
+
+async function fetchJiraStatuses(keys) {
+  if (!keys.length) return;
+  const jql = encodeURIComponent(`issueKey in (${keys.join(',')})`);
+  try {
+    const r = await fetch(
+      `${JIRA_BASE}/rest/api/3/search/jql?jql=${jql}&fields=status&maxResults=100`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    if (!r.ok) return;
+    const data = await r.json();
+    (data.issues || []).forEach(issue => {
+      const s = issue.fields.status;
+      jiraStatusCache[issue.key] = {
+        name:     s.name,
+        category: s.statusCategory?.name || '',
+      };
+    });
+  } catch {}
+}
+
+// ── Renderizado de estado Jira en cada fila ────────────────────────────────
+function renderJiraStatus(key) {
+  const s = jiraStatusCache[key];
+  if (!s) return `<span class="status-loading">—</span>`;
+  const cls = statusPillClass(s.category);
+  return `
+    <div class="jira-status-cell" id="jsc-${key}" style="position:relative">
+      <span class="jira-status-pill ${cls}" id="jsp-${key}">${s.name}</span>
+      <button class="btn-transition" onclick="openTransitions(event,'${key}')" id="btn-${key}">
+        Cambiar
+      </button>
+    </div>`;
+}
+
+// ── Historial ──────────────────────────────────────────────────────────────
 async function loadHistory() {
   const wrap    = document.getElementById('history-body');
   const countEl = document.getElementById('history-count');
   try {
     const rows = await fetch('/api/history').then(r => r.json());
     if (!rows.length) {
-      wrap.innerHTML = '<tr><td colspan="6"><div class="empty-state">Todavía no hay casos enviados.</div></td></tr>';
+      wrap.innerHTML = '<tr><td colspan="7"><div class="empty-state">Todavía no hay casos enviados.</div></td></tr>';
       return;
     }
     countEl.textContent = `${rows.length} registro${rows.length > 1 ? 's' : ''}`;
+
     const pillClass = { 'Pass':'pill-pass', 'Fail':'pill-fail', 'Bloqueado':'pill-blocked' };
+    const keys = [...new Set(rows.map(r => r.jira_key).filter(Boolean))];
+
+    // Primero render sin estado Jira
     wrap.innerHTML = rows.map(r => `
       <tr>
         <td class="tc-mono">${r.tc_id || '—'}</td>
         <td class="desc-cell">${r.descripcion || '—'}</td>
         <td>${r.modulo || '—'}</td>
         <td><span class="pill ${pillClass[r.estado] || ''}">${r.estado || '—'}</span></td>
+        <td id="jsc-cell-${r.jira_key}"><span class="status-loading">Cargando...</span></td>
         <td class="date-cell">${r.fecha || '—'}</td>
         <td><a href="${r.jira_url}" target="_blank">${r.jira_key || '—'}</a></td>
       </tr>`).join('');
+
+    // Luego fetch batch de estados y actualizar celdas
+    await fetchJiraStatuses(keys);
+    rows.forEach(r => {
+      if (!r.jira_key) return;
+      const cell = document.getElementById(`jsc-cell-${r.jira_key}`);
+      if (cell) cell.innerHTML = renderJiraStatus(r.jira_key);
+    });
+
   } catch {
-    wrap.innerHTML = '<tr><td colspan="6"><div class="empty-state" style="color:#b91c1c">Error cargando historial.</div></td></tr>';
+    wrap.innerHTML = '<tr><td colspan="7"><div class="empty-state" style="color:#b91c1c">Error cargando historial.</div></td></tr>';
   }
 }
+
+// ── Popover de transiciones ────────────────────────────────────────────────
+let activePopoverKey = null;
+
+async function openTransitions(event, key) {
+  event.stopPropagation();
+  const popover = document.getElementById('trans-popover');
+
+  // Cerrar si ya estaba abierto para este key
+  if (activePopoverKey === key && popover.style.display !== 'none') {
+    closePopover(); return;
+  }
+
+  activePopoverKey = key;
+  const btn = document.getElementById(`btn-${key}`);
+  btn.disabled = true;
+
+  popover.innerHTML = `<div class="trans-popover-item loading">Cargando transiciones...</div>`;
+
+  // Posicionar debajo del botón
+  const rect = btn.getBoundingClientRect();
+  popover.style.display = 'block';
+  popover.style.top  = `${rect.bottom + window.scrollY + 4}px`;
+  popover.style.left = `${rect.left  + window.scrollX}px`;
+
+  try {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${key}/transitions`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    const transitions = data.transitions || [];
+
+    if (!transitions.length) {
+      popover.innerHTML = `<div class="trans-popover-item loading">Sin transiciones disponibles</div>`;
+      btn.disabled = false; return;
+    }
+
+    popover.innerHTML = transitions.map(t => `
+      <div class="trans-popover-item" onclick="applyTransition('${key}','${t.id}','${t.name.replace(/'/g,"\\'")}')">
+        ${t.name}
+      </div>`).join('');
+
+  } catch(e) {
+    popover.innerHTML = `<div class="trans-popover-item loading">Error: ${e.message}</div>`;
+  }
+
+  btn.disabled = false;
+}
+
+async function applyTransition(key, transitionId, transitionName) {
+  closePopover();
+  const btn = document.getElementById(`btn-${key}`);
+  const pill = document.getElementById(`jsp-${key}`);
+  if (btn) btn.disabled = true;
+  if (pill) pill.textContent = 'Aplicando...';
+
+  try {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${key}/transitions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ transition: { id: transitionId } })
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(JSON.stringify(e));
+    }
+
+    // Actualizar cache y re-renderizar celda
+    // Refetch status de este issue para obtener el nuevo nombre y categoría
+    await fetchJiraStatuses([key]);
+    const cell = document.getElementById(`jsc-cell-${key}`);
+    if (cell) cell.innerHTML = renderJiraStatus(key);
+
+  } catch(e) {
+    console.error('[applyTransition]', e.message);
+    if (pill) pill.textContent = 'Error';
+    if (btn)  btn.disabled = false;
+  }
+}
+
+function closePopover() {
+  const popover = document.getElementById('trans-popover');
+  popover.style.display = 'none';
+  activePopoverKey = null;
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#trans-popover') && !e.target.closest('.btn-transition')) {
+    closePopover();
+  }
+});
 
 document.addEventListener('DOMContentLoaded', loadHistory);
 </script>

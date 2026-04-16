@@ -20,5 +20,16 @@
     "jira_key": "BUGS-19",
     "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-19",
     "created_at": "2026-04-16T16:03:05.752Z"
+  },
+  {
+    "tc_id": "TC-009",
+    "descripcion": "Verificar que al crear un curso en Moodle, este aparezca correctamente en la App móvil",
+    "modulo": "APP WEB",
+    "estado": "Fail",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-16",
+    "jira_key": "BUGS-20",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-20",
+    "created_at": "2026-04-16T19:23:59.929Z"
   }
 ]
