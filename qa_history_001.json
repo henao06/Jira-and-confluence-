@@ -1,13 +1,14 @@
 [
+
   {
-    "tc_id": "TC-006",
-    "descripcion": "dwedfwefdefewfdew",
-    "modulo": "MEET SERVICE",
-    "estado": "Fail",
-    "tester": "dsffefrewferw",
-    "fecha": "2026-04-14",
-    "jira_key": "BUGS-17",
-    "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-17",
-    "created_at": "2026-04-14T21:10:34.920Z"
+    "tc_id": "TC-007",
+    "descripcion": "intalar un pluglin  en /var/www/html/moodle/local y  otro en  /var/www/html/ y intentar  iniciar seción",
+    "modulo": "APP WEB",
+    "estado": "Pass",
+    "tester": "Sebastian Zapata",
+    "fecha": "2026-04-16",
+    "jira_key": "BUGS-18",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-18",
+    "created_at": "2026-04-16T13:00:47.678Z"
   }
 ]

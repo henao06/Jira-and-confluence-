@@ -1,7 +1,7 @@
 /**
  * Servidor local QA — Hybred
  * Ejecutar: node Server.JS
- * Luego abrir: http://localhost:3000
+ * Luego abrir: http://localhost:8080
  * No requiere dependencias externas — solo Node.js
  * Nuevo token se saca en https://id.atlassian.com/manage-profile/security/api-tokens
  */
@@ -12,7 +12,7 @@ const fs    = require('fs');
 const path  = require('path');
 const url   = require('url');
 
-const PORT       = 3000;
+const PORT       = 8080;
 const JIRA_HOST  = 'liceopinoverde.atlassian.net';
 const JIRA_EMAIL = 'sebastian.zapata.h@hybred.edu.co';
 const JIRA_TOKEN = 'ATATT3xFfGF0ETjglczxpGdHrIRBJzGGJG-hsEoiCZ0bIB8oofsD0gjNaz4CLZf19FYOYrYoGbJPM72ksZqmMWiWtDaATU5cXcUf4Ic8rIN-ZJ2FmZx9wO9sP02EkhG-_sgfJZer3DpBaoPRQk8ezkNefRTm7FaukVSQlD2KbxlS3pzFG-r9jd0=15C626FB';

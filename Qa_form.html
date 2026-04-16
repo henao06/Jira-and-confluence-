@@ -196,13 +196,42 @@
         <textarea id="esperado" rows="3" placeholder="¿Qué debería pasar?"></textarea>
       </div>
       <div class="field">
-        <label class="lbl" for="obtenido">Resultado obtenido <span class="req">*</span></label>
-        <textarea id="obtenido" rows="3" placeholder="¿Qué pasó realmente?"></textarea>
+        <label class="lbl">Resultado obtenido <span class="req">*</span></label>
+        <div class="steps-list" id="obtenido-wrap">
+          <div class="step-row">
+            <div class="step-num">1</div>
+            <input type="text" placeholder="¿Qué pasó realmente?">
+            <button class="btn-rm" onclick="removeObtenido(this)">×</button>
+          </div>
+        </div>
+        <button class="btn-add" onclick="addObtenido()">+ Agregar ítem</button>
       </div>
     </div>
     <div class="field">
       <label class="lbl" for="postcondiciones">Postcondiciones <span class="hint">ISO 29119 — opcional</span></label>
       <textarea id="postcondiciones" rows="2" placeholder="Estado del sistema después de la prueba..."></textarea>
+    </div>
+    <div class="field">
+      <label class="lbl">Soluciones <span class="hint">Pasos para resolver el problema — opcional</span></label>
+      <div class="steps-list" id="soluc-wrap">
+        <div class="step-row">
+          <div class="step-num">1</div>
+          <input type="text" placeholder="Solución 1...">
+          <button class="btn-rm" onclick="removeSoluc(this)">×</button>
+        </div>
+      </div>
+      <button class="btn-add" onclick="addSoluc()">+ Agregar solución</button>
+    </div>
+    <div class="field">
+      <label class="lbl">Sugerencias <span class="hint">Recomendaciones o mejoras — opcional</span></label>
+      <div class="steps-list" id="sugg-wrap">
+        <div class="step-row">
+          <div class="step-num">1</div>
+          <input type="text" placeholder="Sugerencia 1...">
+          <button class="btn-rm" onclick="removeSugg(this)">×</button>
+        </div>
+      </div>
+      <button class="btn-add" onclick="addSugg()">+ Agregar sugerencia</button>
     </div>
   </div>
 
@@ -334,7 +363,7 @@ let countdownTimer = null;
 /* ── Memoria de sesión ── */
 const sessionMemory = {};
 const MEMORY_FIELDS = ['descripcion','historia','tester','url-pantalla','version',
-                       'precondiciones','datos','esperado','obtenido','postcondiciones','retest-tc'];
+                       'precondiciones','datos','esperado','postcondiciones','retest-tc'];
 
 function memSave(id, value) {
   if (!value || value.trim().length < 3) return;
@@ -361,6 +390,18 @@ function saveAllToMemory() {
   // Guardar pasos también
   document.querySelectorAll('#steps-wrap .step-row input').forEach(inp => {
     memSave('steps', inp.value);
+  });
+  // Guardar obtenido también
+  document.querySelectorAll('#obtenido-wrap .step-row input').forEach(inp => {
+    memSave('obtenido', inp.value);
+  });
+  // Guardar sugerencias también
+  document.querySelectorAll('#sugg-wrap .step-row input').forEach(inp => {
+    memSave('sugerencias', inp.value);
+  });
+  // Guardar soluciones también
+  document.querySelectorAll('#soluc-wrap .step-row input').forEach(inp => {
+    memSave('soluciones', inp.value);
   });
 }
 
@@ -422,10 +463,28 @@ document.addEventListener('focusin', e => {
   if (e.target.closest('#steps-wrap') && e.target.tagName === 'INPUT') {
     showSuggestions(e.target, 'steps');
   }
+  if (e.target.closest('#obtenido-wrap') && e.target.tagName === 'INPUT') {
+    showSuggestions(e.target, 'obtenido');
+  }
+  if (e.target.closest('#sugg-wrap') && e.target.tagName === 'INPUT') {
+    showSuggestions(e.target, 'sugerencias');
+  }
+  if (e.target.closest('#soluc-wrap') && e.target.tagName === 'INPUT') {
+    showSuggestions(e.target, 'soluciones');
+  }
 });
 document.addEventListener('input', e => {
   if (e.target.closest('#steps-wrap') && e.target.tagName === 'INPUT') {
     showSuggestions(e.target, 'steps');
+  }
+  if (e.target.closest('#obtenido-wrap') && e.target.tagName === 'INPUT') {
+    showSuggestions(e.target, 'obtenido');
+  }
+  if (e.target.closest('#sugg-wrap') && e.target.tagName === 'INPUT') {
+    showSuggestions(e.target, 'sugerencias');
+  }
+  if (e.target.closest('#soluc-wrap') && e.target.tagName === 'INPUT') {
+    showSuggestions(e.target, 'soluciones');
   }
 });
 
@@ -538,6 +597,60 @@ function removeStep(btn) {
   wrap.querySelectorAll('.step-row').forEach((r,i) => {
     r.querySelector('.step-num').textContent = i+1;
     r.querySelector('input').placeholder = `Paso ${i+1}...`;
+  });
+}
+
+function addObtenido() {
+  const wrap = document.getElementById('obtenido-wrap');
+  const n = wrap.querySelectorAll('.step-row').length + 1;
+  const d = document.createElement('div'); d.className = 'step-row';
+  d.innerHTML = `<div class="step-num">${n}</div><input type="text" placeholder="Ítem ${n}..."><button class="btn-rm" onclick="removeObtenido(this)">×</button>`;
+  wrap.appendChild(d);
+}
+
+function removeObtenido(btn) {
+  const wrap = document.getElementById('obtenido-wrap');
+  if (wrap.querySelectorAll('.step-row').length <= 1) return;
+  btn.closest('.step-row').remove();
+  wrap.querySelectorAll('.step-row').forEach((r,i) => {
+    r.querySelector('.step-num').textContent = i+1;
+    r.querySelector('input').placeholder = `Ítem ${i+1}...`;
+  });
+}
+
+function addSoluc() {
+  const wrap = document.getElementById('soluc-wrap');
+  const n = wrap.querySelectorAll('.step-row').length + 1;
+  const d = document.createElement('div'); d.className = 'step-row';
+  d.innerHTML = `<div class="step-num">${n}</div><input type="text" placeholder="Solución ${n}..."><button class="btn-rm" onclick="removeSoluc(this)">×</button>`;
+  wrap.appendChild(d);
+}
+
+function removeSoluc(btn) {
+  const wrap = document.getElementById('soluc-wrap');
+  if (wrap.querySelectorAll('.step-row').length <= 1) return;
+  btn.closest('.step-row').remove();
+  wrap.querySelectorAll('.step-row').forEach((r,i) => {
+    r.querySelector('.step-num').textContent = i+1;
+    r.querySelector('input').placeholder = `Solución ${i+1}...`;
+  });
+}
+
+function addSugg() {
+  const wrap = document.getElementById('sugg-wrap');
+  const n = wrap.querySelectorAll('.step-row').length + 1;
+  const d = document.createElement('div'); d.className = 'step-row';
+  d.innerHTML = `<div class="step-num">${n}</div><input type="text" placeholder="Sugerencia ${n}..."><button class="btn-rm" onclick="removeSugg(this)">×</button>`;
+  wrap.appendChild(d);
+}
+
+function removeSugg(btn) {
+  const wrap = document.getElementById('sugg-wrap');
+  if (wrap.querySelectorAll('.step-row').length <= 1) return;
+  btn.closest('.step-row').remove();
+  wrap.querySelectorAll('.step-row').forEach((r,i) => {
+    r.querySelector('.step-num').textContent = i+1;
+    r.querySelector('input').placeholder = `Sugerencia ${i+1}...`;
   });
 }
 
@@ -720,10 +833,15 @@ async function submitForm() {
   const precon      = document.getElementById('precondiciones').value.trim();
   const datos       = document.getElementById('datos').value.trim();
   const esperado    = document.getElementById('esperado').value.trim();
-  const obtenido    = document.getElementById('obtenido').value.trim();
+  const obtenido    = Array.from(document.querySelectorAll('#obtenido-wrap .step-row input'))
+    .map(inp => inp.value.trim()).filter(Boolean);
   const postcon     = document.getElementById('postcondiciones').value.trim();
   const impacto     = document.getElementById('impacto').value;
   const prioridad   = document.getElementById('prioridad').value;
+  const soluciones  = Array.from(document.querySelectorAll('#soluc-wrap .step-row input'))
+    .map(inp => inp.value.trim()).filter(Boolean);
+  const sugerencias = Array.from(document.querySelectorAll('#sugg-wrap .step-row input'))
+    .map(inp => inp.value.trim()).filter(Boolean);
   const esRetest    = document.getElementById('es-retest').checked;
   const retestTc    = document.getElementById('retest-tc').value.trim();
 
@@ -736,7 +854,7 @@ async function submitForm() {
   if (!navegador || !sistemaOp) return showError('Completá el entorno (navegador y sistema operativo).');
   if (!precon)                  return showError('Completá las precondiciones.');
   if (!esperado)                return showError('Completá el resultado esperado.');
-  if (!obtenido)                return showError('Completá el resultado obtenido.');
+  if (obtenido.length === 0)    return showError('Completá el resultado obtenido.');
   if (!estado)                  return showError('Seleccioná el estado: Pass, Fail o Bloqueado.');
   if (estado==='fail'&&!severidad)  return showError('Seleccioná la severidad del defecto.');
   if (estado==='fail'&&!frecuencia) return showError('Seleccioná la frecuencia del error.');
@@ -780,8 +898,10 @@ async function submitForm() {
     mkH('Datos de entrada'), mkP(datos||'—'),
     mkH('Pasos a seguir'), steps.length > 0 ? mkOrderedList(steps) : mkP('—'),
     mkH('Resultado esperado'), mkP(esperado),
-    mkH('Resultado obtenido'), mkP(obtenido),
+    mkH('Resultado obtenido'), mkOrderedList(obtenido),
     ...(postcon ? [mkH('Postcondiciones'), mkP(postcon)] : []),
+    ...(soluciones.length > 0  ? [mkH('Soluciones'),    mkOrderedList(soluciones)]  : []),
+    ...(sugerencias.length > 0 ? [mkH('Sugerencias'),   mkOrderedList(sugerencias)] : []),
     mkRule(),
     ...mkPanel(panelType, resultContent),
   ]};
@@ -856,7 +976,7 @@ async function submitForm() {
 /* ── Reset ── */
 // Post-envío: limpia solo lo que cambia entre TCs
 function softReset() {
-  ['descripcion','historia','precondiciones','datos','esperado','obtenido','postcondiciones','retest-tc']
+  ['descripcion','historia','precondiciones','datos','esperado','postcondiciones','retest-tc']
     .forEach(id => document.getElementById(id).value = '');
   document.getElementById('tipo-prueba').value = '';
   document.getElementById('rol-usuario').value = '';
@@ -873,6 +993,15 @@ function softReset() {
   // Resetear steps a uno vacío
   document.getElementById('steps-wrap').innerHTML =
     `<div class="step-row"><div class="step-num">1</div><input type="text" placeholder="Paso 1..."><button class="btn-rm" onclick="removeStep(this)">×</button></div>`;
+  // Resetear obtenido a un ítem vacío
+  document.getElementById('obtenido-wrap').innerHTML =
+    `<div class="step-row"><div class="step-num">1</div><input type="text" placeholder="¿Qué pasó realmente?"><button class="btn-rm" onclick="removeObtenido(this)">×</button></div>`;
+  // Resetear soluciones a una vacía
+  document.getElementById('soluc-wrap').innerHTML =
+    `<div class="step-row"><div class="step-num">1</div><input type="text" placeholder="Solución 1..."><button class="btn-rm" onclick="removeSoluc(this)">×</button></div>`;
+  // Resetear sugerencias a una vacía
+  document.getElementById('sugg-wrap').innerHTML =
+    `<div class="step-row"><div class="step-num">1</div><input type="text" placeholder="Sugerencia 1..."><button class="btn-rm" onclick="removeSugg(this)">×</button></div>`;
   estado = ''; severidad = ''; frecuencia = '';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
