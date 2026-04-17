@@ -31,5 +31,27 @@
     "jira_key": "BUGS-20",
     "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-20",
     "created_at": "2026-04-16T19:23:59.929Z"
+  },
+  {
+    "tc_id": "TC-010",
+    "descripcion": "Verificar que se pueda ingresar a un curso desde la App y crear una nueva sección",
+    "modulo": "APP WEB",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-16",
+    "jira_key": "BUGS-22",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-22",
+    "created_at": "2026-04-16T20:07:28.373Z"
+  },
+  {
+    "tc_id": "TC-011",
+    "descripcion": "Verificar que se pueda crear una tarea/lección desde la App dentro de un curso",
+    "modulo": "APP WEB",
+    "estado": "Fail",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-16",
+    "jira_key": "BUGS-26",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-26",
+    "created_at": "2026-04-16T21:28:29.695Z"
   }
 ]

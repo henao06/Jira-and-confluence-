@@ -6,46 +6,56 @@
 <title>Historial QA — Hybred</title>
 <link rel="stylesheet" href="/styles.css">
 <style>
-/* ── Transition picker ── */
-.jira-status-cell { display:flex; align-items:center; gap:6px; }
+.jira-cell { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+
 .jira-status-pill {
   display:inline-block; padding:2px 10px; border-radius:20px; font-size:11px;
   font-weight:600; letter-spacing:.3px; white-space:nowrap;
-  background:var(--sur2); color:var(--txt2);
+  background:#f3f4f6; color:#6b7280;
 }
 .jira-status-pill.cat-done       { background:#dcfce7; color:#15803d; }
 .jira-status-pill.cat-inprogress { background:#dbeafe; color:#1d4ed8; }
 .jira-status-pill.cat-todo       { background:#f3f4f6; color:#6b7280; }
 
-.btn-transition {
+.jira-type-pill {
+  display:inline-block; padding:2px 10px; border-radius:20px; font-size:11px;
+  font-weight:600; letter-spacing:.3px; white-space:nowrap;
+  background:#fef3c7; color:#92400e;
+}
+
+.btn-change {
   background:none; border:1px solid var(--bdr); border-radius:6px;
   color:var(--txt2); font-size:11px; padding:2px 7px; cursor:pointer;
-  white-space:nowrap; transition:background .15s, border-color .15s;
+  white-space:nowrap; transition:background .15s, border-color .15s; flex-shrink:0;
 }
-.btn-transition:hover { background:var(--sur2); border-color:var(--g7); color:var(--g7); }
-.btn-transition:disabled { opacity:.4; cursor:default; }
+.btn-change:hover  { background:var(--sur2); border-color:var(--g7); color:var(--g7); }
+.btn-change:disabled { opacity:.4; cursor:default; }
 
-.trans-popover {
-  position:absolute; z-index:200;
+.popover {
+  position:fixed; z-index:400;
   background:#1e2430; border:1px solid #374151; border-radius:10px;
-  box-shadow:0 12px 32px rgba(0,0,0,.45);
-  min-width:200px; padding:6px 0; margin-top:4px;
+  box-shadow:0 12px 32px rgba(0,0,0,.5);
+  min-width:200px; padding:6px 0;
 }
-.trans-popover-item {
+.popover-title {
+  padding:6px 16px 4px; font-size:10px; font-weight:700;
+  letter-spacing:.6px; text-transform:uppercase; color:#64748b;
+}
+.popover-item {
   padding:10px 16px; font-size:13px; font-weight:500;
   cursor:pointer; color:#f1f5f9;
   transition:background .1s;
   display:flex; align-items:center; gap:8px;
 }
-.trans-popover-item::before {
+.popover-item::before {
   content:''; width:7px; height:7px; border-radius:50%;
   background:#4dbf94; flex-shrink:0;
 }
-.trans-popover-item:hover { background:#2d3748; }
-.trans-popover-item.loading { color:#94a3b8; cursor:default; }
-.trans-popover-item.loading::before { background:#475569; }
+.popover-item:hover { background:#2d3748; }
+.popover-item.dim { color:#94a3b8; cursor:default; }
+.popover-item.dim::before { background:#475569; }
 
-.status-loading { font-size:11px; color:var(--txt3); }
+.cell-loading { font-size:11px; color:var(--txt3); }
 </style>
 </head>
 <body>
@@ -96,12 +106,13 @@
           <th>Módulo</th>
           <th>Estado QA</th>
           <th>Estado Jira</th>
+          <th>Tipo</th>
           <th>Fecha</th>
           <th>Issue Jira</th>
         </tr>
       </thead>
       <tbody id="history-body">
-        <tr><td colspan="7"><div class="empty-state">Cargando...</div></td></tr>
+        <tr><td colspan="8"><div class="empty-state">Cargando...</div></td></tr>
       </tbody>
     </table>
   </div>
@@ -109,66 +120,93 @@
 
 </div><!-- /page -->
 
-<!-- Popover de transiciones -->
-<div id="trans-popover" class="trans-popover" style="display:none"></div>
+<div id="popover" class="popover" style="display:none"></div>
 
 <script>
 const JIRA_BASE = window.location.origin + '/jira';
 const AUTH = '';
 
-// ── Estado Jira cache ──────────────────────────────────────────────────────
-const jiraStatusCache = {};  // key → { name, category }
+// ── Caches ────────────────────────────────────────────────────────────────
+const statusCache = {};   // key → { name, category }
+const typeCache   = {};   // key → typeName
+let   availableTypes = null;  // array de nombres, se carga una sola vez
 
-function statusPillClass(category) {
-  if (!category) return '';
-  const c = category.toLowerCase();
+// ── Helpers ───────────────────────────────────────────────────────────────
+function statusPillClass(cat) {
+  const c = (cat || '').toLowerCase();
   if (c.includes('done') || c.includes('complete')) return 'cat-done';
   if (c.includes('progress') || c.includes('review')) return 'cat-inprogress';
   return 'cat-todo';
 }
 
-async function fetchJiraStatuses(keys) {
+// ── Batch fetch: estado + tipo ────────────────────────────────────────────
+async function fetchJiraData(keys) {
   if (!keys.length) return;
   const jql = encodeURIComponent(`issueKey in (${keys.join(',')})`);
   try {
     const r = await fetch(
-      `${JIRA_BASE}/rest/api/3/search/jql?jql=${jql}&fields=status&maxResults=100`,
+      `${JIRA_BASE}/rest/api/3/search/jql?jql=${jql}&fields=status,issuetype&maxResults=100`,
       { headers: { 'Accept': 'application/json' } }
     );
     if (!r.ok) return;
     const data = await r.json();
     (data.issues || []).forEach(issue => {
       const s = issue.fields.status;
-      jiraStatusCache[issue.key] = {
-        name:     s.name,
-        category: s.statusCategory?.name || '',
-      };
+      const t = issue.fields.issuetype;
+      statusCache[issue.key] = { name: s.name, category: s.statusCategory?.name || '' };
+      typeCache[issue.key]   = t?.name || '—';
     });
   } catch {}
 }
 
-// ── Renderizado de estado Jira en cada fila ────────────────────────────────
-function renderJiraStatus(key) {
-  const s = jiraStatusCache[key];
-  if (!s) return `<span class="status-loading">—</span>`;
+// ── Fetch tipos disponibles del proyecto (una sola vez) ───────────────────
+async function fetchAvailableTypes() {
+  if (availableTypes) return availableTypes;
+  try {
+    const r = await fetch(
+      `${JIRA_BASE}/rest/api/3/issue/createmeta?projectKeys=BUGS&expand=projects.issuetypes`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    if (!r.ok) throw new Error();
+    const data = await r.json();
+    const proj = (data.projects || [])[0];
+    availableTypes = (proj?.issuetypes || []).map(t => t.name).filter(Boolean);
+  } catch {
+    availableTypes = ['Error', 'Tarea', 'Historia', 'Épica'];
+  }
+  return availableTypes;
+}
+
+// ── Render celdas ─────────────────────────────────────────────────────────
+function renderStatusCell(key) {
+  const s = statusCache[key];
+  if (!s) return `<span class="cell-loading">—</span>`;
   const cls = statusPillClass(s.category);
   return `
-    <div class="jira-status-cell" id="jsc-${key}" style="position:relative">
-      <span class="jira-status-pill ${cls}" id="jsp-${key}">${s.name}</span>
-      <button class="btn-transition" onclick="openTransitions(event,'${key}')" id="btn-${key}">
-        Cambiar
-      </button>
+    <div class="jira-cell">
+      <span class="jira-status-pill ${cls}" id="sp-${key}">${s.name}</span>
+      <button class="btn-change" id="btn-s-${key}" onclick="openStatusPicker(event,'${key}')">Cambiar</button>
     </div>`;
 }
 
-// ── Historial ──────────────────────────────────────────────────────────────
+function renderTypeCell(key) {
+  const t = typeCache[key];
+  if (!t) return `<span class="cell-loading">—</span>`;
+  return `
+    <div class="jira-cell">
+      <span class="jira-type-pill" id="tp-${key}">${t}</span>
+      <button class="btn-change" id="btn-t-${key}" onclick="openTypePicker(event,'${key}')">Cambiar</button>
+    </div>`;
+}
+
+// ── Historial ─────────────────────────────────────────────────────────────
 async function loadHistory() {
   const wrap    = document.getElementById('history-body');
   const countEl = document.getElementById('history-count');
   try {
     const rows = await fetch('/api/history').then(r => r.json());
     if (!rows.length) {
-      wrap.innerHTML = '<tr><td colspan="7"><div class="empty-state">Todavía no hay casos enviados.</div></td></tr>';
+      wrap.innerHTML = '<tr><td colspan="8"><div class="empty-state">Todavía no hay casos enviados.</div></td></tr>';
       return;
     }
     countEl.textContent = `${rows.length} registro${rows.length > 1 ? 's' : ''}`;
@@ -176,54 +214,76 @@ async function loadHistory() {
     const pillClass = { 'Pass':'pill-pass', 'Fail':'pill-fail', 'Bloqueado':'pill-blocked' };
     const keys = [...new Set(rows.map(r => r.jira_key).filter(Boolean))];
 
-    // Primero render sin estado Jira
     wrap.innerHTML = rows.map(r => `
       <tr>
         <td class="tc-mono">${r.tc_id || '—'}</td>
         <td class="desc-cell">${r.descripcion || '—'}</td>
         <td>${r.modulo || '—'}</td>
         <td><span class="pill ${pillClass[r.estado] || ''}">${r.estado || '—'}</span></td>
-        <td id="jsc-cell-${r.jira_key}"><span class="status-loading">Cargando...</span></td>
+        <td id="sc-${r.jira_key}"><span class="cell-loading">Cargando...</span></td>
+        <td id="tc-${r.jira_key}"><span class="cell-loading">Cargando...</span></td>
         <td class="date-cell">${r.fecha || '—'}</td>
         <td><a href="${r.jira_url}" target="_blank">${r.jira_key || '—'}</a></td>
       </tr>`).join('');
 
-    // Luego fetch batch de estados y actualizar celdas
-    await fetchJiraStatuses(keys);
+    await fetchJiraData(keys);
+
     rows.forEach(r => {
       if (!r.jira_key) return;
-      const cell = document.getElementById(`jsc-cell-${r.jira_key}`);
-      if (cell) cell.innerHTML = renderJiraStatus(r.jira_key);
+      const sc = document.getElementById(`sc-${r.jira_key}`);
+      const tc = document.getElementById(`tc-${r.jira_key}`);
+      if (sc) sc.innerHTML = renderStatusCell(r.jira_key);
+      if (tc) tc.innerHTML = renderTypeCell(r.jira_key);
     });
 
   } catch {
-    wrap.innerHTML = '<tr><td colspan="7"><div class="empty-state" style="color:#b91c1c">Error cargando historial.</div></td></tr>';
+    wrap.innerHTML = '<tr><td colspan="8"><div class="empty-state" style="color:#b91c1c">Error cargando historial.</div></td></tr>';
   }
 }
 
-// ── Popover de transiciones ────────────────────────────────────────────────
-let activePopoverKey = null;
+// ── Popover genérico ──────────────────────────────────────────────────────
+let activePopover = null; // { key, mode }
 
-async function openTransitions(event, key) {
-  event.stopPropagation();
-  const popover = document.getElementById('trans-popover');
+function showPopover(anchorBtn, titleText, items) {
+  const pop = document.getElementById('popover');
+  pop.innerHTML = `<div class="popover-title">${titleText}</div>` +
+    items.map(item => `<div class="popover-item ${item.dim ? 'dim' : ''}" ${item.onclick ? `onclick="${item.onclick}"` : ''}>
+      ${item.label}
+    </div>`).join('');
 
-  // Cerrar si ya estaba abierto para este key
-  if (activePopoverKey === key && popover.style.display !== 'none') {
-    closePopover(); return;
+  const rect = anchorBtn.getBoundingClientRect();
+  pop.style.display = 'block';
+
+  // Posicionar: calcular si hay espacio abajo o arriba
+  const popH = pop.offsetHeight || 200;
+  const spaceBelow = window.innerHeight - rect.bottom;
+  if (spaceBelow >= popH + 8 || spaceBelow >= 120) {
+    pop.style.top  = `${rect.bottom + window.scrollY + 4}px`;
+  } else {
+    pop.style.top  = `${rect.top + window.scrollY - popH - 4}px`;
   }
+  pop.style.left = `${Math.min(rect.left + window.scrollX, window.innerWidth - 220)}px`;
+}
 
-  activePopoverKey = key;
-  const btn = document.getElementById(`btn-${key}`);
+function closePopover() {
+  document.getElementById('popover').style.display = 'none';
+  activePopover = null;
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#popover') && !e.target.closest('.btn-change')) closePopover();
+});
+
+// ── Status picker ─────────────────────────────────────────────────────────
+async function openStatusPicker(event, key) {
+  event.stopPropagation();
+  const btn = document.getElementById(`btn-s-${key}`);
+
+  if (activePopover?.key === key && activePopover?.mode === 'status') { closePopover(); return; }
+  activePopover = { key, mode: 'status' };
+
+  showPopover(btn, 'Cambiar estado', [{ label: 'Cargando...', dim: true }]);
   btn.disabled = true;
-
-  popover.innerHTML = `<div class="trans-popover-item loading">Cargando transiciones...</div>`;
-
-  // Posicionar debajo del botón
-  const rect = btn.getBoundingClientRect();
-  popover.style.display = 'block';
-  popover.style.top  = `${rect.bottom + window.scrollY + 4}px`;
-  popover.style.left = `${rect.left  + window.scrollX}px`;
 
   try {
     const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${key}/transitions`, {
@@ -234,27 +294,24 @@ async function openTransitions(event, key) {
     const transitions = data.transitions || [];
 
     if (!transitions.length) {
-      popover.innerHTML = `<div class="trans-popover-item loading">Sin transiciones disponibles</div>`;
-      btn.disabled = false; return;
+      showPopover(btn, 'Cambiar estado', [{ label: 'Sin transiciones disponibles', dim: true }]);
+    } else {
+      showPopover(btn, 'Cambiar estado', transitions.map(t => ({
+        label: t.name,
+        onclick: `applyTransition('${key}','${t.id}')`
+      })));
     }
-
-    popover.innerHTML = transitions.map(t => `
-      <div class="trans-popover-item" onclick="applyTransition('${key}','${t.id}','${t.name.replace(/'/g,"\\'")}')">
-        ${t.name}
-      </div>`).join('');
-
   } catch(e) {
-    popover.innerHTML = `<div class="trans-popover-item loading">Error: ${e.message}</div>`;
+    showPopover(btn, 'Cambiar estado', [{ label: `Error: ${e.message}`, dim: true }]);
   }
-
   btn.disabled = false;
 }
 
-async function applyTransition(key, transitionId, transitionName) {
+async function applyTransition(key, transitionId) {
   closePopover();
-  const btn = document.getElementById(`btn-${key}`);
-  const pill = document.getElementById(`jsp-${key}`);
-  if (btn) btn.disabled = true;
+  const btn  = document.getElementById(`btn-s-${key}`);
+  const pill = document.getElementById(`sp-${key}`);
+  if (btn)  btn.disabled = true;
   if (pill) pill.textContent = 'Aplicando...';
 
   try {
@@ -263,17 +320,11 @@ async function applyTransition(key, transitionId, transitionName) {
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({ transition: { id: transitionId } })
     });
-    if (!r.ok) {
-      const e = await r.json().catch(() => ({}));
-      throw new Error(JSON.stringify(e));
-    }
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).errorMessages?.join(', ') || `HTTP ${r.status}`);
 
-    // Actualizar cache y re-renderizar celda
-    // Refetch status de este issue para obtener el nuevo nombre y categoría
-    await fetchJiraStatuses([key]);
-    const cell = document.getElementById(`jsc-cell-${key}`);
-    if (cell) cell.innerHTML = renderJiraStatus(key);
-
+    await fetchJiraData([key]);
+    const cell = document.getElementById(`sc-${key}`);
+    if (cell) cell.innerHTML = renderStatusCell(key);
   } catch(e) {
     console.error('[applyTransition]', e.message);
     if (pill) pill.textContent = 'Error';
@@ -281,17 +332,53 @@ async function applyTransition(key, transitionId, transitionName) {
   }
 }
 
-function closePopover() {
-  const popover = document.getElementById('trans-popover');
-  popover.style.display = 'none';
-  activePopoverKey = null;
+// ── Type picker ───────────────────────────────────────────────────────────
+async function openTypePicker(event, key) {
+  event.stopPropagation();
+  const btn = document.getElementById(`btn-t-${key}`);
+
+  if (activePopover?.key === key && activePopover?.mode === 'type') { closePopover(); return; }
+  activePopover = { key, mode: 'type' };
+
+  showPopover(btn, 'Cambiar tipo', [{ label: 'Cargando...', dim: true }]);
+  btn.disabled = true;
+
+  const types = await fetchAvailableTypes();
+  const current = typeCache[key] || '';
+
+  showPopover(btn, 'Cambiar tipo', types.map(name => ({
+    label: name === current ? `${name} ✓` : name,
+    onclick: name !== current ? `applyTypeChange('${key}','${name.replace(/'/g,"\\'")}')` : '',
+    dim: name === current
+  })));
+
+  btn.disabled = false;
 }
 
-document.addEventListener('click', e => {
-  if (!e.target.closest('#trans-popover') && !e.target.closest('.btn-transition')) {
-    closePopover();
+async function applyTypeChange(key, typeName) {
+  closePopover();
+  const btn  = document.getElementById(`btn-t-${key}`);
+  const pill = document.getElementById(`tp-${key}`);
+  if (btn)  btn.disabled = true;
+  if (pill) pill.textContent = 'Actualizando...';
+
+  try {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${key}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ fields: { issuetype: { name: typeName } } })
+    });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).errorMessages?.join(', ') || `HTTP ${r.status}`);
+
+    typeCache[key] = typeName;
+    const cell = document.getElementById(`tc-${key}`);
+    if (cell) cell.innerHTML = renderTypeCell(key);
+  } catch(e) {
+    console.error('[applyTypeChange]', e.message);
+    if (pill) pill.textContent = 'Error';
+    if (btn)  btn.disabled = false;
   }
-});
+}
 
 document.addEventListener('DOMContentLoaded', loadHistory);
 </script>
