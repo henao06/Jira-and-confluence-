@@ -58,14 +58,14 @@
         </div>
       </div>
       <div class="field">
-        <label class="lbl" for="modulo">Módulo <span class="req">*</span></label>
-        <select id="modulo">
-          <option value="" disabled selected>Seleccionar módulo...</option>
-          <option value="APP WEB">APP WEB</option>
-          <option value="MEET SERVICE">MEET SERVICE</option>
-          <option value="PARENTS">PARENTS</option>
-          <option value="CONTENT CREATION">CONTENT CREATION</option>
-        </select>
+        <label class="lbl" for="modulo">Módulo <span class="req">*</span> <span class="hint">Libre — agrega CHATKIT si es nuevo</span></label>
+        <input type="text" id="modulo" list="modulo-list" placeholder="Seleccionar o escribir módulo..." autocomplete="off">
+        <datalist id="modulo-list">
+          <option value="APP WEB">
+          <option value="MEET SERVICE">
+          <option value="PARENTS">
+          <option value="CONTENT CREATION">
+        </datalist>
       </div>
     </div>
     <div class="row2">
@@ -286,10 +286,11 @@
     </div>
     <div class="row2">
       <div class="field">
-        <label class="lbl" for="impacto">Impacto en el usuario</label>
+        <label class="lbl" for="impacto">Impacto en el usuario <span class="hint">Opcional</span></label>
         <select id="impacto">
+          <option value="" selected>Sin especificar</option>
           <option value="Bloquea el flujo completo">Bloquea el flujo completo</option>
-          <option value="Afecta función secundaria" selected>Afecta función secundaria</option>
+          <option value="Afecta función secundaria">Afecta función secundaria</option>
           <option value="Error visual / cosmético">Error visual / cosmético</option>
           <option value="Pérdida de datos">Pérdida de datos</option>
         </select>
@@ -325,7 +326,7 @@
             <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
             <polyline points="21 15 16 10 5 21"/>
           </svg>
-          <span>Clic para adjuntar imágenes</span>
+          <span>Clic para adjuntar <span class="upload-hint-sep">·</span> <kbd>Ctrl+V</kbd> para pegar</span>
         </div>
         <!-- Estado con archivos -->
         <div id="upload-filled" style="display:none">
@@ -649,7 +650,27 @@ window.addEventListener('DOMContentLoaded', () => {
   fetchNextTC();
   fetchAssignees();
   initMemoryListeners();
+  initModuloCombo();
 });
+
+function initModuloCombo() {
+  const PREDEFINED = ['APP WEB', 'MEET SERVICE', 'PARENTS', 'CONTENT CREATION'];
+  const input = document.getElementById('modulo');
+
+  input.addEventListener('blur', () => {
+    const val = input.value.trim().toUpperCase();
+    if (!val) return;
+    input.value = val;
+    if (!PREDEFINED.includes(val) && !val.endsWith('CHATKIT')) {
+      input.value = val + ' CHATKIT';
+    }
+    persistForm();
+  });
+
+  input.addEventListener('input', () => {
+    input.value = input.value.toUpperCase();
+  });
+}
 
 /* ── TC ID ── */
 async function fetchNextTC() {
@@ -1077,7 +1098,7 @@ async function submitForm() {
       { type:'paragraph', content:[{type:'text',text:'Severidad: ',marks:[{type:'strong'}]},{type:'text',text:sevLbl}]},
       { type:'paragraph', content:[{type:'text',text:'Frecuencia: ',marks:[{type:'strong'}]},{type:'text',text:frecuencia}]},
     ] : []),
-    { type:'paragraph', content:[{type:'text',text:'Impacto: ',marks:[{type:'strong'}]},{type:'text',text:impacto}]},
+    ...(impacto ? [{ type:'paragraph', content:[{type:'text',text:'Impacto: ',marks:[{type:'strong'}]},{type:'text',text:impacto}]}] : []),
     { type:'paragraph', content:[{type:'text',text:'Prioridad: ',marks:[{type:'strong'}]},{type:'text',text:prioridad}]},
   ];
 
@@ -1171,7 +1192,7 @@ function softReset() {
     .forEach(id => document.getElementById(id).value = '');
   document.getElementById('tipo-prueba').value = '';
   document.getElementById('rol-usuario').value = '';
-  document.getElementById('impacto').value     = 'Afecta función secundaria';
+  document.getElementById('impacto').value     = '';
   document.getElementById('prioridad').value   = 'Medium';
   document.getElementById('evidence').value    = '';
   uploadedFiles = [];
@@ -1202,6 +1223,23 @@ function softReset() {
   estado = ''; severidad = ''; frecuencia = '';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
+/* ── Paste desde clipboard ── */
+document.addEventListener('paste', e => {
+  const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+  if (!items) return;
+  let added = false;
+  for (const item of items) {
+    if (!item.type.startsWith('image/')) continue;
+    const file = item.getAsFile();
+    if (!file) continue;
+    const ext = item.type.split('/')[1] || 'png';
+    const named = new File([file], `captura-${Date.now()}.${ext}`, { type: item.type });
+    uploadedFiles.push(named);
+    added = true;
+  }
+  if (added) renderPreviews();
+});
 
 /* ── Lightbox ── */
 let lbIndex = 0;

@@ -53,5 +53,82 @@
     "jira_key": "BUGS-26",
     "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-26",
     "created_at": "2026-04-16T21:28:29.695Z"
+  },
+  {
+    "tc_id": "TC-012",
+    "descripcion": "Verificar instalación y configuración correcta de ChatKit",
+    "modulo": "CHATKIT",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-17",
+    "jira_key": "BUGS-30",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-30",
+    "created_at": "2026-04-17T17:04:36.223Z"
+  },
+  {
+    "tc_id": "TC-013",
+    "descripcion": "Verificar instalación y configuración correcta de MCP",
+    "modulo": "MCP CHATKIT",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-17",
+    "jira_key": "BUGS-31",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-31",
+    "created_at": "2026-04-17T17:14:08.847Z"
+  },
+  {
+    "tc_id": "TC-014",
+    "descripcion": "Verificar funcionamiento integrado de ChatKit + MCP en escenarios reales",
+    "modulo": "APP WEB",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-17",
+    "jira_key": "BUGS-32",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-32",
+    "created_at": "2026-04-17T18:38:23.134Z"
+  },
+  {
+    "tc_id": "TC-015",
+    "descripcion": "Verificar que el agente cree una lección de 10 paginas",
+    "modulo": "APP WEB",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-17",
+    "jira_key": "BUGS-33",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-33",
+    "created_at": "2026-04-17T19:55:44.987Z"
+  },
+  {
+    "tc_id": "TC-015",
+    "descripcion": "Verificar la edición de las paginas y creación de las mismas",
+    "modulo": "APP WEB",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-17",
+    "jira_key": "BUGS-34",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-34",
+    "created_at": "2026-04-17T20:18:54.662Z"
+  },
+  {
+    "tc_id": "TC-016",
+    "descripcion": "Verficar que el char guarde el historial de conversaciones",
+    "modulo": "APP WEB",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-17",
+    "jira_key": "BUGS-35",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-35",
+    "created_at": "2026-04-17T20:32:06.115Z"
+  },
+  {
+    "tc_id": "TC-017",
+    "descripcion": "Consumir una lección como estudiante y verficar que se este generando el progreso",
+    "modulo": "APP WEB",
+    "estado": "Fail",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-20",
+    "jira_key": "BUGS-36",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-36",
+    "created_at": "2026-04-20T12:51:20.444Z"
   }
 ]
