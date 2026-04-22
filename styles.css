@@ -56,6 +56,20 @@ body {
   letter-spacing: .06em; text-transform: uppercase;
   padding: 3px 9px; border-radius: 100px;
 }
+.badge-version {
+  background: rgba(16,185,129,.2); border-color: rgba(16,185,129,.5);
+  color: #6ee7b7; cursor: pointer; text-decoration: none;
+  transition: background .15s;
+}
+.badge-version:hover { background: rgba(16,185,129,.35); }
+.btn-version-avanzar {
+  background: rgba(16,185,129,.15); border: 1px solid rgba(16,185,129,.4);
+  color: #6ee7b7; border-radius: 100px; padding: 3px 7px;
+  cursor: pointer; display: flex; align-items: center;
+  transition: background .15s;
+}
+.btn-version-avanzar:hover { background: rgba(16,185,129,.3); }
+.btn-version-avanzar:disabled { opacity: .4; cursor: not-allowed; }
 .btn-hdr-history {
   display: flex; align-items: center; gap: 6px;
   background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.22);
@@ -276,6 +290,19 @@ select {
 .upload-add-btn:hover { background: var(--g0); border-color: var(--g4); }
 
 /* ── Form footer ── */
+.config-check-label {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 13px; color: var(--g5); cursor: pointer;
+  padding: 6px 12px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--g0);
+  transition: border-color .15s, color .15s;
+  white-space: nowrap;
+}
+.config-check-label:has(input:checked) {
+  border-color: #f59e0b; color: #f59e0b; background: rgba(245,158,11,.06);
+}
+.config-check-label input { accent-color: #f59e0b; width: 15px; height: 15px; }
+
 .form-footer {
   padding: 18px 24px;
   background: linear-gradient(0deg, var(--g0), var(--white));

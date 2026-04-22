@@ -25,6 +25,13 @@
     <div class="hdr-badges">
       <span class="badge">ISO 29119</span>
       <span class="badge">ISTQB</span>
+      <a class="badge badge-version" id="version-actual" href="https://liceopinoverde.atlassian.net/jira/software/projects/QAA/releases" target="_blank" title="Ver publicaciones en Jira">...</a>
+      <button class="btn-version-avanzar" id="btn-avanzar-version" onclick="promptAvanzarVersion()" title="Nueva versión">
+        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+      <button class="btn-version-avanzar" onclick="promptPublicarVersion()" title="Publicar versión actual" style="background:rgba(99,102,241,.15);border-color:rgba(99,102,241,.4);color:#a5b4fc;">
+        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+      </button>
     </div>
     <a href="/history" class="btn-hdr-history">
       <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
@@ -60,16 +67,7 @@
       <div class="field">
         <label class="lbl" for="modulo">Módulo <span class="req">*</span></label>
         <select id="modulo" onchange="onModuloChange()">
-          <option value="">— Seleccioná un módulo —</option>
-          <option value="login">LG — Login &amp; Autenticación</option>
-          <option value="lecciones">LC — Lecciones</option>
-          <option value="tareas">TA — Tareas</option>
-          <option value="foros">FO — Foros</option>
-          <option value="calendario">CA — Calendario</option>
-          <option value="chatkit">CH — ChatKit IA</option>
-          <option value="cursos">CR — Creación de Cursos</option>
-          <option value="reportes">RP — Reportes y Calificaciones</option>
-          <option value="perfil">PR — Perfil</option>
+          <option value="">Cargando módulos...</option>
         </select>
       </div>
     </div>
@@ -358,6 +356,10 @@
   <!-- Footer -->
   <div class="form-footer">
     <button class="btn-reset" onclick="resetForm()">Limpiar formulario</button>
+    <label class="config-check-label">
+      <input type="checkbox" id="requiere-config">
+      <span>⚙️ Requiere configuración</span>
+    </label>
     <button class="btn-submit" id="btn-submit" onclick="submitForm()">
       <svg id="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/>
@@ -668,6 +670,121 @@ document.addEventListener('click',  e => {
   if (e.target.matches('.e-btn, .sev-btn')) setTimeout(persistForm, 0);
 });
 
+/* ── Sistema de versiones — fixVersions nativo de Jira ── */
+let versionActual   = null;
+let versionActualId = null;
+let projectIdQAA    = null;
+
+async function resolverProjectId() {
+  if (projectIdQAA) return projectIdQAA;
+  const r = await fetch(`/jira/rest/api/3/project/QAA`, {
+    headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  projectIdQAA = (await r.json()).id;
+  return projectIdQAA;
+}
+
+async function obtenerVersionActiva() {
+  const r = await fetch(`/jira/rest/api/3/project/QAA/versions`, {
+    headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const activas = (await r.json())
+    .filter(v => !v.released && v.name.startsWith('test-v'))
+    .sort((a, b) => b.name.localeCompare(a.name));
+  if (!activas.length) throw new Error('Sin versión activa');
+  return activas[0];
+}
+
+async function inicializarSistemaVersiones() {
+  const badge = document.getElementById('version-actual');
+  try {
+    const v = await obtenerVersionActiva();
+    versionActual   = v.name;
+    versionActualId = v.id;
+    const icono = (v.description || '').startsWith('⚙️') ? ' ⚙️' : ' ✅';
+    if (badge) badge.textContent = v.name + icono;
+  } catch(e) {
+    console.warn('[version]', e.message);
+    if (badge) badge.textContent = 'sin versión';
+  }
+}
+
+async function iniciarSesion(motivo = 'Nueva sesión') {
+  const projectId = await resolverProjectId();
+
+  // Leer TODAS las versiones (publicadas + activas) para sacar el número más alto
+  const rAll = await fetch(`/jira/rest/api/3/project/QAA/versions`, {
+    headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
+  });
+  const todas = rAll.ok ? await rAll.json() : [];
+  const maxNum = todas
+    .filter(v => v.name.startsWith('test-v'))
+    .reduce((max, v) => Math.max(max, parseInt(v.name.replace('test-v', ''), 10)), 0);
+  const siguiente = `test-v${String(maxNum + 1).padStart(3, '0')}`;
+  const desc = motivo;
+
+  const r = await fetch(`/jira/rest/api/3/version`, {
+    method: 'POST',
+    headers: { 'Authorization': AUTH, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({ name: siguiente, description: desc, projectId: parseInt(projectId), released: false, startDate: new Date().toISOString().split('T')[0] })
+  });
+  if (!r.ok) { const e = await r.json(); throw new Error(JSON.stringify(e.errors || e)); }
+  const creada    = await r.json();
+  versionActual   = siguiente;
+  versionActualId = creada.id;
+
+  const badge = document.getElementById('version-actual');
+  if (badge) badge.textContent = siguiente;
+  return siguiente;
+}
+
+async function cerrarSesion() {
+  if (!versionActualId) throw new Error('Sin ID de versión activa');
+  const r = await fetch(`/jira/rest/api/3/version/${versionActualId}`, {
+    method: 'PUT',
+    headers: { 'Authorization': AUTH, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({ released: true, releaseDate: new Date().toISOString().split('T')[0] })
+  });
+  if (!r.ok) { const e = await r.json(); throw new Error(JSON.stringify(e.errors || e)); }
+}
+
+async function promptAvanzarVersion() {
+  const motivo = prompt(`Versión actual: ${versionActual || 'ninguna'}\n\nMotivo:`, '');
+  if (motivo === null) return;
+  const btn = document.getElementById('btn-avanzar-version');
+  if (btn) btn.disabled = true;
+  try {
+    await iniciarSesion(motivo.trim() || 'Nueva sesión');
+  } catch(e) {
+    alert(`Error: ${e.message}`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function promptPublicarVersion() {
+  if (!versionActual) return alert('No hay versión activa');
+  if (!confirm(`¿Cerrar y publicar ${versionActual}?\n\nEsto marca la sesión como terminada en Jira.`)) return;
+  try {
+    const publicada = versionActual;
+    const num       = parseInt(publicada.replace('test-v', ''), 10);
+    await cerrarSesion();
+    versionActual = null; versionActualId = null;
+
+    const motivo = prompt(`✓ ${publicada} publicada.\n\nMotivo para la nueva sesión (${`test-v${String(num + 1).padStart(3, '0')}`}):`, '');
+    if (motivo !== null) {
+      await iniciarSesion(motivo.trim() || 'Nueva sesión');
+    } else {
+      const badge = document.getElementById('version-actual');
+      if (badge) badge.textContent = 'sin versión';
+    }
+  } catch(e) {
+    alert(`Error: ${e.message}`);
+  }
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('fecha').value = new Date().toISOString().split('T')[0];
   sanitizeDraft();
@@ -675,17 +792,8 @@ window.addEventListener('DOMContentLoaded', () => {
   fetchNextTC();
   fetchAssignees();
   initMemoryListeners();
-  // Precargar estructuras de todos los epics en paralelo (sin bloquear)
-  Object.values(EPICS).forEach(e => cargarEstructuraEpic(e.key).catch(() => {}));
-  // Restaurar estado del selector de test cases si había un módulo guardado
-  const savedModulo = document.getElementById('modulo').value;
-  if (savedModulo && TEST_CASES[savedModulo]) {
-    const testCases = TEST_CASES[savedModulo];
-    const sel = document.getElementById('test-case-select');
-    sel.innerHTML = '<option value="">— Seleccioná un Test Case —</option>' +
-      testCases.map(tc => `<option value="${tc.id}">${tc.id}: ${tc.titulo}</option>`).join('');
-    sel.disabled = false;
-  }
+  cargarEpicsDesdeJira();
+  inicializarSistemaVersiones();
 });
 
 const estructuraCache = {}; // epic key → parsed structure
@@ -842,9 +950,8 @@ function onTestCaseChange() {
   const tc = testCases.find(t => t.id === tcId);
   if (!tc) return;
 
-  // Auto-fill description (only if empty)
   const descField = document.getElementById('descripcion');
-  if (descField && !descField.value) descField.value = tc.titulo;
+  if (descField) descField.value = tc.titulo;
 
   // Auto-fill preconditions
   if (tc.precondiciones?.length) rebuildList('precon-wrap', tc.precondiciones, 'Precondición', 'removePrecon');
@@ -1221,18 +1328,73 @@ function mkTable(rows) {
   };
 }
 
-/* ── EPICS map (módulo → epic QAA) ── */
-const EPICS = {
-  'login':      { key: 'QAA-1', prefix: 'LG', modulo: 'modulo-app-web',  severidadDefault: 'severity-mayor'   },
-  'lecciones':  { key: 'QAA-2', prefix: 'LC', modulo: 'modulo-app-web',  severidadDefault: 'severity-mayor'   },
-  'tareas':     { key: 'QAA-3', prefix: 'TA', modulo: 'modulo-app-web',  severidadDefault: 'severity-medio'   },
-  'foros':      { key: 'QAA-4', prefix: 'FO', modulo: 'modulo-app-web',  severidadDefault: 'severity-medio'   },
-  'calendario': { key: 'QAA-5', prefix: 'CA', modulo: 'modulo-app-web',  severidadDefault: 'severity-medio'   },
-  'chatkit':    { key: 'QAA-6', prefix: 'CH', modulo: 'modulo-chatkit',  severidadDefault: 'severity-critico' },
-  'cursos':     { key: 'QAA-7', prefix: 'CR', modulo: 'modulo-app-web',  severidadDefault: 'severity-mayor'   },
-  'reportes':   { key: 'QAA-8', prefix: 'RP', modulo: 'modulo-app-web',  severidadDefault: 'severity-medio'   },
-  'perfil':     { key: 'QAA-9', prefix: 'PR', modulo: 'modulo-app-web',  severidadDefault: 'severity-bajo'    },
-};
+/* ── EPICS map — se llena dinámicamente desde Jira ── */
+let EPICS = {};
+
+async function cargarEpicsDesdeJira() {
+  const select = document.getElementById('modulo');
+  select.disabled = true;
+  try {
+    const jql = encodeURIComponent('project = QAA AND issuetype = Epic ORDER BY created ASC');
+    const r = await fetch(`/jira/rest/api/3/search/jql?jql=${jql}&fields=summary,description&maxResults=100`, {
+      headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+
+    EPICS = {};
+    select.innerHTML = '<option value="">— Seleccioná un módulo —</option>';
+
+    for (const issue of (data.issues || [])) {
+      const epicKey  = issue.key;
+      const moduloId = epicKey.toLowerCase();
+      const summary  = issue.fields.summary || epicKey;
+
+      let prefix = null, modulo = 'modulo-app-web', severidadDefault = 'severity-mayor';
+      try {
+        const texto  = extraerTextoDeADF(issue.fields.description);
+        const iStart = texto.indexOf('QA_STRUCTURE_START');
+        const iEnd   = texto.lastIndexOf('QA_STRUCTURE_END');
+        if (iStart !== -1 && iEnd !== -1) {
+          const jsonMatch = texto.slice(iStart + 18, iEnd).match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const estructura = JSON.parse(jsonMatch[0]);
+            prefix           = estructura.meta?.prefix;
+            modulo           = estructura.meta?.moduloSistema || modulo;
+            severidadDefault = estructura.meta?.severidadDefault || severidadDefault;
+            estructuraCache[epicKey] = estructura;
+          }
+        }
+      } catch {}
+
+      if (!prefix) {
+        const m = summary.match(/^([A-Z]{2,4})\s*[—\-]/);
+        prefix = m ? m[1] : epicKey.replace('QAA-', 'M');
+      }
+
+      EPICS[moduloId] = { key: epicKey, prefix, modulo, severidadDefault };
+
+      const opt = document.createElement('option');
+      opt.value = moduloId;
+      opt.textContent = summary;
+      select.appendChild(opt);
+    }
+
+    select.disabled = false;
+
+    // Restaurar módulo del draft si existe
+    const savedModulo = (() => { try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}').modulo; } catch { return ''; } })();
+    if (savedModulo && select.querySelector(`option[value="${savedModulo}"]`)) {
+      select.value = savedModulo;
+      onModuloChange();
+    }
+
+  } catch(e) {
+    console.error('[cargarEpicsDesdeJira]', e.message);
+    select.innerHTML = '<option value="">— Error cargando módulos —</option>';
+    select.disabled = false;
+  }
+}
 
 /* ── TEST_CASES catalog ── */
 const TEST_CASES = {
@@ -1647,17 +1809,13 @@ async function submitForm() {
   const sevLbl     = {'severity-critico':'Crítico','severity-mayor':'Mayor','severity-medio':'Medio','severity-bajo':'Bajo'}[severidad]||'—';
   const entorno    = `${navegador} / ${sistemaOp}${version ? ' / '+version : ''}`;
 
-  // Leer número de ciclo del TC ID (ej: TC-003 → ciclo-1 por defecto si no hay campo dedicado)
-  const numeroCiclo = '1';
-  const tipoTest = tipoPrueba; // ya tiene el formato 'type-funcional' etc.
-
-  // Construir labels según spec — usar moduloSistema de Jira si está disponible
+  const tipoTest    = tipoPrueba;
   const moduloLabel = window.estructuraActual?.meta?.moduloSistema || epic.modulo;
   const labels = [
     `estado-${estado.toLowerCase()}`,
-    `ciclo-${numeroCiclo}`,
     tipoTest,
     moduloLabel,
+    ...(versionActual ? [versionActual] : []),
     ...(estado === 'fail' && severidad ? [severidad] : []),
     ...(esRetest ? ['retest'] : []),
   ];
@@ -1673,55 +1831,48 @@ async function submitForm() {
     ...(esRetest  ? [['Re-test de', retestTc]] : []),
   ];
 
-  const panelType = estado === 'pass' ? 'success' : estado === 'fail' ? 'error' : 'warning';
-  const resultContent = [
-    { type:'paragraph', content:[{type:'text',text:'Estado: ',marks:[{type:'strong'}]},{type:'text',text:estadoLbl}]},
-    ...(estado==='fail' ? [
-      { type:'paragraph', content:[{type:'text',text:'Severidad: ',marks:[{type:'strong'}]},{type:'text',text:sevLbl}]},
-      { type:'paragraph', content:[{type:'text',text:'Frecuencia: ',marks:[{type:'strong'}]},{type:'text',text:frecuencia}]},
-    ] : []),
-    ...(impacto ? [{ type:'paragraph', content:[{type:'text',text:'Impacto: ',marks:[{type:'strong'}]},{type:'text',text:impacto}]}] : []),
-    { type:'paragraph', content:[{type:'text',text:'Prioridad: ',marks:[{type:'strong'}]},{type:'text',text:prioridad}]},
-  ];
-
-  // ADF description
+  // ADF description — solo nodos seguros (sin panel)
   const description = { type:'doc', version:1, content:[
     mkB('Tester: ' + tester),
     mkB('Fecha: ' + fecha),
-    mkB('Resultado: ' + estadoLbl),
+    mkB('Módulo: ' + moduloNombre),
+    mkB('Tipo: ' + tipoLabel),
+    mkB('Entorno: ' + entorno),
+    ...(historia ? [mkB('Historia: ' + historia)] : []),
     mkRule(),
-    ...mkPanel('info', [mkB('Identificación del caso de prueba'), mkTable(infoRows)]),
+    mkH('Resultado'), mkB('Estado: ' + estadoLbl),
+    ...(estado==='fail' ? [ mkB('Severidad: ' + sevLbl), mkB('Frecuencia: ' + frecuencia) ] : []),
+    ...(impacto ? [mkB('Impacto: ' + impacto)] : []),
     mkRule(),
     mkH('Precondiciones'), mkOrderedList(precon),
     mkH('Datos de entrada'), datos.length > 0 ? mkOrderedList(datos) : mkP('—'),
     mkH('Pasos a seguir'), steps.length > 0 ? mkOrderedList(steps) : mkP('—'),
     mkH('Resultado esperado'), mkOrderedList(esperado),
     mkH('Resultado obtenido'), mkOrderedList(obtenido),
-    ...(postcon.length > 0 ? [mkH('Postcondiciones'), mkOrderedList(postcon)] : []),
-    ...(soluciones.length > 0  ? [mkH('Soluciones'),    mkOrderedList(soluciones)]  : []),
-    ...(sugerencias.length > 0 ? [mkH('Sugerencias'),   mkOrderedList(sugerencias)] : []),
-    mkRule(),
-    ...mkPanel(panelType, resultContent),
+    ...(postcon.length > 0    ? [mkH('Postcondiciones'), mkOrderedList(postcon)]       : []),
+    ...(soluciones.length > 0 ? [mkH('Soluciones'),      mkOrderedList(soluciones)]    : []),
+    ...(sugerencias.length > 0? [mkH('Sugerencias'),     mkOrderedList(sugerencias)]   : []),
   ]};
 
   setLoading(true);
 
   try {
-    // Obtener el próximo número de subtarea bajo el epic
-    const numero = await getNextNumero(epic.key);
-    const summary = `${epic.prefix}-${numero} — ${desc}`;
+    const requiereConfig = document.getElementById('requiere-config').checked;
+    const numero  = await getNextNumero(epic.key);
+    const summary = `${requiereConfig ? '⚙️ ' : ''}${epic.prefix}-${numero} — ${desc}`;
 
-    const asignado = document.getElementById('asignado').value;
+    if (requiereConfig) labels.push('requiere-config');
+
     const body = { fields:{
-      project:{ key: 'QAA' },
+      project:           { key: 'QAA' },
+      parent:            { key: epic.key },
       summary,
-      description,
-      issuetype:{ name: 'Actividades secundarias' },
-      parent:{ key: epic.key },
-      priority:{ name: prioridad },
+      issuetype:         { name: 'Tarea' },
+      customfield_10014: epic.key,
+      priority:          { name: requiereConfig ? 'High' : 'Medium' },
       labels,
-      customfield_10015: fecha,
-      ...(asignado ? { assignee:{ accountId: asignado } } : {}),
+      description,
+      ...(versionActual ? { fixVersions: [{ name: versionActual }] } : {}),
     }};
 
     const r = await fetch(`/jira/rest/api/3/issue`, {
@@ -1763,7 +1914,7 @@ async function submitForm() {
         description,
         issuetype: { name: 'Error' },
         priority:  { name: prioridadBug },
-        labels:    [ `severity-${sevSuffix}`, `ciclo-${numeroCiclo}`, `type-${tipeSuffix}`, epic.modulo, 'estado-abierto' ],
+        labels:    [ `severity-${sevSuffix}`, `type-${tipeSuffix}`, epic.modulo, 'estado-abierto', ...(versionActual ? [versionActual] : []) ],
       }};
       try {
         const bugRes = await fetch(`/jira/rest/api/3/issue`, {
@@ -1811,7 +1962,7 @@ async function submitForm() {
         labels,
         tipo_prueba: tipoPrueba,
         severidad: severidad || null,
-        ciclo: numeroCiclo,
+        ciclo: versionActual || '',
         summary,
       })
     });
@@ -1838,7 +1989,8 @@ function softReset() {
   document.getElementById('evidence').value    = '';
   uploadedFiles = [];
   renderPreviews();
-  document.getElementById('es-retest').checked = false;
+  document.getElementById('es-retest').checked      = false;
+  document.getElementById('requiere-config').checked = false;
   document.getElementById('retest-extra').classList.remove('show');
   document.getElementById('row-severity').style.display   = 'none';
   document.getElementById('row-frecuencia').style.display = 'none';

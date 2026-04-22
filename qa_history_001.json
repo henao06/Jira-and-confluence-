@@ -130,5 +130,183 @@
     "jira_key": "BUGS-36",
     "jira_url": "https://liceopinoverde.atlassian.net/browse/BUGS-36",
     "created_at": "2026-04-20T12:51:20.444Z"
+  },
+  {
+    "tc_id": "LC-001",
+    "descripcion": "Visualización de lección con contenido multimedia",
+    "modulo": "LC — Lecciones",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-20",
+    "jira_key": "QAA-24",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/QAA-24",
+    "epic_key": "QAA-2",
+    "labels": [
+      "estado-pass",
+      "ciclo-1",
+      "type-funcional",
+      "modulo-app-web"
+    ],
+    "tipo_prueba": "type-funcional",
+    "severidad": null,
+    "ciclo": "1",
+    "summary": "LC-002 — Visualización de lección con contenido multimedia",
+    "created_at": "2026-04-22T15:24:53.632Z"
+  },
+  {
+    "tc_id": "TA-001",
+    "descripcion": "Visualizar tareas pendientes",
+    "modulo": "TA — Tareas",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-22",
+    "jira_key": "QAA-26",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/QAA-26",
+    "epic_key": "QAA-3",
+    "labels": [
+      "estado-pass",
+      "ciclo-1",
+      "type-funcional",
+      "modulo-app-web"
+    ],
+    "tipo_prueba": "type-funcional",
+    "severidad": null,
+    "ciclo": "1",
+    "summary": "TA-001 — Visualizar tareas pendientes",
+    "created_at": "2026-04-22T15:28:40.971Z"
+  },
+  {
+    "tc_id": "CA-001",
+    "descripcion": "Crear un evento personal",
+    "modulo": "CA — Calendario",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-22",
+    "jira_key": "QAA-27",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/QAA-27",
+    "epic_key": "QAA-5",
+    "labels": [
+      "estado-pass",
+      "ciclo-1",
+      "type-funcional",
+      "modulo-app-web"
+    ],
+    "tipo_prueba": "type-funcional",
+    "severidad": null,
+    "ciclo": "1",
+    "summary": "CA-001 — Crear un evento personal",
+    "created_at": "2026-04-22T15:32:20.316Z"
+  },
+  {
+    "tc_id": "LC-001",
+    "descripcion": "Responder correctamente a un ejercicio",
+    "modulo": "LC — Lecciones",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-22",
+    "jira_key": "QAA-28",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/QAA-28",
+    "epic_key": "QAA-25",
+    "labels": [
+      "estado-pass",
+      "ciclo-1",
+      "type-funcional",
+      "modulo-app-web"
+    ],
+    "tipo_prueba": "type-funcional",
+    "severidad": null,
+    "ciclo": "1",
+    "summary": "LC-001 — Responder correctamente a un ejercicio",
+    "created_at": "2026-04-22T15:48:30.743Z"
+  },
+  {
+    "tc_id": "LG-003",
+    "descripcion": "Cierre de sesión",
+    "modulo": "LG — Login & Autenticación",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-22",
+    "jira_key": "QAA-29",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/QAA-29",
+    "epic_key": "QAA-1",
+    "labels": [
+      "estado-pass",
+      "ciclo-1",
+      "type-funcional",
+      "modulo-app-web"
+    ],
+    "tipo_prueba": "type-funcional",
+    "severidad": null,
+    "ciclo": "1",
+    "summary": "LG-002 — Cierre de sesión",
+    "created_at": "2026-04-22T15:59:20.181Z"
+  },
+  {
+    "tc_id": "LG-005",
+    "descripcion": "Expiración de sesión",
+    "modulo": "LG — Login & Autenticación",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-22",
+    "jira_key": "QAA-33",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/QAA-33",
+    "epic_key": "QAA-1",
+    "labels": [
+      "estado-pass",
+      "type-funcional",
+      "modulo-app-web",
+      "test-v002"
+    ],
+    "tipo_prueba": "type-funcional",
+    "severidad": null,
+    "ciclo": "test-v002",
+    "summary": "LG-002 — Expiración de sesión",
+    "created_at": "2026-04-22T19:44:02.463Z"
+  },
+  {
+    "tc_id": "LG-005",
+    "descripcion": "Login con credenciales válidas",
+    "modulo": "LG — Login & Autenticación",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-22",
+    "jira_key": "QAA-34",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/QAA-34",
+    "epic_key": "QAA-1",
+    "labels": [
+      "estado-pass",
+      "type-funcional",
+      "modulo-app-web",
+      "test-v002",
+      "requiere-config"
+    ],
+    "tipo_prueba": "type-funcional",
+    "severidad": null,
+    "ciclo": "test-v002",
+    "summary": "⚙️ LG-002 — Login con credenciales válidas",
+    "created_at": "2026-04-22T19:50:52.575Z"
+  },
+  {
+    "tc_id": "TA-001",
+    "descripcion": "Visualizar tareas pendientes",
+    "modulo": "TA — Tareas",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-22",
+    "jira_key": "QAA-35",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/QAA-35",
+    "epic_key": "QAA-3",
+    "labels": [
+      "estado-pass",
+      "type-funcional",
+      "modulo-app-web",
+      "test-v002",
+      "requiere-config"
+    ],
+    "tipo_prueba": "type-funcional",
+    "severidad": null,
+    "ciclo": "test-v002",
+    "summary": "⚙️ TA-001 — Visualizar tareas pendientes",
+    "created_at": "2026-04-22T20:05:58.928Z"
   }
 ]
