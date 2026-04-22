@@ -353,11 +353,31 @@
     </div>
   </div>
 
+  <!-- Config images — solo visible cuando "Requiere configuración" está marcado -->
+  <div id="config-section" class="config-section" style="display:none">
+    <div class="sec-hdr">
+      <div class="sec-icon" style="background:rgba(245,158,11,.15)">
+        <svg fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" stroke="#f59e0b">
+          <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/>
+        </svg>
+      </div>
+      <div><div class="sec-title">Imágenes de configuración</div><div class="sec-sub">Adjuntá capturas para guiar al configurador</div></div>
+    </div>
+    <div class="fields">
+      <div id="config-previews" class="config-previews-wrap"></div>
+      <label class="config-upload-btn">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Subir imágenes de configuración
+        <input type="file" accept="image/*" multiple style="display:none" onchange="onConfigFilePicked(this)">
+      </label>
+    </div>
+  </div>
+
   <!-- Footer -->
   <div class="form-footer">
     <button class="btn-reset" onclick="resetForm()">Limpiar formulario</button>
     <label class="config-check-label">
-      <input type="checkbox" id="requiere-config">
+      <input type="checkbox" id="requiere-config" onchange="toggleConfigSection(this)">
       <span>⚙️ Requiere configuración</span>
     </label>
     <button class="btn-submit" id="btn-submit" onclick="submitForm()">
@@ -559,6 +579,7 @@ function persistForm() {
     urlPantalla:   document.getElementById('url-pantalla').value,
     rolUsuario:    document.getElementById('rol-usuario').value,
     asignado:      document.getElementById('asignado').value,
+
     precondiciones: Array.from(document.querySelectorAll('#precon-wrap .step-row input')).map(i => i.value),
     datos:          Array.from(document.querySelectorAll('#datos-wrap .step-row input')).map(i => i.value),
     esperado:       Array.from(document.querySelectorAll('#esperado-wrap .step-row input')).map(i => i.value),
@@ -787,6 +808,8 @@ async function promptPublicarVersion() {
 
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('fecha').value = new Date().toISOString().split('T')[0];
+  document.getElementById('requiere-config').checked = false;
+  document.getElementById('config-section').style.display = 'none';
   sanitizeDraft();
   restoreForm();
   fetchNextTC();
@@ -1169,6 +1192,36 @@ function removeSugg(btn) {
 /* ── Evidence ── */
 /* ── Upload con array propio ── */
 let uploadedFiles = [];
+let configFiles   = [];
+
+function toggleConfigSection(cb) {
+  document.getElementById('config-section').style.display = cb.checked ? 'block' : 'none';
+  if (!cb.checked) { configFiles = []; renderConfigPreviews(); }
+}
+
+function onConfigFilePicked(input) {
+  Array.from(input.files).forEach(f => configFiles.push(f));
+  input.value = '';
+  renderConfigPreviews();
+}
+
+function renderConfigPreviews() {
+  const wrap = document.getElementById('config-previews');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  configFiles.forEach((file, i) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const item = document.createElement('div');
+      item.className = 'preview-item';
+      item.innerHTML = `<img src="${e.target.result}" title="${file.name}"><button type="button" class="preview-remove" onclick="removeConfigImg(${i})">×</button><div class="preview-name">${file.name.length > 14 ? file.name.slice(0,12)+'…' : file.name}</div>`;
+      wrap.appendChild(item);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function removeConfigImg(i) { configFiles.splice(i, 1); renderConfigPreviews(); }
 
 function onFilePicked(input) {
   Array.from(input.files).forEach(file => uploadedFiles.push(file));
@@ -1886,9 +1939,18 @@ async function submitForm() {
     const issueKey = created.key;
     const issueUrl = `https://liceopinoverde.atlassian.net/browse/${issueKey}`;
 
-    if (uploadedFiles.length > 0) {
-      for (const file of uploadedFiles) {
-        const fd = new FormData(); fd.append('file', file);
+    for (const file of uploadedFiles) {
+      const fd = new FormData(); fd.append('file', file);
+      await fetch(`/jira/rest/api/3/issue/${issueKey}/attachments`, {
+        method:'POST', headers:{'Authorization':AUTH,'X-Atlassian-Token':'no-check'}, body:fd
+      });
+    }
+
+    if (configFiles.length > 0) {
+      for (const file of configFiles) {
+        const ext = file.name.split('.').pop();
+        const renamed = new File([file], `config.${ext}`, { type: file.type });
+        const fd = new FormData(); fd.append('file', renamed);
         await fetch(`/jira/rest/api/3/issue/${issueKey}/attachments`, {
           method:'POST', headers:{'Authorization':AUTH,'X-Atlassian-Token':'no-check'}, body:fd
         });
@@ -1991,6 +2053,8 @@ function softReset() {
   renderPreviews();
   document.getElementById('es-retest').checked      = false;
   document.getElementById('requiere-config').checked = false;
+  configFiles = []; renderConfigPreviews();
+  document.getElementById('config-section').style.display = 'none';
   document.getElementById('retest-extra').classList.remove('show');
   document.getElementById('row-severity').style.display   = 'none';
   document.getElementById('row-frecuencia').style.display = 'none';

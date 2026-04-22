@@ -290,6 +290,16 @@ select {
 .upload-add-btn:hover { background: var(--g0); border-color: var(--g4); }
 
 /* ── Form footer ── */
+.config-section { border-top: 2px dashed rgba(245,158,11,.4); background: rgba(245,158,11,.04); }
+.config-previews-wrap { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+.config-upload-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px; border-radius: 8px; cursor: pointer;
+  border: 1.5px dashed rgba(245,158,11,.5); color: #f59e0b;
+  font-size: 13px; font-weight: 500; transition: background .15s;
+}
+.config-upload-btn:hover { background: rgba(245,158,11,.1); }
+
 .config-check-label {
   display: flex; align-items: center; gap: 7px;
   font-size: 13px; color: var(--g5); cursor: pointer;

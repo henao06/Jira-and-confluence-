@@ -308,5 +308,51 @@
     "ciclo": "test-v002",
     "summary": "⚙️ TA-001 — Visualizar tareas pendientes",
     "created_at": "2026-04-22T20:05:58.928Z"
+  },
+  {
+    "tc_id": "FO-001",
+    "descripcion": "Crear un nuevo tema",
+    "modulo": "FO — Foros",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-22",
+    "jira_key": "QAA-36",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/QAA-36",
+    "epic_key": "QAA-4",
+    "labels": [
+      "estado-pass",
+      "type-funcional",
+      "modulo-app-web",
+      "test-v002",
+      "requiere-config"
+    ],
+    "tipo_prueba": "type-funcional",
+    "severidad": null,
+    "ciclo": "test-v002",
+    "summary": "⚙️ FO-001 — Crear un nuevo tema",
+    "created_at": "2026-04-22T20:29:00.516Z"
+  },
+  {
+    "tc_id": "FO-002",
+    "descripcion": "Crear un nuevo tema",
+    "modulo": "FO — Foros",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-22",
+    "jira_key": "QAA-37",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/QAA-37",
+    "epic_key": "QAA-4",
+    "labels": [
+      "estado-pass",
+      "type-funcional",
+      "modulo-app-web",
+      "test-v002",
+      "requiere-config"
+    ],
+    "tipo_prueba": "type-funcional",
+    "severidad": null,
+    "ciclo": "test-v002",
+    "summary": "⚙️ FO-002 — Crear un nuevo tema",
+    "created_at": "2026-04-22T20:32:06.990Z"
   }
 ]
