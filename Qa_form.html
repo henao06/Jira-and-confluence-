@@ -19,7 +19,7 @@
   </div>
   <div class="hdr-text">
     <h1>Caso de Prueba QA</h1>
-    <p>Hybred · Proyecto BUGS · ISO/IEC 29119 · ISTQB</p>
+    <p>Hybred · Proyecto QAA · ISO/IEC 29119 · ISTQB</p>
   </div>
   <div class="hdr-right">
     <div class="hdr-badges">
@@ -58,14 +58,27 @@
         </div>
       </div>
       <div class="field">
-        <label class="lbl" for="modulo">Módulo <span class="req">*</span> <span class="hint">Libre — agrega CHATKIT si es nuevo</span></label>
-        <input type="text" id="modulo" list="modulo-list" placeholder="Seleccionar o escribir módulo..." autocomplete="off">
-        <datalist id="modulo-list">
-          <option value="APP WEB">
-          <option value="MEET SERVICE">
-          <option value="PARENTS">
-          <option value="CONTENT CREATION">
-        </datalist>
+        <label class="lbl" for="modulo">Módulo <span class="req">*</span></label>
+        <select id="modulo" onchange="onModuloChange()">
+          <option value="">— Seleccioná un módulo —</option>
+          <option value="login">LG — Login &amp; Autenticación</option>
+          <option value="lecciones">LC — Lecciones</option>
+          <option value="tareas">TA — Tareas</option>
+          <option value="foros">FO — Foros</option>
+          <option value="calendario">CA — Calendario</option>
+          <option value="chatkit">CH — ChatKit IA</option>
+          <option value="cursos">CR — Creación de Cursos</option>
+          <option value="reportes">RP — Reportes y Calificaciones</option>
+          <option value="perfil">PR — Perfil</option>
+        </select>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label class="lbl" for="test-case-select">Test Case <span class="hint">Se carga al elegir módulo</span></label>
+        <select id="test-case-select" disabled onchange="onTestCaseChange()">
+          <option value="">— Primero elegí un módulo —</option>
+        </select>
       </div>
     </div>
     <div class="row2">
@@ -313,7 +326,7 @@
         <span>Sí, este TC valida un error corregido</span>
       </label>
       <div class="retest-extra" id="retest-extra">
-        <input type="text" id="retest-tc" placeholder="Issue anterior, ej: BUGS-7" style="margin-top:8px">
+        <input type="text" id="retest-tc" placeholder="Issue anterior, ej: QAA-7" style="margin-top:8px">
       </div>
     </div>
     <div class="field">
@@ -532,6 +545,7 @@ function persistForm() {
   const draft = {
     tcId:          document.getElementById('tc-id').value,
     modulo:        document.getElementById('modulo').value,
+    testCaseId:    document.getElementById('test-case-select').value,
     tipoPrueba:    document.getElementById('tipo-prueba').value,
     descripcion:   document.getElementById('descripcion').value,
     historia:      document.getElementById('historia').value,
@@ -567,7 +581,8 @@ function sanitizeDraft() {
     const raw = localStorage.getItem(DRAFT_KEY);
     if (!raw) return;
     const d = JSON.parse(raw);
-    if (d.tcId && !/^TC-\d+$/i.test(d.tcId.trim())) {
+    // Aceptar TC-NNN (legacy) y XX-NNN (nuevo formato por módulo)
+    if (d.tcId && !/^[A-Z]{2,3}-\d+$/i.test(d.tcId.trim())) {
       delete d.tcId;
       localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
     }
@@ -594,7 +609,17 @@ function restoreForm() {
   const set = (id, val) => { if (val !== undefined && val !== null) { const el = document.getElementById(id); if (el) el.value = val; } };
 
   if (d.tcId) set('tc-id', d.tcId);
-  set('modulo', d.modulo); set('tipo-prueba', d.tipoPrueba);
+  set('modulo', d.modulo);
+  // Restaurar test-case-select después de restaurar el módulo
+  if (d.modulo && TEST_CASES[d.modulo]) {
+    const testCases = TEST_CASES[d.modulo];
+    const tcSel = document.getElementById('test-case-select');
+    tcSel.innerHTML = '<option value="">— Seleccioná un Test Case —</option>' +
+      testCases.map(tc => `<option value="${tc.id}">${tc.id}: ${tc.titulo}</option>`).join('');
+    tcSel.disabled = false;
+    if (d.testCaseId) tcSel.value = d.testCaseId;
+  }
+  set('tipo-prueba', d.tipoPrueba);
   set('descripcion', d.descripcion); set('historia', d.historia);
   set('tester', d.tester); set('fecha', d.fecha);
   set('navegador', d.navegador); set('sistema-op', d.sistemaOp);
@@ -650,60 +675,215 @@ window.addEventListener('DOMContentLoaded', () => {
   fetchNextTC();
   fetchAssignees();
   initMemoryListeners();
-  initModuloCombo();
+  // Precargar estructuras de todos los epics en paralelo (sin bloquear)
+  Object.values(EPICS).forEach(e => cargarEstructuraEpic(e.key).catch(() => {}));
+  // Restaurar estado del selector de test cases si había un módulo guardado
+  const savedModulo = document.getElementById('modulo').value;
+  if (savedModulo && TEST_CASES[savedModulo]) {
+    const testCases = TEST_CASES[savedModulo];
+    const sel = document.getElementById('test-case-select');
+    sel.innerHTML = '<option value="">— Seleccioná un Test Case —</option>' +
+      testCases.map(tc => `<option value="${tc.id}">${tc.id}: ${tc.titulo}</option>`).join('');
+    sel.disabled = false;
+  }
 });
 
-function initModuloCombo() {
-  const PREDEFINED = ['APP WEB', 'MEET SERVICE', 'PARENTS', 'CONTENT CREATION'];
-  const input = document.getElementById('modulo');
+const estructuraCache = {}; // epic key → parsed structure
 
-  input.addEventListener('blur', () => {
-    const val = input.value.trim().toUpperCase();
-    if (!val) return;
-    input.value = val;
-    if (!PREDEFINED.includes(val) && !val.endsWith('CHATKIT')) {
-      input.value = val + ' CHATKIT';
+async function cargarEstructuraEpic(epicKey) {
+  if (estructuraCache[epicKey]) return estructuraCache[epicKey];
+
+  const r = await fetch(`/jira/rest/api/3/issue/${epicKey}?fields=description`, {
+    headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
+  });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    console.error(`[cargarEstructuraEpic] ${epicKey} → HTTP ${r.status}`, body.substring(0, 300));
+    throw new Error(`HTTP ${r.status} al cargar ${epicKey}`);
+  }
+
+  const data = await r.json();
+  const texto = extraerTextoDeADF(data.fields.description);
+
+  const iStart = texto.indexOf('QA_STRUCTURE_START');
+  const iEnd   = texto.lastIndexOf('QA_STRUCTURE_END');
+  if (iStart === -1 || iEnd === -1) throw new Error(`Sin estructura QA en ${epicKey}`);
+
+  const between   = texto.slice(iStart + 18, iEnd);
+  const jsonMatch = between.match(/\{[\s\S]*\}/); // greedy — captura el objeto completo
+  if (!jsonMatch) throw new Error(`Sin JSON en ${epicKey}`);
+
+  const estructura = JSON.parse(jsonMatch[0]);
+  estructuraCache[epicKey] = estructura;
+  return estructura;
+}
+
+function extraerTextoDeADF(adf) {
+  if (typeof adf === 'string') return adf;
+  if (!adf?.content) return '';
+  let texto = '';
+  function procesar(nodo) {
+    if (!nodo) return;
+    // codeBlock: extraer el texto EXACTO sin agregar saltos
+    if (nodo.type === 'codeBlock') {
+      if (nodo.content) nodo.content.forEach(h => { if (h.text) texto += h.text; });
+      texto += '\n';
+      return;
     }
-    persistForm();
-  });
+    if (nodo.text) texto += nodo.text;
+    if (nodo.content) nodo.content.forEach(procesar);
+    if (['paragraph','heading','listItem'].includes(nodo.type)) texto += '\n';
+  }
+  adf.content.forEach(procesar);
+  return texto;
+}
 
-  input.addEventListener('input', () => {
-    input.value = input.value.toUpperCase();
+async function obtenerEstadoModulo(moduloKey) {
+  const epic = EPICS[moduloKey];
+  if (!epic) throw new Error(`Módulo desconocido: ${moduloKey}`);
+
+  const estructura = await cargarEstructuraEpic(epic.key);
+  const testCases  = estructura.testCases || [];
+  const totalTCs   = testCases.length;
+
+  const jql = encodeURIComponent(`parent = ${epic.key} ORDER BY created ASC`);
+  const res  = await fetch(`/jira/rest/api/3/search/jql?jql=${jql}&fields=summary,labels,created&maxResults=200`, {
+    headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
   });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+
+  const totalEjecuciones = (data.issues || []).length;
+  const siguienteNumero  = totalEjecuciones + 1;
+  const siguienteId      = `${epic.prefix}-${String(siguienteNumero).padStart(3, '0')}`;
+  const tcIndex          = totalTCs > 0 ? totalEjecuciones % totalTCs : 0;
+  const siguienteTC      = testCases[tcIndex] ?? null;
+  const cicloCompleto    = totalTCs > 0 && totalEjecuciones > 0 && totalEjecuciones % totalTCs === 0;
+
+  return { estructura, testCases, totalTCs, totalEjecuciones, siguienteId, siguienteTC, cicloCompleto, prefix: epic.prefix };
+}
+
+async function getNextNumero(epicKey) {
+  try {
+    const jql = encodeURIComponent(`parent = ${epicKey} ORDER BY created ASC`);
+    const r   = await fetch(`/jira/rest/api/3/search/jql?jql=${jql}&maxResults=1`, {
+      headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    return String(((d.issues || []).length) + 1).padStart(3, '0');
+  } catch(e) {
+    console.warn('[getNextNumero]', e.message);
+    return '001';
+  }
+}
+
+async function onModuloChange() {
+  const modulo = document.getElementById('modulo').value;
+  if (!modulo) return;
+  const epic = EPICS[modulo];
+
+  const tcIdField = document.getElementById('tc-id');
+  const banner    = document.getElementById('next-tc-banner');
+  const tcSel     = document.getElementById('test-case-select');
+
+  if (tcIdField) { tcIdField.value = 'Cargando...'; tcIdField.style.opacity = '0.6'; }
+  if (banner)    { banner.textContent = 'Consultando Jira...'; banner.style.display = 'inline-block'; banner.style.background = '#6b7280'; }
+  tcSel.innerHTML = '<option value="">Cargando test cases...</option>';
+  tcSel.disabled  = true;
+
+  try {
+    const estado = await obtenerEstadoModulo(modulo);
+    window.estructuraActual = estado.estructura;
+
+    tcSel.innerHTML = '<option value="">— Seleccioná un Test Case —</option>' +
+      estado.testCases.map(tc => `<option value="${tc.id}">${tc.id}: ${tc.titulo}</option>`).join('');
+    tcSel.disabled = false;
+
+    if (tcIdField) { tcIdField.value = estado.siguienteId; tcIdField.removeAttribute('readonly'); tcIdField.style.opacity = '1'; }
+
+    if (estado.cicloCompleto) {
+      if (banner) { banner.textContent = `Siguiente: ${estado.siguienteId} · Ciclo completo ✓ — iniciando ciclo 2`; banner.style.background = '#10b981'; }
+    }
+
+    if (estado.siguienteTC) {
+      tcSel.value = estado.siguienteTC.id;
+      if (banner) { banner.textContent = `Siguiente: ${estado.siguienteId} · TC: ${estado.siguienteTC.id} — ${estado.siguienteTC.titulo}`; banner.style.background = 'var(--g7)'; }
+      onTestCaseChange();
+    } else {
+      if (banner) { banner.textContent = `Siguiente: ${estado.siguienteId}`; banner.style.background = 'var(--g7)'; }
+    }
+
+  } catch(e) {
+    console.warn('[onModuloChange]', e.message);
+    const testCases = (typeof TEST_CASES !== 'undefined' && TEST_CASES[modulo]) ? TEST_CASES[modulo] : [];
+    tcSel.innerHTML = '<option value="">— Seleccioná un Test Case —</option>' +
+      testCases.map(tc => `<option value="${tc.id}">${tc.id}: ${tc.titulo}</option>`).join('');
+    tcSel.disabled = false;
+    window.estructuraActual = null;
+
+    const numero = await getNextNumero(epic.key);
+    const nextId = `${epic.prefix}-${numero}`;
+    if (tcIdField) { tcIdField.value = nextId; tcIdField.removeAttribute('readonly'); tcIdField.style.opacity = '1'; }
+    if (banner)    { banner.textContent = `Siguiente: ${nextId} (sin estructura Jira)`; banner.style.background = '#f59e0b'; }
+  }
+
+  persistForm();
+}
+
+function onTestCaseChange() {
+  const modulo = document.getElementById('modulo').value;
+  const tcId   = document.getElementById('test-case-select').value;
+  if (!tcId || !modulo) return;
+
+  // Try structure from Jira first, fall back to hardcoded
+  const estructura = window.estructuraActual;
+  const testCases  = estructura?.testCases || (typeof TEST_CASES !== 'undefined' ? TEST_CASES[modulo] : []) || [];
+  const tc = testCases.find(t => t.id === tcId);
+  if (!tc) return;
+
+  // Auto-fill description (only if empty)
+  const descField = document.getElementById('descripcion');
+  if (descField && !descField.value) descField.value = tc.titulo;
+
+  // Auto-fill preconditions
+  if (tc.precondiciones?.length) rebuildList('precon-wrap', tc.precondiciones, 'Precondición', 'removePrecon');
+
+  // Auto-fill steps
+  if (tc.pasos?.length) rebuildList('steps-wrap', tc.pasos, 'Paso', 'removeStep');
+
+  // Auto-fill expected result
+  if (tc.resultadoEsperado) rebuildList('esperado-wrap', [tc.resultadoEsperado], 'Ítem', 'removeEsperado');
+
+  // Pre-select test type if specified
+  if (tc.tipoTest) {
+    const tipoSel = document.getElementById('tipo-prueba');
+    if (tipoSel) tipoSel.value = tc.tipoTest;
+  }
+
+  // Store severity default for FAIL case
+  window.severidadDefaultTC = tc.severidadSiFalla || estructura?.meta?.severidadDefault || null;
+
+  persistForm();
 }
 
 /* ── TC ID ── */
 async function fetchNextTC() {
   const f = document.getElementById('tc-id');
   const banner = document.getElementById('next-tc-banner');
-  const validTcId = id => /^TC-\d+$/i.test((id||'').trim());
+  // Aceptar tanto TC-NNN (legacy) como XX-NNN (nuevo formato por módulo)
+  const validTcId = id => /^[A-Z]{2,3}-\d+$/i.test((id||'').trim());
   const draftTcId = (() => { try { const v = JSON.parse(localStorage.getItem(DRAFT_KEY)||'{}').tcId; return validTcId(v) ? v : ''; } catch { return ''; } })();
-  if (!draftTcId) f.value = 'Consultando...';
-  try {
-    const jql = encodeURIComponent('project = BUGS ORDER BY created DESC');
-    const r = await fetch(`${JIRA_BASE}/rest/api/3/search/jql?jql=${jql}&maxResults=200&fields=summary`,
-      { headers:{ 'Authorization':AUTH, 'Accept':'application/json' }});
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      throw new Error(`HTTP ${r.status}: ${JSON.stringify(err)}`);
-    }
-    const d = await r.json();
-    let max = 0;
-    (d.issues || []).forEach(i => {
-      const m = i.fields.summary.match(/TC-(\d+)/i);
-      if (m) max = Math.max(max, parseInt(m[1]));
-    });
-    const next = `TC-${String(max+1).padStart(3,'0')}`;
-    f.value = draftTcId || next;
-    if (banner) { banner.textContent = `Próximo: ${next}`; banner.style.display = 'inline-block'; banner.style.background = 'var(--g7)'; }
+  // Si hay draft con tcId válido, mostrarlo; de lo contrario indicar que hay que elegir módulo
+  if (draftTcId) {
+    f.value = draftTcId;
     f.removeAttribute('readonly');
     f.style.opacity = '1';
-  } catch(e) {
-    console.error('[fetchNextTC]', e.message);
-    f.value = draftTcId || 'TC-001';
-    f.removeAttribute('readonly');
-    f.style.opacity = '1';
-    if (banner) { banner.textContent = 'Sin conexión'; banner.style.display = 'inline-block'; banner.style.background = '#e24b4a'; }
+    if (banner) { banner.textContent = 'Del borrador'; banner.style.display = 'inline-block'; banner.style.background = 'var(--g7)'; }
+  } else {
+    f.value = '— Elegí módulo —';
+    f.style.opacity = '0.5';
+    if (banner) { banner.style.display = 'none'; }
   }
 }
 
@@ -712,7 +892,7 @@ async function fetchNextTC() {
 async function fetchAssignees() {
   const sel = document.getElementById('asignado');
   try {
-    const r = await fetch(`${JIRA_BASE}/rest/api/3/user/assignable/search?project=BUGS&maxResults=50`, {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/user/assignable/search?project=QAA&maxResults=50`, {
       headers: { 'Accept': 'application/json' }
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -740,13 +920,27 @@ function setEstado(val, btn) {
     severidad = ''; frecuencia = '';
     document.querySelectorAll('.sev-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('#row-frecuencia .e-btn').forEach(b => b.classList.remove('active'));
+  } else {
+    // Pre-seleccionar severidad: primero desde el TC seleccionado (Jira), luego desde el epic
+    const moduloKey = document.getElementById('modulo').value;
+    const sevDefault = window.severidadDefaultTC || EPICS[moduloKey]?.severidadDefault;
+    if (sevDefault && !severidad) {
+      const sevMap = {
+        'severity-critico': '.sev-btn.critical',
+        'severity-mayor':   '.sev-btn.major',
+        'severity-medio':   '.sev-btn.medium',
+        'severity-bajo':    '.sev-btn.low',
+      };
+      const sevBtn = document.querySelector(sevMap[sevDefault]);
+      if (sevBtn) setSev(sevDefault, sevBtn);
+    }
   }
 }
 
 function setFreq(val, btn) {
   frecuencia = val;
   document.querySelectorAll('#row-frecuencia .e-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active', 'pass');
+  btn.classList.add('active');
 }
 
 function setSev(val, btn) {
@@ -1012,7 +1206,7 @@ function mkH(text, level=3) { return { type:'heading', attrs:{level}, content:[{
 function mkP(text)           { return { type:'paragraph', content:[{type:'text',text:text||'—'}] }; }
 function mkB(text)           { return { type:'paragraph', content:[{type:'text',text,marks:[{type:'strong'}]}] }; }
 function mkRule()            { return { type:'rule' }; }
-function mkPanel(panelType, content) { return content; }
+function mkPanel(panelType, content) { return [{ type:'panel', attrs:{panelType}, content }]; }
 function mkOrderedList(items) {
   return { type:'orderedList', content: items.map(item => ({
     type:'listItem', content:[{ type:'paragraph', content:[{type:'text',text:item}] }]
@@ -1026,6 +1220,375 @@ function mkTable(rows) {
     ]}))
   };
 }
+
+/* ── EPICS map (módulo → epic QAA) ── */
+const EPICS = {
+  'login':      { key: 'QAA-1', prefix: 'LG', modulo: 'modulo-app-web',  severidadDefault: 'severity-mayor'   },
+  'lecciones':  { key: 'QAA-2', prefix: 'LC', modulo: 'modulo-app-web',  severidadDefault: 'severity-mayor'   },
+  'tareas':     { key: 'QAA-3', prefix: 'TA', modulo: 'modulo-app-web',  severidadDefault: 'severity-medio'   },
+  'foros':      { key: 'QAA-4', prefix: 'FO', modulo: 'modulo-app-web',  severidadDefault: 'severity-medio'   },
+  'calendario': { key: 'QAA-5', prefix: 'CA', modulo: 'modulo-app-web',  severidadDefault: 'severity-medio'   },
+  'chatkit':    { key: 'QAA-6', prefix: 'CH', modulo: 'modulo-chatkit',  severidadDefault: 'severity-critico' },
+  'cursos':     { key: 'QAA-7', prefix: 'CR', modulo: 'modulo-app-web',  severidadDefault: 'severity-mayor'   },
+  'reportes':   { key: 'QAA-8', prefix: 'RP', modulo: 'modulo-app-web',  severidadDefault: 'severity-medio'   },
+  'perfil':     { key: 'QAA-9', prefix: 'PR', modulo: 'modulo-app-web',  severidadDefault: 'severity-bajo'    },
+};
+
+/* ── TEST_CASES catalog ── */
+const TEST_CASES = {
+  'login': [
+    {
+      id: 'LG-TC-001',
+      titulo: 'Login exitoso con credenciales válidas',
+      precondiciones: [
+        'El usuario tiene una cuenta activa en Hybred',
+        'El usuario NO está logueado actualmente',
+        'El servidor está disponible',
+      ],
+      pasos: [
+        'Navegar a https://app.hybred.edu.co/login',
+        'Ingresar email válido en el campo "Correo electrónico"',
+        'Ingresar contraseña correcta en el campo "Contraseña"',
+        'Hacer clic en el botón "Iniciar sesión"',
+      ],
+      resultadoEsperado: 'El sistema autentica al usuario y lo redirige al dashboard correspondiente a su rol',
+    },
+    {
+      id: 'LG-TC-002',
+      titulo: 'Login fallido con credenciales inválidas',
+      precondiciones: [
+        'El usuario NO está logueado actualmente',
+        'El servidor está disponible',
+      ],
+      pasos: [
+        'Navegar a https://app.hybred.edu.co/login',
+        'Ingresar un email inválido o inexistente',
+        'Ingresar cualquier contraseña',
+        'Hacer clic en el botón "Iniciar sesión"',
+      ],
+      resultadoEsperado: 'El sistema muestra un mensaje de error claro indicando credenciales incorrectas. No se otorga acceso.',
+    },
+    {
+      id: 'LG-TC-003',
+      titulo: 'Cierre de sesión (logout)',
+      precondiciones: [
+        'El usuario está logueado en el sistema',
+      ],
+      pasos: [
+        'Hacer clic en el avatar o menú de usuario (esquina superior derecha)',
+        'Seleccionar la opción "Cerrar sesión"',
+        'Confirmar si hay diálogo de confirmación',
+      ],
+      resultadoEsperado: 'La sesión se destruye, el usuario es redirigido a /login y no puede acceder a rutas protegidas',
+    },
+  ],
+  'lecciones': [
+    {
+      id: 'LC-TC-001',
+      titulo: 'Visualización de lección con contenido multimedia',
+      precondiciones: [
+        'El usuario está logueado como Estudiante',
+        'Existe al menos una lección publicada con video/imagen',
+      ],
+      pasos: [
+        'Navegar al curso asignado',
+        'Seleccionar una lección disponible',
+        'Verificar que el contenido (video, texto, imágenes) carga correctamente',
+        'Reproducir el video si existe',
+      ],
+      resultadoEsperado: 'El contenido multimedia se carga sin errores, el video reproduce correctamente y el texto es legible',
+    },
+    {
+      id: 'LC-TC-002',
+      titulo: 'Marcado de lección como completada',
+      precondiciones: [
+        'El usuario está logueado como Estudiante',
+        'Existe una lección no completada en el curso activo',
+      ],
+      pasos: [
+        'Abrir una lección no completada',
+        'Consumir el contenido de la lección',
+        'Hacer clic en "Marcar como completada" o equivalente',
+      ],
+      resultadoEsperado: 'La lección queda marcada como completada, el progreso del curso se actualiza visualmente',
+    },
+    {
+      id: 'LC-TC-003',
+      titulo: 'Navegación secuencial entre lecciones',
+      precondiciones: [
+        'El usuario está logueado como Estudiante',
+        'El curso tiene al menos 2 lecciones publicadas',
+      ],
+      pasos: [
+        'Abrir la primera lección del curso',
+        'Hacer clic en "Siguiente lección"',
+        'Verificar que carga la lección siguiente correctamente',
+        'Hacer clic en "Lección anterior"',
+      ],
+      resultadoEsperado: 'La navegación entre lecciones funciona correctamente, sin pérdida de estado ni errores de carga',
+    },
+  ],
+  'tareas': [
+    {
+      id: 'TA-TC-001',
+      titulo: 'Entrega de tarea dentro del plazo',
+      precondiciones: [
+        'El usuario está logueado como Estudiante',
+        'Existe una tarea activa con fecha de entrega futura',
+      ],
+      pasos: [
+        'Navegar a la sección "Tareas"',
+        'Seleccionar una tarea pendiente',
+        'Completar el formulario de entrega o adjuntar archivo',
+        'Hacer clic en "Entregar"',
+      ],
+      resultadoEsperado: 'La entrega se registra correctamente, el estado de la tarea cambia a "Entregada" y se confirma con mensaje de éxito',
+    },
+    {
+      id: 'TA-TC-002',
+      titulo: 'Visualización de calificación de tarea',
+      precondiciones: [
+        'El usuario está logueado como Estudiante',
+        'El docente ya calificó al menos una tarea del usuario',
+      ],
+      pasos: [
+        'Navegar a "Tareas"',
+        'Seleccionar una tarea con estado "Calificada"',
+        'Revisar la nota y el feedback del docente',
+      ],
+      resultadoEsperado: 'Se muestra la calificación, los comentarios del docente y cualquier rúbrica aplicada de forma clara',
+    },
+    {
+      id: 'TA-TC-003',
+      titulo: 'Intento de entrega de tarea vencida',
+      precondiciones: [
+        'El usuario está logueado como Estudiante',
+        'Existe una tarea cuya fecha de entrega ya venció',
+      ],
+      pasos: [
+        'Navegar a "Tareas"',
+        'Seleccionar la tarea vencida',
+        'Intentar entregar aunque esté vencida',
+      ],
+      resultadoEsperado: 'El sistema bloquea la entrega o muestra advertencia de entrega tardía según la política configurada por el docente',
+    },
+  ],
+  'foros': [
+    {
+      id: 'FO-TC-001',
+      titulo: 'Publicación de hilo en foro',
+      precondiciones: [
+        'El usuario está logueado (Estudiante o Docente)',
+        'Existe al menos un foro disponible en el curso',
+      ],
+      pasos: [
+        'Navegar a la sección "Foros"',
+        'Seleccionar un foro activo',
+        'Hacer clic en "Nueva publicación" o equivalente',
+        'Completar el título y cuerpo del mensaje',
+        'Publicar',
+      ],
+      resultadoEsperado: 'El hilo se publica y aparece en la lista del foro, visible para otros participantes del curso',
+    },
+    {
+      id: 'FO-TC-002',
+      titulo: 'Respuesta a hilo existente',
+      precondiciones: [
+        'El usuario está logueado',
+        'Existe al menos un hilo publicado en el foro',
+      ],
+      pasos: [
+        'Navegar al foro y seleccionar un hilo existente',
+        'Hacer clic en "Responder"',
+        'Escribir la respuesta',
+        'Publicar la respuesta',
+      ],
+      resultadoEsperado: 'La respuesta se agrega al hilo correctamente, visible debajo del mensaje original con la autoría correcta',
+    },
+  ],
+  'calendario': [
+    {
+      id: 'CA-TC-001',
+      titulo: 'Visualización de eventos en el calendario',
+      precondiciones: [
+        'El usuario está logueado',
+        'Existen eventos programados (tareas, clases, evaluaciones) en el calendario del curso',
+      ],
+      pasos: [
+        'Navegar a la sección "Calendario"',
+        'Verificar que los eventos del mes actual aparecen en las fechas correctas',
+        'Cambiar de mes y verificar eventos futuros',
+      ],
+      resultadoEsperado: 'Los eventos se muestran en sus fechas correctas, con colores o etiquetas diferenciando el tipo de evento',
+    },
+    {
+      id: 'CA-TC-002',
+      titulo: 'Detalle de evento al hacer clic',
+      precondiciones: [
+        'El usuario está logueado',
+        'Existe al menos un evento visible en el calendario',
+      ],
+      pasos: [
+        'Navegar a "Calendario"',
+        'Hacer clic sobre un evento visible',
+        'Revisar los detalles que aparecen (nombre, fecha, descripción, enlace)',
+      ],
+      resultadoEsperado: 'Se muestra un detalle o popup con la información completa del evento, con opción de navegar a la sección relacionada',
+    },
+  ],
+  'chatkit': [
+    {
+      id: 'CH-TC-001',
+      titulo: 'Envío de mensaje de texto al ChatKit IA',
+      precondiciones: [
+        'El usuario está logueado',
+        'El servicio de ChatKit IA está disponible',
+        'El usuario tiene créditos/acceso habilitado',
+      ],
+      pasos: [
+        'Navegar a la sección "ChatKit IA"',
+        'Escribir una pregunta en el campo de texto',
+        'Presionar Enter o hacer clic en el botón de enviar',
+        'Esperar la respuesta del modelo IA',
+      ],
+      resultadoEsperado: 'El ChatKit IA responde con contenido relevante a la pregunta, sin errores de timeout ni mensajes de fallo visible al usuario',
+    },
+    {
+      id: 'CH-TC-002',
+      titulo: 'Historial de conversación se mantiene en sesión',
+      precondiciones: [
+        'El usuario está logueado',
+        'El usuario ya tiene al menos 2 mensajes enviados en la sesión actual de ChatKit',
+      ],
+      pasos: [
+        'Enviar un primer mensaje y obtener respuesta',
+        'Enviar un segundo mensaje que haga referencia al primero',
+        'Verificar que la IA mantiene el contexto de la conversación',
+      ],
+      resultadoEsperado: 'La IA responde considerando el contexto del mensaje anterior, demostrando que el historial de la sesión se preserva',
+    },
+    {
+      id: 'CH-TC-003',
+      titulo: 'Manejo de error cuando el servicio IA no responde',
+      precondiciones: [
+        'El usuario está logueado',
+        'El servicio de IA está inaccesible o con timeout',
+      ],
+      pasos: [
+        'Navegar a "ChatKit IA"',
+        'Enviar cualquier mensaje',
+        'Observar el comportamiento ante la falta de respuesta del servicio',
+      ],
+      resultadoEsperado: 'El sistema muestra un mensaje de error amigable al usuario (no un stack trace) y permite reintentar o contactar soporte',
+    },
+  ],
+  'cursos': [
+    {
+      id: 'CR-TC-001',
+      titulo: 'Creación de nuevo curso por docente',
+      precondiciones: [
+        'El usuario está logueado como Docente o Administrador',
+      ],
+      pasos: [
+        'Navegar a "Mis Cursos" o "Gestión de Cursos"',
+        'Hacer clic en "Crear nuevo curso"',
+        'Completar nombre, descripción, categoría y configuración básica',
+        'Guardar/Publicar el curso',
+      ],
+      resultadoEsperado: 'El curso se crea correctamente y aparece en el listado de cursos del docente con estado "Borrador" o "Publicado"',
+    },
+    {
+      id: 'CR-TC-002',
+      titulo: 'Agregar lección a curso existente',
+      precondiciones: [
+        'El usuario está logueado como Docente',
+        'Existe al menos un curso creado por el docente',
+      ],
+      pasos: [
+        'Ingresar al editor del curso',
+        'Hacer clic en "Agregar lección" o equivalente',
+        'Completar el título y contenido de la lección',
+        'Guardar la lección',
+      ],
+      resultadoEsperado: 'La lección se agrega al curso y aparece en el listado de contenido del curso en el orden correcto',
+    },
+    {
+      id: 'CR-TC-003',
+      titulo: 'Publicación de curso para estudiantes',
+      precondiciones: [
+        'El usuario está logueado como Docente',
+        'Existe un curso en estado "Borrador" con al menos una lección',
+      ],
+      pasos: [
+        'Navegar al curso en estado borrador',
+        'Hacer clic en "Publicar curso"',
+        'Confirmar la publicación',
+      ],
+      resultadoEsperado: 'El curso cambia de estado a "Publicado" y queda visible y accesible para los estudiantes matriculados',
+    },
+  ],
+  'reportes': [
+    {
+      id: 'RP-TC-001',
+      titulo: 'Visualización de reporte de progreso de estudiante',
+      precondiciones: [
+        'El usuario está logueado como Docente o Administrador',
+        'Existen estudiantes matriculados con actividad registrada',
+      ],
+      pasos: [
+        'Navegar a "Reportes" o "Calificaciones"',
+        'Seleccionar un curso con estudiantes activos',
+        'Ver el reporte de progreso individual de un estudiante',
+      ],
+      resultadoEsperado: 'Se muestra el progreso del estudiante: lecciones completadas, tareas entregadas y calificaciones obtenidas',
+    },
+    {
+      id: 'RP-TC-002',
+      titulo: 'Exportación de calificaciones',
+      precondiciones: [
+        'El usuario está logueado como Docente o Administrador',
+        'Existen calificaciones registradas para el curso',
+      ],
+      pasos: [
+        'Navegar a la sección de calificaciones del curso',
+        'Buscar opción de exportar (CSV, Excel u otro formato)',
+        'Iniciar la descarga',
+      ],
+      resultadoEsperado: 'Se descarga un archivo con las calificaciones en el formato esperado, con los datos correctos y sin errores',
+    },
+  ],
+  'perfil': [
+    {
+      id: 'PR-TC-001',
+      titulo: 'Edición de datos de perfil de usuario',
+      precondiciones: [
+        'El usuario está logueado en la plataforma',
+      ],
+      pasos: [
+        'Navegar a "Mi Perfil" o avatar en el menú',
+        'Hacer clic en "Editar perfil"',
+        'Modificar nombre, foto u otros datos permitidos',
+        'Guardar los cambios',
+      ],
+      resultadoEsperado: 'Los cambios se guardan correctamente y se reflejan inmediatamente en la UI (avatar, nombre en header, etc.)',
+    },
+    {
+      id: 'PR-TC-002',
+      titulo: 'Cambio de contraseña',
+      precondiciones: [
+        'El usuario está logueado',
+      ],
+      pasos: [
+        'Navegar a "Mi Perfil" → "Seguridad" o "Cambiar contraseña"',
+        'Ingresar la contraseña actual',
+        'Ingresar la nueva contraseña y confirmarla',
+        'Guardar el cambio',
+      ],
+      resultadoEsperado: 'La contraseña se actualiza, el usuario sigue logueado con la sesión actual y la nueva contraseña funciona en el próximo login',
+    },
+  ],
+};
+
 
 /* ── Submit ── */
 async function submitForm() {
@@ -1069,16 +1632,35 @@ async function submitForm() {
   if (!estado)                  return showError('Seleccioná el estado: Pass, Fail o Bloqueado.');
   if (estado==='fail'&&!severidad)  return showError('Seleccioná la severidad del defecto.');
   if (estado==='fail'&&!frecuencia) return showError('Seleccioná la frecuencia del error.');
-  if (esRetest && !retestTc)    return showError('Indicá el issue del TC anterior (ej: BUGS-7).');
+  if (esRetest && !retestTc)    return showError('Indicá el issue del TC anterior (ej: QAA-7).');
 
-  const moduloNombre = moduloRaw;
+  // Resolver el epic según el módulo seleccionado
+  const moduloKey = moduloRaw.trim().toLowerCase();
+  const epic = EPICS[moduloKey];
+  if (!epic) return showError(`Módulo "${moduloRaw}" no reconocido. Usá uno de: ${Object.keys(EPICS).join(', ')}.`);
+
+  // Obtener el nombre legible del módulo desde el select
+  const moduloSelect = document.getElementById('modulo');
+  const moduloNombre = moduloSelect.options[moduloSelect.selectedIndex]?.text || moduloRaw;
   const tipoLabel  = {'type-funcional':'Funcional','type-regresion':'Regresión','type-ui':'UI','type-smoke':'Smoke','type-integracion':'Integración','type-uat':'UAT','type-rendimiento':'Rendimiento'}[tipoPrueba]||tipoPrueba;
   const estadoLbl  = {pass:'Pass',fail:'Fail',blocked:'Bloqueado'}[estado];
   const sevLbl     = {'severity-critico':'Crítico','severity-mayor':'Mayor','severity-medio':'Medio','severity-bajo':'Bajo'}[severidad]||'—';
-  const issueType = estado === 'fail' ? 'Error' : 'Tarea';
   const entorno    = `${navegador} / ${sistemaOp}${version ? ' / '+version : ''}`;
-  const labels     = [tipoPrueba, `estado-${estado}`, ...(severidad?[severidad]:[]), ...(esRetest?['retest']:[])];
-  const summary    = `${tcId} | ${desc} — ${moduloNombre}`;
+
+  // Leer número de ciclo del TC ID (ej: TC-003 → ciclo-1 por defecto si no hay campo dedicado)
+  const numeroCiclo = '1';
+  const tipoTest = tipoPrueba; // ya tiene el formato 'type-funcional' etc.
+
+  // Construir labels según spec — usar moduloSistema de Jira si está disponible
+  const moduloLabel = window.estructuraActual?.meta?.moduloSistema || epic.modulo;
+  const labels = [
+    `estado-${estado.toLowerCase()}`,
+    `ciclo-${numeroCiclo}`,
+    tipoTest,
+    moduloLabel,
+    ...(estado === 'fail' && severidad ? [severidad] : []),
+    ...(esRetest ? ['retest'] : []),
+  ];
 
   const steps = Array.from(document.querySelectorAll('#steps-wrap .step-row input'))
     .map(inp => inp.value.trim() || null).filter(Boolean);
@@ -1102,7 +1684,12 @@ async function submitForm() {
     { type:'paragraph', content:[{type:'text',text:'Prioridad: ',marks:[{type:'strong'}]},{type:'text',text:prioridad}]},
   ];
 
+  // ADF description
   const description = { type:'doc', version:1, content:[
+    mkB('Tester: ' + tester),
+    mkB('Fecha: ' + fecha),
+    mkB('Resultado: ' + estadoLbl),
+    mkRule(),
     ...mkPanel('info', [mkB('Identificación del caso de prueba'), mkTable(infoRows)]),
     mkRule(),
     mkH('Precondiciones'), mkOrderedList(precon),
@@ -1120,18 +1707,24 @@ async function submitForm() {
   setLoading(true);
 
   try {
-    const moduloLabel = 'modulo-' + moduloNombre.toLowerCase().replace(/\s+/g,'-');
-    labels.push(moduloLabel);
+    // Obtener el próximo número de subtarea bajo el epic
+    const numero = await getNextNumero(epic.key);
+    const summary = `${epic.prefix}-${numero} — ${desc}`;
 
     const asignado = document.getElementById('asignado').value;
     const body = { fields:{
-      project:{key:'BUGS'}, summary, description,
-      issuetype:{name:issueType}, priority:{name:prioridad},
-      labels, customfield_10015:fecha,
+      project:{ key: 'QAA' },
+      summary,
+      description,
+      issuetype:{ name: 'Actividades secundarias' },
+      parent:{ key: epic.key },
+      priority:{ name: prioridad },
+      labels,
+      customfield_10015: fecha,
       ...(asignado ? { assignee:{ accountId: asignado } } : {}),
     }};
 
-    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue`, {
+    const r = await fetch(`/jira/rest/api/3/issue`, {
       method:'POST',
       headers:{'Authorization':AUTH,'Content-Type':'application/json','Accept':'application/json'},
       body:JSON.stringify(body)
@@ -1145,34 +1738,82 @@ async function submitForm() {
     if (uploadedFiles.length > 0) {
       for (const file of uploadedFiles) {
         const fd = new FormData(); fd.append('file', file);
-        await fetch(`${JIRA_BASE}/rest/api/3/issue/${issueKey}/attachments`, {
+        await fetch(`/jira/rest/api/3/issue/${issueKey}/attachments`, {
           method:'POST', headers:{'Authorization':AUTH,'X-Atlassian-Token':'no-check'}, body:fd
         });
       }
     }
 
-    if (esRetest && retestTc && retestTc.toUpperCase().startsWith('BUGS')) {
-      await fetch(`${JIRA_BASE}/rest/api/3/issueLink`, {
+    if (esRetest && retestTc) {
+      await fetch(`/jira/rest/api/3/issueLink`, {
         method:'POST',
         headers:{'Authorization':AUTH,'Content-Type':'application/json'},
         body:JSON.stringify({ type:{name:'Relates'}, inwardIssue:{key:issueKey}, outwardIssue:{key:retestTc.trim().toUpperCase()} })
       });
     }
 
-    // Avanzar TC localmente
-    const currentNum = parseInt(tcId.replace(/\D/g,'')) || 0;
-    const nextTC = `TC-${String(currentNum + 1).padStart(3,'0')}`;
+    // Crear bug automáticamente si el resultado es FAIL
+    if (estado === 'fail') {
+      const sevSuffix  = severidad.replace(/^severity-/, '');
+      const tipeSuffix = tipoPrueba.replace(/^type-/, '');
+      const prioridadBug = { critico:'Highest', mayor:'High', medio:'Medium', menor:'Low', bajo:'Low' }[sevSuffix] || 'Medium';
+      const bugBody = { fields:{
+        project:   { key: 'QAA' },
+        summary:   `[BUG] ${summary}`,
+        description,
+        issuetype: { name: 'Error' },
+        priority:  { name: prioridadBug },
+        labels:    [ `severity-${sevSuffix}`, `ciclo-${numeroCiclo}`, `type-${tipeSuffix}`, epic.modulo, 'estado-abierto' ],
+      }};
+      try {
+        const bugRes = await fetch(`/jira/rest/api/3/issue`, {
+          method:'POST',
+          headers:{'Authorization':AUTH,'Content-Type':'application/json','Accept':'application/json'},
+          body:JSON.stringify(bugBody)
+        });
+        if (bugRes.ok) {
+          const bug = await bugRes.json();
+          // Vincular bug con la subtarea
+          await fetch(`/jira/rest/api/3/issueLink`, {
+            method:'POST',
+            headers:{'Authorization':AUTH,'Content-Type':'application/json'},
+            body:JSON.stringify({ type:{name:'Relates'}, inwardIssue:{key:issueKey}, outwardIssue:{key:bug.key} })
+          });
+        }
+      } catch(bugErr) {
+        console.warn('[Bug creation]', bugErr.message);
+      }
+    }
+
+    // Avanzar TC: reconsultar Jira para el próximo número real
+    const nextNumero = await getNextNumero(epic.key);
+    const nextTC = `${epic.prefix}-${nextNumero}`;
     document.getElementById('tc-id').value = nextTC;
     document.getElementById('tc-id').removeAttribute('readonly');
     document.getElementById('tc-id').style.opacity = '1';
     const banner = document.getElementById('next-tc-banner');
-    if (banner) { banner.textContent = `Próximo: ${nextTC}`; banner.style.display = 'inline-block'; banner.style.background = '#0f6e56'; }
+    if (banner) { banner.textContent = `Próximo: ${nextTC}`; banner.style.display = 'inline-block'; banner.style.background = 'var(--g7)'; }
 
-    // Guardar historial
+    // Guardar historial con nuevos campos
     fetch('/api/history', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ tc_id:tcId, descripcion:desc, modulo:moduloNombre, estado:estadoLbl, tester, fecha, jira_key:issueKey, jira_url:issueUrl })
+      body:JSON.stringify({
+        tc_id: tcId,
+        descripcion: desc,
+        modulo: moduloNombre,
+        estado: estadoLbl,
+        tester,
+        fecha,
+        jira_key: issueKey,
+        jira_url: issueUrl,
+        epic_key: epic.key,
+        labels,
+        tipo_prueba: tipoPrueba,
+        severidad: severidad || null,
+        ciclo: numeroCiclo,
+        summary,
+      })
     });
 
     showSuccess(tcId, issueKey, issueUrl, moduloNombre, tipoLabel, entorno, sevLbl);
@@ -1221,6 +1862,18 @@ function softReset() {
   document.getElementById('sugg-wrap').innerHTML =
     `<div class="step-row"><div class="step-num">1</div><input type="text" placeholder="Sugerencia 1..."><button class="btn-rm" onclick="removeSugg(this)">×</button></div>`;
   estado = ''; severidad = ''; frecuencia = '';
+  // Resetear test case select a estado vacío (mantener módulo activo)
+  const tcSel = document.getElementById('test-case-select');
+  const moduloActual = document.getElementById('modulo').value;
+  if (moduloActual && TEST_CASES[moduloActual]) {
+    const testCases = TEST_CASES[moduloActual];
+    tcSel.innerHTML = '<option value="">— Seleccioná un Test Case —</option>' +
+      testCases.map(tc => `<option value="${tc.id}">${tc.id}: ${tc.titulo}</option>`).join('');
+    tcSel.disabled = false;
+  } else {
+    tcSel.innerHTML = '<option value="">— Primero elegí un módulo —</option>';
+    tcSel.disabled = true;
+  }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -1291,6 +1944,10 @@ function resetForm() {
   document.getElementById('navegador').value  = '';
   document.getElementById('sistema-op').value = '';
   document.getElementById('fecha').value = new Date().toISOString().split('T')[0];
+  // Resetear selector de test cases
+  const tcSel = document.getElementById('test-case-select');
+  tcSel.innerHTML = '<option value="">— Primero elegí un módulo —</option>';
+  tcSel.disabled = true;
 }
 </script>
 </body>
