@@ -12,11 +12,32 @@ const fs    = require('fs');
 const path  = require('path');
 const url   = require('url');
 
-const PORT       = 8080;
-const JIRA_HOST  = 'liceopinoverde.atlassian.net';
-const JIRA_EMAIL = 'sebastian.zapata.h@hybred.edu.co';
-const JIRA_TOKEN = 'ATATT3xFfGF0ETjglczxpGdHrIRBJzGGJG-hsEoiCZ0bIB8oofsD0gjNaz4CLZf19FYOYrYoGbJPM72ksZqmMWiWtDaATU5cXcUf4Ic8rIN-ZJ2FmZx9wO9sP02EkhG-_sgfJZer3DpBaoPRQk8ezkNefRTm7FaukVSQlD2KbxlS3pzFG-r9jd0=15C626FB';
-const AUTH       = 'Basic ' + Buffer.from(JIRA_EMAIL + ':' + JIRA_TOKEN).toString('base64');
+
+// Cargar .env sin dependencias externas
+const envPath = path.join(__dirname, '.env');
+if (fs.existsSync(envPath)) {
+  fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
+    const [key, ...rest] = line.split('=');
+    if (key && rest.length) process.env[key.trim()] = rest.join('=').trim();
+  });
+}
+
+const PORT       = parseInt(process.env.PORT, 10);
+const JIRA_HOST  = process.env.JIRA_HOST;
+const JIRA_EMAIL = process.env.JIRA_EMAIL;
+const JIRA_TOKEN = process.env.JIRA_TOKEN;
+
+const ENV_ERROR = !PORT || !JIRA_HOST || !JIRA_EMAIL || !JIRA_TOKEN
+  ? `Falta configurar el archivo .env<br><br>
+     Variables requeridas:<br>
+     ${!PORT       ? '❌ PORT<br>'       : ''}
+     ${!JIRA_HOST  ? '❌ JIRA_HOST<br>'  : ''}
+     ${!JIRA_EMAIL ? '❌ JIRA_EMAIL<br>' : ''}
+     ${!JIRA_TOKEN ? '❌ JIRA_TOKEN<br>' : ''}
+     <br>Copiá <strong>.env.example</strong> como <strong>.env</strong> y completá los valores.`
+  : null;
+
+const AUTH = ENV_ERROR ? '' : 'Basic ' + Buffer.from(JIRA_EMAIL + ':' + JIRA_TOKEN).toString('base64');
 
 const HISTORY_DIR   = __dirname;
 const HISTORY_MAX   = 1000;
@@ -80,6 +101,16 @@ const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Atlassian-Token');
 
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+  if (ENV_ERROR) {
+    res.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Error de configuración</title>
+      <style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:#f1f5f9}
+      .box{background:#1e293b;border:1px solid #ef4444;border-radius:12px;padding:32px;max-width:480px;line-height:1.7}
+      h2{color:#ef4444;margin-top:0}code{background:#0f172a;padding:2px 6px;border-radius:4px}</style></head>
+      <body><div class="box"><h2>⚠️ Error de configuración</h2><p>${ENV_ERROR}</p></div></body></html>`);
+    return;
+  }
 
   // ── GET /api/history ──
   if (req.method === 'GET' && parsed.pathname === '/api/history') {

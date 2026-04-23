@@ -354,5 +354,28 @@
     "ciclo": "test-v002",
     "summary": "⚙️ FO-002 — Crear un nuevo tema",
     "created_at": "2026-04-22T20:32:06.990Z"
+  },
+  {
+    "tc_id": "FO-003",
+    "descripcion": "Ver notificaciones de respuesta",
+    "modulo": "FO — Foros",
+    "estado": "Pass",
+    "tester": "sebastian zapata",
+    "fecha": "2026-04-22",
+    "jira_key": "QAA-38",
+    "jira_url": "https://liceopinoverde.atlassian.net/browse/QAA-38",
+    "epic_key": "QAA-4",
+    "labels": [
+      "estado-pass",
+      "type-funcional",
+      "modulo-app-web",
+      "test-v002",
+      "requiere-config"
+    ],
+    "tipo_prueba": "type-funcional",
+    "severidad": null,
+    "ciclo": "test-v002",
+    "summary": "⚙️ FO-002 — Ver notificaciones de respuesta",
+    "created_at": "2026-04-22T20:37:57.510Z"
   }
 ]
