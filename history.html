@@ -6,119 +6,246 @@
 <title>Historial QA — Hybred</title>
 <link rel="stylesheet" href="/styles.css">
 <style>
-/* ── Filtros ── */
-.filters {
-  display: flex; gap: 10px; flex-wrap: wrap;
-  padding: 16px 20px; border-bottom: 1px solid var(--border);
-  background: var(--g0);
+:root {
+  --pass-bg:#dcfce7; --pass-fg:#15803d;
+  --fail-bg:#fee2e2; --fail-fg:#991b1b;
+  --block-bg:#fef3c7; --block-fg:#92400e;
+  --high-bg:#fef2f2; --high-fg:#dc2626;
+  --med-bg:#fffbeb;  --med-fg:#d97706;
+  --low-bg:#f0fdf4;  --low-fg:#16a34a;
+  --type-bg:#ede9fe; --type-fg:#6d28d9;
 }
-.filter-group { display: flex; flex-direction: column; gap: 4px; min-width: 160px; flex: 1; }
-.filter-label { font-size: 11px; font-weight: 600; color: var(--g5); text-transform: uppercase; letter-spacing: .5px; }
+
+/* ── Top bar ── */
+.top-bar {
+  display:flex; align-items:center; gap:8px;
+  padding:12px 20px; border-bottom:1px solid var(--border);
+  background:var(--g0); flex-wrap:wrap; position:relative;
+}
+.search-wrap { position:relative; flex:1; min-width:220px; }
+.search-input {
+  width:100%; padding:8px 36px 8px 12px; border-radius:8px;
+  border:1px solid var(--border); background:var(--white);
+  color:var(--g8); font-size:13px; outline:none;
+  transition:border-color .15s; box-sizing:border-box;
+}
+.search-input:focus { border-color:var(--g6); }
+.search-clear {
+  position:absolute; right:10px; top:50%; transform:translateY(-50%);
+  background:none; border:none; color:var(--g4); cursor:pointer;
+  font-size:16px; line-height:1; display:none;
+}
+.suggestions {
+  position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:300;
+  background:var(--white); border:1px solid var(--border); border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,.12); overflow:hidden; display:none;
+}
+.suggestion-item {
+  padding:9px 14px; cursor:pointer; border-bottom:1px solid var(--border);
+  transition:background .1s; display:flex; flex-direction:column; gap:2px;
+}
+.suggestion-item:last-child { border-bottom:none; }
+.suggestion-item:hover { background:var(--g0); }
+.sug-key  { font-size:11px; font-weight:700; color:var(--g5); }
+.sug-text { font-size:13px; color:var(--g8); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+.btn-toggle-filters {
+  display:flex; align-items:center; gap:6px; padding:8px 14px;
+  border-radius:8px; border:1px solid var(--border); background:var(--white);
+  color:var(--g7); font-size:13px; font-weight:500; cursor:pointer;
+  transition:background .15s; white-space:nowrap;
+}
+.btn-toggle-filters:hover, .btn-toggle-filters.active { background:var(--g1); border-color:var(--g5); }
+.filter-badge {
+  display:none; align-items:center; justify-content:center;
+  width:18px; height:18px; border-radius:50%; background:var(--g8);
+  color:#fff; font-size:10px; font-weight:700;
+}
+.filter-badge.show { display:inline-flex; }
+
+.btn-search {
+  padding:8px 20px; border-radius:8px; background:var(--g8); color:#fff;
+  border:none; font-size:13px; font-weight:600; cursor:pointer;
+  transition:opacity .15s; white-space:nowrap;
+}
+.btn-search:hover { opacity:.85; }
+
+.btn-export {
+  padding:8px 14px; border-radius:8px; border:1px solid var(--border);
+  background:var(--white); color:var(--g6); font-size:13px; cursor:pointer;
+  transition:background .15s; display:flex; align-items:center; gap:6px;
+  white-space:nowrap;
+}
+.btn-export:hover { background:var(--g1); }
+.btn-export:disabled { opacity:.5; cursor:default; }
+
+/* ── Panel filtros ── */
+.filters-panel {
+  display:none; border-bottom:1px solid var(--border); background:var(--g0);
+}
+.filters-panel.open { display:block; }
+.filters-grid {
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(175px,1fr));
+  gap:12px; padding:16px 20px 12px;
+}
+.filter-group { display:flex; flex-direction:column; gap:5px; }
+.filter-label {
+  font-size:10px; font-weight:700; color:var(--g5);
+  text-transform:uppercase; letter-spacing:.6px;
+}
 .filter-select, .filter-input {
-  padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border);
-  background: var(--white); color: var(--g8); font-size: 13px;
-  outline: none; transition: border-color .15s;
+  padding:7px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--white); color:var(--g8); font-size:13px;
+  outline:none; transition:border-color .15s;
 }
-.filter-select:focus, .filter-input:focus { border-color: var(--g6); }
-.btn-filter {
-  align-self: flex-end; padding: 7px 18px; border-radius: 8px;
-  background: var(--g8); color: #fff; border: none; font-size: 13px;
-  font-weight: 600; cursor: pointer; transition: opacity .15s; white-space: nowrap;
+.filter-select:focus, .filter-input:focus { border-color:var(--g6); }
+.filter-checks {
+  display:flex; gap:20px; padding:4px 20px 12px; flex-wrap:wrap;
 }
-.btn-filter:hover { opacity: .85; }
-.btn-clear {
-  align-self: flex-end; padding: 7px 14px; border-radius: 8px;
-  background: none; color: var(--g5); border: 1px solid var(--border);
-  font-size: 13px; cursor: pointer; transition: background .15s; white-space: nowrap;
+.filter-check-item {
+  display:flex; align-items:center; gap:7px; font-size:13px;
+  color:var(--g6); cursor:pointer; user-select:none;
 }
-.btn-clear:hover { background: var(--g1); }
+.filter-check-item input { accent-color:var(--g7); width:14px; height:14px; }
+.filters-footer {
+  display:flex; gap:8px; padding:10px 20px;
+  border-top:1px solid var(--border); background:var(--white);
+}
+.btn-apply {
+  padding:7px 20px; border-radius:8px; background:var(--g8);
+  color:#fff; border:none; font-size:13px; font-weight:600; cursor:pointer;
+}
+.btn-apply:hover { opacity:.85; }
+.btn-clear-all {
+  padding:7px 14px; border-radius:8px; border:1px solid var(--border);
+  background:none; color:var(--g5); font-size:13px; cursor:pointer;
+}
+.btn-clear-all:hover { background:var(--g1); }
 
 /* ── Stats ── */
 .stats-bar {
-  display: flex; gap: 16px; padding: 12px 20px;
-  border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  display:flex; border-bottom:1px solid var(--border); overflow-x:auto;
 }
-.stat-item { display: flex; flex-direction: column; gap: 2px; }
-.stat-num  { font-size: 20px; font-weight: 700; color: var(--g8); line-height: 1; }
-.stat-lbl  { font-size: 11px; color: var(--g5); }
-.stat-pass { color: #16a34a; }
-.stat-fail { color: #dc2626; }
-.stat-block{ color: #d97706; }
-.stat-sep  { width: 1px; background: var(--border); margin: 4px 0; }
+.stat-card {
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:14px 18px; flex:1; border-right:1px solid var(--border);
+  min-width:90px; cursor:default;
+}
+.stat-card:last-child { border-right:none; }
+.stat-num { font-size:24px; font-weight:800; line-height:1; color:var(--g8); }
+.stat-lbl { font-size:11px; color:var(--g5); white-space:nowrap; }
+.stat-sub { font-size:10px; color:var(--g4); margin-top:1px; }
+.s-pass  .stat-num { color:#16a34a; }
+.s-fail  .stat-num { color:#dc2626; }
+.s-block .stat-num { color:#d97706; }
+.s-rate  .stat-num { color:#2563eb; }
+
+/* ── Progress bar ── */
+.progress-wrap { padding:0 20px 12px; }
+.progress-bar-bg {
+  height:6px; border-radius:99px; background:var(--g1);
+  overflow:hidden; display:flex;
+}
+.progress-seg { height:100%; transition:width .4s ease; }
+.seg-pass  { background:#16a34a; }
+.seg-fail  { background:#dc2626; }
+.seg-block { background:#d97706; }
 
 /* ── Tabla ── */
-.history-table th, .history-table td { white-space: nowrap; }
-.history-table td.desc-cell { white-space: normal; max-width: 260px; }
-.pill-pass    { background: #dcfce7; color: #15803d; }
-.pill-fail    { background: #fee2e2; color: #991b1b; }
-.pill-blocked { background: #fef3c7; color: #92400e; }
-.pill-config  { background: #fff7ed; color: #c2410c; font-size: 10px; }
+.history-table { width:100%; border-collapse:collapse; }
+.history-table thead th {
+  padding:10px 14px; font-size:11px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.5px; color:var(--g5);
+  background:var(--g0); border-bottom:2px solid var(--border);
+  white-space:nowrap; position:sticky; top:0; z-index:1;
+}
+.history-table tbody tr {
+  border-bottom:1px solid var(--border); transition:background .1s;
+}
+.history-table tbody tr:hover { background:var(--g0); }
+.history-table td { padding:10px 14px; font-size:13px; color:var(--g7); white-space:nowrap; }
+.history-table td.wrap { white-space:normal; max-width:240px; }
+
+/* Pills */
+.pill { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; }
+.p-pass   { background:var(--pass-bg); color:var(--pass-fg); }
+.p-fail   { background:var(--fail-bg); color:var(--fail-fg); }
+.p-block  { background:var(--block-bg); color:var(--block-fg); }
+.p-high   { background:var(--high-bg); color:var(--high-fg); }
+.p-med    { background:var(--med-bg);  color:var(--med-fg); }
+.p-low    { background:var(--low-bg);  color:var(--low-fg); }
+.p-type   { background:var(--type-bg); color:var(--type-fg); font-size:10px; }
+.p-sev-critico { background:#fef2f2; color:#dc2626; }
+.p-sev-mayor   { background:#fff7ed; color:#c2410c; }
+.p-sev-medio   { background:#fefce8; color:#a16207; }
+.p-sev-bajo    { background:#f0fdf4; color:#16a34a; }
 
 .jira-link {
-  display: inline-flex; align-items: center; gap: 4px;
-  color: #2563eb; font-weight: 600; font-size: 12px; text-decoration: none;
+  display:inline-flex; align-items:center; gap:4px; color:#2563eb;
+  font-weight:700; font-size:12px; text-decoration:none; white-space:nowrap;
 }
-.jira-link:hover { text-decoration: underline; }
+.jira-link:hover { text-decoration:underline; }
 
-.badge-version-sm {
-  display: inline-block; padding: 2px 8px; border-radius: 20px;
-  font-size: 11px; font-weight: 600; background: #dcfce7; color: #15803d;
-  white-space: nowrap;
+.badge-ver {
+  display:inline-block; padding:2px 9px; border-radius:20px;
+  font-size:11px; font-weight:600; background:#dbeafe; color:#1d4ed8;
 }
 
 .jira-status-pill {
-  display:inline-block; padding:2px 10px; border-radius:20px; font-size:11px;
-  font-weight:600; letter-spacing:.3px; white-space:nowrap;
-  background:#f3f4f6; color:#6b7280;
+  display:inline-block; padding:3px 10px; border-radius:20px;
+  font-size:11px; font-weight:600; background:#f3f4f6; color:#6b7280;
 }
 .jira-status-pill.cat-done       { background:#dcfce7; color:#15803d; }
 .jira-status-pill.cat-inprogress { background:#dbeafe; color:#1d4ed8; }
-.jira-status-pill.cat-todo       { background:#f3f4f6; color:#6b7280; }
 
 .btn-change {
   background:none; border:1px solid var(--border); border-radius:6px;
-  color:var(--g5); font-size:11px; padding:2px 7px; cursor:pointer;
-  transition:background .15s; flex-shrink:0;
+  color:var(--g4); font-size:10px; padding:2px 6px; cursor:pointer;
 }
-.btn-change:hover  { background:var(--g1); }
+.btn-change:hover { background:var(--g1); color:var(--g7); }
 .btn-change:disabled { opacity:.4; cursor:default; }
-.jira-cell { display:flex; align-items:center; gap:6px; }
+.jira-cell { display:flex; align-items:center; gap:5px; }
 
+.flag-tag {
+  display:inline-block; font-size:12px; padding:1px 5px;
+  border-radius:6px; background:var(--g1);
+}
+
+/* ── Popover ── */
 .popover {
-  position:fixed; z-index:400;
-  background:#1e2430; border:1px solid #374151; border-radius:10px;
-  box-shadow:0 12px 32px rgba(0,0,0,.5);
-  min-width:180px; padding:6px 0;
+  position:fixed; z-index:500; background:#1e2430;
+  border:1px solid #374151; border-radius:10px;
+  box-shadow:0 12px 32px rgba(0,0,0,.5); min-width:180px; padding:6px 0;
 }
-.popover-title {
-  padding:6px 16px 4px; font-size:10px; font-weight:700;
-  letter-spacing:.6px; text-transform:uppercase; color:#64748b;
-}
+.popover-title { padding:6px 16px 4px; font-size:10px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:#64748b; }
 .popover-item {
-  padding:10px 16px; font-size:13px; font-weight:500;
-  cursor:pointer; color:#f1f5f9; transition:background .1s;
-  display:flex; align-items:center; gap:8px;
+  padding:10px 16px; font-size:13px; font-weight:500; cursor:pointer;
+  color:#f1f5f9; transition:background .1s; display:flex; align-items:center; gap:8px;
 }
 .popover-item::before { content:''; width:7px; height:7px; border-radius:50%; background:#4dbf94; flex-shrink:0; }
 .popover-item:hover { background:#2d3748; }
 .popover-item.dim { color:#94a3b8; cursor:default; }
 .popover-item.dim::before { background:#475569; }
 
+/* ── Paginación ── */
 .pag-bar { display:flex; align-items:center; gap:8px; padding:12px 20px; }
 .btn-pag {
-  padding:5px 14px; border-radius:7px; border:1px solid var(--border);
+  padding:6px 16px; border-radius:8px; border:1px solid var(--border);
   background:var(--white); color:var(--g7); font-size:12px; cursor:pointer;
-  transition:background .15s;
+  transition:background .15s; font-weight:500;
 }
 .btn-pag:hover:not(:disabled) { background:var(--g1); }
-.btn-pag:disabled { opacity:.4; cursor:default; }
-.pag-info { font-size:12px; color:var(--g5); }
+.btn-pag:disabled { opacity:.35; cursor:default; }
+.pag-info { font-size:12px; color:var(--g5); flex:1; text-align:center; }
+
+/* ── Empty / loading ── */
+.state-row td { padding:48px 0; text-align:center; color:var(--g4); font-size:14px; }
 </style>
 </head>
 <body>
 <div class="page">
 
-<!-- ── Header ── -->
+<!-- Header -->
 <div class="hdr">
   <div class="hdr-icon">
     <svg fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
@@ -127,13 +254,10 @@
   </div>
   <div class="hdr-text">
     <h1>Historial de pruebas</h1>
-    <p>Hybred · Proyecto QAA · Datos en tiempo real desde Jira</p>
+    <p>Hybred · QAA · Tiempo real desde Jira</p>
   </div>
   <div class="hdr-right">
-    <div class="hdr-badges">
-      <span class="badge">ISO 29119</span>
-      <span class="badge">ISTQB</span>
-    </div>
+    <div class="hdr-badges"><span class="badge">ISO 29119</span><span class="badge">ISTQB</span></div>
     <a href="/" class="btn-hdr-history">
       <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
         <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
@@ -143,53 +267,120 @@
   </div>
 </div>
 
-<!-- ── Card ── -->
-<div class="card" style="padding:0; overflow:visible">
+<div class="card" style="padding:0;overflow:visible">
 
-  <!-- Filtros -->
-  <div class="filters">
-    <div class="filter-group">
-      <span class="filter-label">Versión</span>
-      <select class="filter-select" id="f-version">
-        <option value="">Todas</option>
-      </select>
+  <!-- Top bar -->
+  <div class="top-bar">
+    <div class="search-wrap">
+      <input class="search-input" id="f-texto" type="text" placeholder="Buscar por descripción, ID..."
+        oninput="onSearchInput()" onkeydown="if(event.key==='Enter'){closeSuggestions();applyFilters()}" autocomplete="off">
+      <button class="search-clear" id="search-clear" onclick="clearSearch()">×</button>
+      <div class="suggestions" id="suggestions"></div>
     </div>
-    <div class="filter-group">
-      <span class="filter-label">Módulo (Epic)</span>
-      <select class="filter-select" id="f-epic">
-        <option value="">Todos</option>
-      </select>
+    <button class="btn-toggle-filters" id="btn-toggle" onclick="toggleFilters()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+      </svg>
+      Filtros <span class="filter-badge" id="filter-badge">0</span>
+    </button>
+    <button class="btn-search" onclick="applyFilters()">Buscar</button>
+    <button class="btn-export" id="btn-export" onclick="exportCSV()">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Exportar CSV
+    </button>
+  </div>
+
+  <!-- Panel filtros -->
+  <div class="filters-panel" id="filters-panel">
+    <div class="filters-grid">
+      <div class="filter-group">
+        <span class="filter-label">Versión</span>
+        <select class="filter-select" id="f-version"><option value="">Todas</option></select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Módulo</span>
+        <select class="filter-select" id="f-epic"><option value="">Todos</option></select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Estado QA</span>
+        <select class="filter-select" id="f-estado">
+          <option value="">Todos</option>
+          <option value="estado-pass">Pass</option>
+          <option value="estado-fail">Fail</option>
+          <option value="estado-blocked">Bloqueado</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Tipo de prueba</span>
+        <select class="filter-select" id="f-tipo">
+          <option value="">Todos</option>
+          <option value="smoke">Smoke</option>
+          <option value="regression">Regression</option>
+          <option value="functional">Functional</option>
+          <option value="performance">Performance</option>
+          <option value="security">Security</option>
+          <option value="ux">UX</option>
+          <option value="api">API</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Prioridad</span>
+        <select class="filter-select" id="f-prioridad">
+          <option value="">Todas</option>
+          <option value="High">High</option>
+          <option value="Medium">Medium</option>
+          <option value="Low">Low</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Severidad</span>
+        <select class="filter-select" id="f-severidad">
+          <option value="">Todas</option>
+          <option value="severity-critico">Crítico</option>
+          <option value="severity-mayor">Mayor</option>
+          <option value="severity-medio">Medio</option>
+          <option value="severity-bajo">Bajo</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Desde</span>
+        <input type="date" class="filter-input" id="f-desde">
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Hasta</span>
+        <input type="date" class="filter-input" id="f-hasta">
+      </div>
     </div>
-    <div class="filter-group">
-      <span class="filter-label">Estado</span>
-      <select class="filter-select" id="f-estado">
-        <option value="">Todos</option>
-        <option value="estado-pass">Pass</option>
-        <option value="estado-fail">Fail</option>
-        <option value="estado-blocked">Bloqueado</option>
-      </select>
+    <div class="filter-checks">
+      <label class="filter-check-item"><input type="checkbox" id="f-config"> ⚙️ Requiere configuración</label>
+      <label class="filter-check-item"><input type="checkbox" id="f-retest"> 🔁 Solo retest</label>
     </div>
-    <div class="filter-group">
-      <span class="filter-label">Desde</span>
-      <input type="date" class="filter-input" id="f-desde">
+    <div class="filters-footer">
+      <button class="btn-apply" onclick="applyFilters()">Aplicar</button>
+      <button class="btn-clear-all" onclick="clearFilters()">Limpiar todo</button>
     </div>
-    <div class="filter-group">
-      <span class="filter-label">Hasta</span>
-      <input type="date" class="filter-input" id="f-hasta">
-    </div>
-    <button class="btn-filter" onclick="applyFilters()">Buscar</button>
-    <button class="btn-clear"  onclick="clearFilters()">Limpiar</button>
   </div>
 
   <!-- Stats -->
-  <div class="stats-bar" id="stats-bar">
-    <div class="stat-item"><span class="stat-num" id="s-total">—</span><span class="stat-lbl">Total</span></div>
-    <div class="stat-sep"></div>
-    <div class="stat-item"><span class="stat-num stat-pass" id="s-pass">—</span><span class="stat-lbl">Pass</span></div>
-    <div class="stat-item"><span class="stat-num stat-fail" id="s-fail">—</span><span class="stat-lbl">Fail</span></div>
-    <div class="stat-item"><span class="stat-num stat-block" id="s-block">—</span><span class="stat-lbl">Bloqueado</span></div>
-    <div class="stat-sep"></div>
-    <div class="stat-item"><span class="stat-num" id="s-config">—</span><span class="stat-lbl">⚙️ Config</span></div>
+  <div class="stats-bar">
+    <div class="stat-card"><span class="stat-num" id="s-total">—</span><span class="stat-lbl">Total</span></div>
+    <div class="stat-card s-pass"><span class="stat-num" id="s-pass">—</span><span class="stat-lbl">Pass</span></div>
+    <div class="stat-card s-fail"><span class="stat-num" id="s-fail">—</span><span class="stat-lbl">Fail</span></div>
+    <div class="stat-card s-block"><span class="stat-num" id="s-block">—</span><span class="stat-lbl">Bloqueado</span></div>
+    <div class="stat-card s-rate"><span class="stat-num" id="s-rate">—</span><span class="stat-lbl">Pass rate</span></div>
+    <div class="stat-card"><span class="stat-num" id="s-config">—</span><span class="stat-lbl">⚙️ Config</span></div>
+    <div class="stat-card"><span class="stat-num" id="s-retest">—</span><span class="stat-lbl">🔁 Retest</span></div>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="progress-wrap" id="progress-wrap" style="display:none">
+    <div class="progress-bar-bg">
+      <div class="progress-seg seg-pass"  id="prog-pass"  style="width:0%"></div>
+      <div class="progress-seg seg-fail"  id="prog-fail"  style="width:0%"></div>
+      <div class="progress-seg seg-block" id="prog-block" style="width:0%"></div>
+    </div>
   </div>
 
   <!-- Tabla -->
@@ -201,14 +392,17 @@
           <th>Descripción</th>
           <th>Módulo</th>
           <th>Estado QA</th>
+          <th>Severidad</th>
+          <th>Tipo</th>
+          <th>Prioridad</th>
           <th>Estado Jira</th>
           <th>Versión</th>
-          <th>⚙️</th>
-          <th>Creado</th>
+          <th>Flags</th>
+          <th>Fecha</th>
         </tr>
       </thead>
       <tbody id="history-body">
-        <tr><td colspan="8"><div class="empty-state">Cargando...</div></td></tr>
+        <tr class="state-row"><td colspan="11">Cargando...</td></tr>
       </tbody>
     </table>
   </div>
@@ -217,170 +411,343 @@
   <div class="pag-bar">
     <button class="btn-pag" id="btn-prev" onclick="changePage(-1)" disabled>← Anterior</button>
     <span class="pag-info" id="pag-info"></span>
-    <button class="btn-pag" id="btn-next" onclick="changePage(1)" disabled>Siguiente →</button>
+    <button class="btn-pag" id="btn-next" onclick="changePage(1)"  disabled>Siguiente →</button>
   </div>
 
 </div>
 </div>
-
 <div id="popover" class="popover" style="display:none"></div>
 
 <script>
 const JIRA_BASE = window.location.origin + '/jira';
+const JIRA_HOST = 'liceopinoverde.atlassian.net';
 const PAGE_SIZE = 50;
 let currentPage = 0;
-let totalIssues = 0;
 let currentJQL  = '';
+let debounceTimer = null;
 
-// ── Cargar filtros ────────────────────────────────────────────────────────────
+// ── Búsqueda con sugerencias ──────────────────────────────────────────────────
+function onSearchInput() {
+  const val = document.getElementById('f-texto').value;
+  document.getElementById('search-clear').style.display = val ? 'block' : 'none';
+  clearTimeout(debounceTimer);
+  if (val.length < 2) { closeSuggestions(); return; }
+  debounceTimer = setTimeout(() => fetchSuggestions(val), 300);
+}
+
+async function fetchSuggestions(text) {
+  try {
+    const jql = `project = QAA AND issuetype != Epic AND summary ~ "${text.replace(/"/g,'')}" ORDER BY created DESC`;
+    const r   = await fetch(`${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=summary&maxResults=6`, { headers:{ 'Accept':'application/json' } });
+    const d   = await r.json();
+    const issues = d.issues || [];
+    const box  = document.getElementById('suggestions');
+    if (!issues.length) { closeSuggestions(); return; }
+    box.innerHTML = issues.map(i =>
+      `<div class="suggestion-item" onclick="pickSuggestion('${i.key}','${i.fields.summary.replace(/'/g,"\\'")}')">
+        <span class="sug-key">${i.key}</span>
+        <span class="sug-text">${i.fields.summary}</span>
+      </div>`).join('');
+    box.style.display = 'block';
+  } catch { closeSuggestions(); }
+}
+
+function pickSuggestion(key, summary) {
+  document.getElementById('f-texto').value = summary;
+  document.getElementById('search-clear').style.display = 'block';
+  closeSuggestions();
+  applyFilters();
+}
+
+function closeSuggestions() {
+  document.getElementById('suggestions').style.display = 'none';
+}
+
+function clearSearch() {
+  document.getElementById('f-texto').value = '';
+  document.getElementById('search-clear').style.display = 'none';
+  closeSuggestions();
+  applyFilters();
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-wrap')) closeSuggestions();
+});
+
+// ── Toggle filtros ────────────────────────────────────────────────────────────
+function toggleFilters() {
+  const panel = document.getElementById('filters-panel');
+  const btn   = document.getElementById('btn-toggle');
+  const open  = panel.classList.toggle('open');
+  btn.classList.toggle('active', open);
+}
+
+function actualizarBadge() {
+  const selects = ['f-version','f-epic','f-estado','f-tipo','f-prioridad','f-severidad','f-desde','f-hasta'];
+  const checks  = ['f-config','f-retest'];
+  const texto   = document.getElementById('f-texto').value.trim();
+  let n = selects.filter(id => document.getElementById(id).value).length
+        + checks.filter(id => document.getElementById(id).checked).length
+        + (texto ? 1 : 0);
+  const badge = document.getElementById('filter-badge');
+  badge.textContent = n;
+  badge.classList.toggle('show', n > 0);
+}
+
+// ── Cargar filtros desde Jira ─────────────────────────────────────────────────
 async function cargarFiltros() {
   const [versiones, epics] = await Promise.all([
-    fetch(`${JIRA_BASE}/rest/api/3/project/QAA/versions`, { headers:{ 'Accept':'application/json' } }).then(r => r.json()).catch(() => []),
-    fetch(`${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent('project = QAA AND issuetype = Epic ORDER BY created ASC')}&fields=summary&maxResults=100`, { headers:{ 'Accept':'application/json' } }).then(r => r.json()).catch(() => ({}))
+    fetch(`${JIRA_BASE}/rest/api/3/project/QAA/versions`, { headers:{ 'Accept':'application/json' } }).then(r=>r.json()).catch(()=>[]),
+    fetch(`${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent('project=QAA AND issuetype=Epic ORDER BY created ASC')}&fields=summary&maxResults=100`, { headers:{ 'Accept':'application/json' } }).then(r=>r.json()).catch(()=>({}))
   ]);
 
   const selV = document.getElementById('f-version');
   [...versiones].reverse().forEach(v => {
-    const opt = document.createElement('option');
-    opt.value = v.name;
-    opt.textContent = v.name + (v.released ? ' ✓' : ' (activa)');
-    selV.appendChild(opt);
+    const o = document.createElement('option');
+    o.value = v.name;
+    o.textContent = v.name + (v.released ? ' ✓' : ' (activa)');
+    selV.appendChild(o);
   });
 
   const selE = document.getElementById('f-epic');
   (epics.issues || []).forEach(e => {
-    const opt = document.createElement('option');
-    opt.value = e.key;
-    opt.textContent = e.fields.summary;
-    selE.appendChild(opt);
+    const o = document.createElement('option');
+    o.value = e.key;
+    o.textContent = e.fields.summary;
+    selE.appendChild(o);
   });
 }
 
-// ── Construir JQL ─────────────────────────────────────────────────────────────
+// ── JQL ───────────────────────────────────────────────────────────────────────
 function buildJQL() {
+  const g = id => document.getElementById(id);
   const parts = ['project = QAA', 'issuetype != Epic'];
-  const ver    = document.getElementById('f-version').value;
-  const epic   = document.getElementById('f-epic').value;
-  const estado = document.getElementById('f-estado').value;
-  const desde  = document.getElementById('f-desde').value;
-  const hasta  = document.getElementById('f-hasta').value;
-
-  if (ver)    parts.push(`fixVersion = "${ver}"`);
-  if (epic)   parts.push(`parent = "${epic}"`);
-  if (estado) parts.push(`labels = "${estado}"`);
-  if (desde)  parts.push(`created >= "${desde}"`);
-  if (hasta)  parts.push(`created <= "${hasta}"`);
-
+  if (g('f-version').value)   parts.push(`fixVersion = "${g('f-version').value}"`);
+  if (g('f-epic').value)      parts.push(`parent = "${g('f-epic').value}"`);
+  if (g('f-estado').value)    parts.push(`labels = "${g('f-estado').value}"`);
+  if (g('f-tipo').value)      parts.push(`labels = "${g('f-tipo').value}"`);
+  if (g('f-prioridad').value) parts.push(`priority = "${g('f-prioridad').value}"`);
+  if (g('f-severidad').value) parts.push(`labels = "${g('f-severidad').value}"`);
+  if (g('f-desde').value)     parts.push(`created >= "${g('f-desde').value}"`);
+  if (g('f-hasta').value)     parts.push(`created <= "${g('f-hasta').value}"`);
+  if (g('f-texto').value.trim()) parts.push(`summary ~ "${g('f-texto').value.trim().replace(/"/g,'')}"`);
+  if (g('f-config').checked)  parts.push('labels = "requiere-config"');
+  if (g('f-retest').checked)  parts.push('labels = "retest"');
   return parts.join(' AND ') + ' ORDER BY created DESC';
 }
 
-// ── Stats — se calculan desde los issues cargados ────────────────────────────
+// ── Stats ─────────────────────────────────────────────────────────────────────
 function calcularStats(issues) {
-  let pass = 0, fail = 0, blocked = 0, config = 0;
-  issues.forEach(issue => {
-    const labels = issue.fields.labels || [];
-    if (labels.includes('estado-pass'))    pass++;
-    if (labels.includes('estado-fail'))    fail++;
-    if (labels.includes('estado-blocked')) blocked++;
-    if (labels.includes('requiere-config'))config++;
+  let pass=0, fail=0, blocked=0, config=0, retest=0;
+  issues.forEach(i => {
+    const l = i.fields.labels || [];
+    if (l.includes('estado-pass'))    pass++;
+    if (l.includes('estado-fail'))    fail++;
+    if (l.includes('estado-blocked')) blocked++;
+    if (l.includes('requiere-config'))config++;
+    if (l.includes('retest'))         retest++;
   });
-  document.getElementById('s-total').textContent  = issues.length;
+  const total = issues.length;
+  const rate  = total > 0 ? Math.round((pass/total)*100) : 0;
+
+  document.getElementById('s-total').textContent  = total;
   document.getElementById('s-pass').textContent   = pass;
   document.getElementById('s-fail').textContent   = fail;
   document.getElementById('s-block').textContent  = blocked;
+  document.getElementById('s-rate').textContent   = total ? rate + '%' : '—';
   document.getElementById('s-config').textContent = config;
+  document.getElementById('s-retest').textContent = retest;
+
+  if (total > 0) {
+    document.getElementById('progress-wrap').style.display = 'block';
+    document.getElementById('prog-pass').style.width  = ((pass/total)*100)+'%';
+    document.getElementById('prog-fail').style.width  = ((fail/total)*100)+'%';
+    document.getElementById('prog-block').style.width = ((blocked/total)*100)+'%';
+  }
 }
 
-// ── Cargar página ─────────────────────────────────────────────────────────────
+// ── Helpers render ────────────────────────────────────────────────────────────
+function statusCls(statusCategory) {
+  const c = (statusCategory || '').toLowerCase();
+  return c.includes('done') || c.includes('complet') ? 'cat-done'
+       : c.includes('progress') ? 'cat-inprogress' : '';
+}
+
+function renderIssues(issues) {
+  if (!issues.length) {
+    document.getElementById('history-body').innerHTML =
+      `<tr class="state-row"><td colspan="11">No hay resultados para estos filtros.</td></tr>`;
+    return;
+  }
+
+  document.getElementById('history-body').innerHTML = issues.map(issue => {
+    const f      = issue.fields;
+    const labels = f.labels || [];
+
+    // Estado QA
+    const eLbl  = labels.find(l => l.startsWith('estado-'));
+    const eKey  = eLbl ? eLbl.replace('estado-','') : '';
+    const eCls  = eKey==='pass'?'p-pass':eKey==='fail'?'p-fail':eKey==='blocked'?'p-block':'';
+    const eTxt  = eKey==='pass'?'Pass':eKey==='fail'?'Fail':eKey==='blocked'?'Bloqueado':'—';
+    const eCell = eLbl ? `<span class="pill ${eCls}">${eTxt}</span>` : '—';
+
+    // Severidad
+    const sLbl  = labels.find(l => l.startsWith('severity-'));
+    const sKey  = sLbl ? sLbl.replace('severity-','') : '';
+    const sCls  = sKey ? `p-sev-${sKey}` : '';
+    const sTxt  = sKey ? sKey.charAt(0).toUpperCase()+sKey.slice(1) : '';
+    const sCell = sLbl ? `<span class="pill ${sCls}">${sTxt}</span>` : '—';
+
+    // Tipo
+    const TIPOS = ['smoke','regression','functional','performance','security','ux','api'];
+    const tLbl  = labels.find(l => TIPOS.includes(l));
+    const tCell = tLbl ? `<span class="pill p-type">${tLbl}</span>` : '—';
+
+    // Prioridad
+    const pName = f.priority?.name || '';
+    const pCls  = pName==='High'?'p-high':pName==='Medium'?'p-med':pName==='Low'?'p-low':'';
+    const pTxt  = pName || '—';
+    const pCell = pName ? `<span class="pill ${pCls}">${pTxt}</span>` : '—';
+
+    // Estado Jira
+    const st    = f.status;
+    const stCls = statusCls(st?.statusCategory?.name);
+    const stCell= `<div class="jira-cell">
+      <span class="jira-status-pill ${stCls}" id="sp-${issue.key}">${st?.name||'—'}</span>
+      <button class="btn-change" id="btn-s-${issue.key}" onclick="openStatusPicker(event,'${issue.key}')">↕</button>
+    </div>`;
+
+    // Flags
+    const flags = [
+      labels.includes('requiere-config') ? '<span class="flag-tag" title="Requiere configuración">⚙️</span>' : '',
+      labels.includes('retest')          ? '<span class="flag-tag" title="Retest">🔁</span>' : '',
+    ].filter(Boolean).join(' ') || '—';
+
+    const version = (f.fixVersions||[])[0]?.name;
+    const modulo  = f.parent?.fields?.summary || f.parent?.key || '—';
+    const fecha   = f.created ? f.created.split('T')[0] : '—';
+    const jiraUrl = `https://${JIRA_HOST}/browse/${issue.key}`;
+
+    return `<tr>
+      <td><a class="jira-link" href="${jiraUrl}" target="_blank">↗ ${issue.key}</a></td>
+      <td class="wrap">${f.summary||'—'}</td>
+      <td style="font-size:12px;color:var(--g5);max-width:130px;overflow:hidden;text-overflow:ellipsis">${modulo}</td>
+      <td>${eCell}</td>
+      <td>${sCell}</td>
+      <td>${tCell}</td>
+      <td>${pCell}</td>
+      <td>${stCell}</td>
+      <td>${version ? `<span class="badge-ver">${version}</span>` : '—'}</td>
+      <td>${flags}</td>
+      <td class="date-cell">${fecha}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Load page ─────────────────────────────────────────────────────────────────
 async function loadPage(jql, page) {
-  const wrap = document.getElementById('history-body');
-  wrap.innerHTML = `<tr><td colspan="8"><div class="empty-state">Cargando...</div></td></tr>`;
+  document.getElementById('history-body').innerHTML =
+    `<tr class="state-row"><td colspan="11">Cargando...</td></tr>`;
 
   const start = page * PAGE_SIZE;
-  const url = `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=summary,labels,status,fixVersions,parent,created,priority&maxResults=${PAGE_SIZE}&startAt=${start}`;
+  const url   = `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=summary,labels,status,fixVersions,parent,created,priority&maxResults=${PAGE_SIZE}&startAt=${start}`;
 
   try {
-    const r = await fetch(url, { headers:{ 'Accept':'application/json' } });
+    const r      = await fetch(url, { headers:{ 'Accept':'application/json' } });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const data = await r.json();
+    const data   = await r.json();
     const issues = data.issues || [];
     const isLast = data.isLast ?? (issues.length < PAGE_SIZE);
 
-    if (page === 0) calcularStats(issues);
+    calcularStats(issues);
+    renderIssues(issues);
 
     document.getElementById('pag-info').textContent =
-      issues.length ? `Página ${page + 1} · ${issues.length} resultados` : '';
+      issues.length ? `Página ${page+1}${isLast?' (última)':''}` : '';
     document.getElementById('btn-prev').disabled = page === 0;
     document.getElementById('btn-next').disabled = isLast;
-
-    if (!issues.length) {
-      wrap.innerHTML = `<tr><td colspan="8"><div class="empty-state">No hay resultados para estos filtros.</div></td></tr>`;
-      return;
-    }
-
-    wrap.innerHTML = issues.map(issue => {
-      const fields   = issue.fields;
-      const labels   = fields.labels || [];
-      const estadoLbl = labels.find(l => l.startsWith('estado-'));
-      const esConfig  = labels.includes('requiere-config');
-      const version   = (fields.fixVersions || [])[0]?.name || '—';
-      const modulo    = fields.parent?.fields?.summary || fields.parent?.key || '—';
-      const fecha     = fields.created ? fields.created.split('T')[0] : '—';
-      const status    = fields.status;
-      const statusCat = (status?.statusCategory?.name || '').toLowerCase();
-      const statusCls = statusCat.includes('done') || statusCat.includes('complet') ? 'cat-done'
-                      : statusCat.includes('progress') || statusCat.includes('review') ? 'cat-inprogress'
-                      : 'cat-todo';
-
-      let estadoPill = '—';
-      if (estadoLbl) {
-        const e = estadoLbl.replace('estado-', '');
-        const cls = e === 'pass' ? 'pill-pass' : e === 'fail' ? 'pill-fail' : 'pill-blocked';
-        const lbl = e === 'pass' ? 'Pass' : e === 'fail' ? 'Fail' : 'Bloqueado';
-        estadoPill = `<span class="pill ${cls}">${lbl}</span>`;
-      }
-
-      const jiraUrl = `https://liceopinoverde.atlassian.net/browse/${issue.key}`;
-
-      return `<tr>
-        <td><a class="jira-link" href="${jiraUrl}" target="_blank">↗ ${issue.key}</a></td>
-        <td class="desc-cell">${fields.summary || '—'}</td>
-        <td style="font-size:12px;color:var(--g5)">${modulo}</td>
-        <td>${estadoPill}</td>
-        <td>
-          <div class="jira-cell">
-            <span class="jira-status-pill ${statusCls}" id="sp-${issue.key}">${status?.name || '—'}</span>
-            <button class="btn-change" id="btn-s-${issue.key}" onclick="openStatusPicker(event,'${issue.key}')">↕</button>
-          </div>
-        </td>
-        <td>${version !== '—' ? `<span class="badge-version-sm">${version}</span>` : '—'}</td>
-        <td style="text-align:center">${esConfig ? '⚙️' : ''}</td>
-        <td class="date-cell">${fecha}</td>
-      </tr>`;
-    }).join('');
-
   } catch(e) {
-    wrap.innerHTML = `<tr><td colspan="8"><div class="empty-state" style="color:#b91c1c">Error: ${e.message}</div></td></tr>`;
+    document.getElementById('history-body').innerHTML =
+      `<tr class="state-row"><td colspan="11" style="color:#b91c1c">Error: ${e.message}</td></tr>`;
   }
 }
 
 // ── Filtros ───────────────────────────────────────────────────────────────────
 function applyFilters() {
+  closeSuggestions();
   currentPage = 0;
   currentJQL  = buildJQL();
+  actualizarBadge();
   loadPage(currentJQL, currentPage);
 }
 
 function clearFilters() {
-  ['f-version','f-epic','f-estado'].forEach(id => document.getElementById(id).value = '');
-  ['f-desde','f-hasta'].forEach(id => document.getElementById(id).value = '');
+  ['f-version','f-epic','f-estado','f-tipo','f-prioridad','f-severidad'].forEach(id => document.getElementById(id).value='');
+  ['f-desde','f-hasta'].forEach(id => document.getElementById(id).value='');
+  ['f-config','f-retest'].forEach(id => document.getElementById(id).checked=false);
+  document.getElementById('f-texto').value='';
+  document.getElementById('search-clear').style.display='none';
   applyFilters();
 }
 
 function changePage(dir) {
   currentPage += dir;
   loadPage(currentJQL, currentPage);
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo({ top:0, behavior:'smooth' });
+}
+
+// ── Export CSV — trae TODOS los issues del filtro actual ──────────────────────
+async function exportCSV() {
+  const btn = document.getElementById('btn-export');
+  btn.disabled = true;
+  btn.textContent = 'Exportando...';
+
+  try {
+    let all = [], startAt = 0, isLast = false;
+    while (!isLast) {
+      const url = `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(currentJQL)}&fields=summary,labels,status,fixVersions,parent,created,priority&maxResults=100&startAt=${startAt}`;
+      const r   = await fetch(url, { headers:{ 'Accept':'application/json' } });
+      const d   = await r.json();
+      const issues = d.issues || [];
+      all.push(...issues);
+      isLast  = d.isLast ?? (issues.length < 100);
+      startAt += issues.length;
+      if (!issues.length) break;
+    }
+
+    const TIPOS = ['smoke','regression','functional','performance','security','ux','api'];
+    const cols  = ['Key','Descripción','Módulo','Estado QA','Severidad','Tipo','Prioridad','Estado Jira','Versión','⚙️ Config','🔁 Retest','Fecha'];
+    const rows  = all.map(i => {
+      const f = i.fields, l = f.labels||[];
+      const estado   = (l.find(x=>x.startsWith('estado-'))||'').replace('estado-','');
+      const sev      = (l.find(x=>x.startsWith('severity-'))||'').replace('severity-','');
+      const tipo     = l.find(x=>TIPOS.includes(x))||'';
+      return [
+        i.key,
+        `"${(f.summary||'').replace(/"/g,'""')}"`,
+        `"${(f.parent?.key||'')}"`,
+        estado, sev, tipo,
+        f.priority?.name||'',
+        f.status?.name||'',
+        (f.fixVersions||[])[0]?.name||'',
+        l.includes('requiere-config')?'Sí':'No',
+        l.includes('retest')?'Sí':'No',
+        f.created?f.created.split('T')[0]:'',
+      ].join(',');
+    });
+
+    const csv  = '\uFEFF' + [cols.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
+    a.download = `qa_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+  } catch(e) {
+    alert('Error exportando: ' + e.message);
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = `<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Exportar CSV`;
 }
 
 // ── Status picker ─────────────────────────────────────────────────────────────
@@ -389,67 +756,47 @@ let activePopover = null;
 function showPopover(btn, title, items) {
   const pop = document.getElementById('popover');
   pop.innerHTML = `<div class="popover-title">${title}</div>` +
-    items.map(i => `<div class="popover-item ${i.dim ? 'dim' : ''}" ${i.onclick ? `onclick="${i.onclick}"` : ''}>${i.label}</div>`).join('');
+    items.map(i=>`<div class="popover-item ${i.dim?'dim':''}" ${i.onclick?`onclick="${i.onclick}"`:''}>
+      ${i.label}</div>`).join('');
   const rect = btn.getBoundingClientRect();
-  pop.style.display = 'block';
-  const popH = pop.offsetHeight || 200;
-  const spaceBelow = window.innerHeight - rect.bottom;
-  pop.style.top  = `${spaceBelow >= popH + 8 ? rect.bottom + window.scrollY + 4 : rect.top + window.scrollY - popH - 4}px`;
-  pop.style.left = `${Math.min(rect.left + window.scrollX, window.innerWidth - 200)}px`;
+  pop.style.display='block';
+  const popH = pop.offsetHeight||200;
+  pop.style.top  = `${window.innerHeight-rect.bottom>=popH+8?rect.bottom+window.scrollY+4:rect.top+window.scrollY-popH-4}px`;
+  pop.style.left = `${Math.min(rect.left+window.scrollX, window.innerWidth-200)}px`;
 }
 
-function closePopover() {
-  document.getElementById('popover').style.display = 'none';
-  activePopover = null;
-}
-
-document.addEventListener('click', e => {
-  if (!e.target.closest('#popover') && !e.target.closest('.btn-change')) closePopover();
-});
+function closePopover() { document.getElementById('popover').style.display='none'; activePopover=null; }
+document.addEventListener('click', e => { if(!e.target.closest('#popover')&&!e.target.closest('.btn-change')) closePopover(); });
 
 async function openStatusPicker(event, key) {
   event.stopPropagation();
   const btn = document.getElementById(`btn-s-${key}`);
-  if (activePopover?.key === key) { closePopover(); return; }
-  activePopover = { key };
-  showPopover(btn, 'Cambiar estado', [{ label: 'Cargando...', dim: true }]);
-  btn.disabled = true;
+  if (activePopover?.key===key) { closePopover(); return; }
+  activePopover={key};
+  showPopover(btn,'Cambiar estado',[{label:'Cargando...',dim:true}]);
+  btn.disabled=true;
   try {
-    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${key}/transitions`, { headers:{ 'Accept':'application/json' } });
-    const data = await r.json();
-    const transitions = data.transitions || [];
-    showPopover(btn, 'Cambiar estado', transitions.length
-      ? transitions.map(t => ({ label: t.name, onclick: `applyTransition('${key}','${t.id}')` }))
-      : [{ label: 'Sin transiciones disponibles', dim: true }]);
-  } catch(e) {
-    showPopover(btn, 'Cambiar estado', [{ label: `Error: ${e.message}`, dim: true }]);
-  }
-  btn.disabled = false;
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${key}/transitions`,{headers:{'Accept':'application/json'}});
+    const d = await r.json();
+    const t = d.transitions||[];
+    showPopover(btn,'Cambiar estado', t.length
+      ? t.map(x=>({label:x.name,onclick:`applyTransition('${key}','${x.id}')`}))
+      : [{label:'Sin transiciones',dim:true}]);
+  } catch(e) { showPopover(btn,'Error',[{label:e.message,dim:true}]); }
+  btn.disabled=false;
 }
 
-async function applyTransition(key, transitionId) {
+async function applyTransition(key, id) {
   closePopover();
-  const btn  = document.getElementById(`btn-s-${key}`);
-  const pill = document.getElementById(`sp-${key}`);
-  if (btn)  btn.disabled = true;
-  if (pill) pill.textContent = '...';
+  const btn=document.getElementById(`btn-s-${key}`), pill=document.getElementById(`sp-${key}`);
+  if(btn) btn.disabled=true; if(pill) pill.textContent='...';
   try {
-    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${key}/transitions`, {
-      method: 'POST',
-      headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
-      body: JSON.stringify({ transition: { id: transitionId } })
-    });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const info = await fetch(`${JIRA_BASE}/rest/api/3/issue/${key}?fields=status`, { headers:{ 'Accept':'application/json' } }).then(r => r.json());
-    const s   = info.fields.status;
-    const cat = (s?.statusCategory?.name || '').toLowerCase();
-    const cls = cat.includes('done') || cat.includes('complet') ? 'cat-done'
-              : cat.includes('progress') ? 'cat-inprogress' : 'cat-todo';
-    if (pill) { pill.textContent = s?.name || ''; pill.className = `jira-status-pill ${cls}`; }
-  } catch(e) {
-    if (pill) pill.textContent = 'Error';
-  }
-  if (btn) btn.disabled = false;
+    await fetch(`${JIRA_BASE}/rest/api/3/issue/${key}/transitions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({transition:{id}})});
+    const info=await fetch(`${JIRA_BASE}/rest/api/3/issue/${key}?fields=status`,{headers:{'Accept':'application/json'}}).then(r=>r.json());
+    const s=info.fields.status;
+    if(pill){pill.textContent=s?.name||'';pill.className=`jira-status-pill ${statusCls(s?.statusCategory?.name)}`;}
+  } catch { if(pill) pill.textContent='Error'; }
+  if(btn) btn.disabled=false;
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

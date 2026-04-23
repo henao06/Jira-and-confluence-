@@ -30,10 +30,10 @@ const JIRA_TOKEN = process.env.JIRA_TOKEN;
 const ENV_ERROR = !PORT || !JIRA_HOST || !JIRA_EMAIL || !JIRA_TOKEN
   ? `Falta configurar el archivo .env<br><br>
      Variables requeridas:<br>
-     ${!PORT       ? '❌ PORT<br>'       : ''}
-     ${!JIRA_HOST  ? '❌ JIRA_HOST<br>'  : ''}
-     ${!JIRA_EMAIL ? '❌ JIRA_EMAIL<br>' : ''}
-     ${!JIRA_TOKEN ? '❌ JIRA_TOKEN<br>' : ''}
+     ${!PORT       ? ' PORT<br>'       : ''}
+     ${!JIRA_HOST  ? ' JIRA_HOST<br>'  : ''}
+     ${!JIRA_EMAIL ? ' JIRA_EMAIL<br>' : ''}
+     ${!JIRA_TOKEN ? ' JIRA_TOKEN<br>' : ''}
      <br>Copiá <strong>.env.example</strong> como <strong>.env</strong> y completá los valores.`
   : null;
 
@@ -178,6 +178,34 @@ const server = http.createServer((req, res) => {
         res.writeHead(502); res.end(JSON.stringify({ error: err.message }));
       });
 
+      if (bodyData.length > 0) proxyReq.write(bodyData);
+      proxyReq.end();
+    });
+    return;
+  }
+
+  // ── PROXY: /wiki/* → Confluence API ──
+  if (req.url.startsWith('/wiki/')) {
+    const wikiPath = req.url;
+    console.log(`[WIKI] ${req.method} ${wikiPath}`);
+
+    let body = [];
+    req.on('data', chunk => body.push(chunk));
+    req.on('end', () => {
+      const bodyData = Buffer.concat(body);
+      const headers = {
+        'Authorization': AUTH,
+        'Accept':        'application/json',
+      };
+      if (bodyData.length > 0) {
+        headers['Content-Type']   = req.headers['content-type'] || 'application/json';
+        headers['Content-Length'] = bodyData.length;
+      }
+      const proxyReq = https.request({ hostname: JIRA_HOST, port: 443, path: wikiPath, method: req.method, headers }, proxyRes => {
+        res.writeHead(proxyRes.statusCode, { 'Content-Type': proxyRes.headers['content-type'] || 'application/json', 'Access-Control-Allow-Origin': '*' });
+        proxyRes.pipe(res);
+      });
+      proxyReq.on('error', err => { res.writeHead(502); res.end(JSON.stringify({ error: err.message })); });
       if (bodyData.length > 0) proxyReq.write(bodyData);
       proxyReq.end();
     });

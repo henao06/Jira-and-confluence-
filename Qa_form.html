@@ -724,7 +724,7 @@ async function inicializarSistemaVersiones() {
     const v = await obtenerVersionActiva();
     versionActual   = v.name;
     versionActualId = v.id;
-    const icono = (v.description || '').startsWith('⚙️') ? ' ⚙️' : ' ✅';
+    const icono = (v.description || '').startsWith('⚙️') ? ' ⚙️' : '';
     if (badge) badge.textContent = v.name + icono;
   } catch(e) {
     console.warn('[version]', e.message);
@@ -785,24 +785,244 @@ async function promptAvanzarVersion() {
   }
 }
 
+// ── Confluence ───────────────────────────────────────────────────────────────
+const CONFLUENCE_BASE    = window.location.origin + '/wiki/rest/api';
+const HISTORIAL_PAGE_ID  = '78053377';
+
+async function obtenerDatosVersion(nombreVersion) {
+  const jql = encodeURIComponent(`project = QAA AND fixVersion = "${nombreVersion}" AND issuetype != Epic`);
+  const r   = await fetch(`/jira/rest/api/3/search/jql?jql=${jql}&fields=labels,summary,key&maxResults=200`, {
+    headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
+  });
+  const d      = await r.json();
+  const issues = d.issues || [];
+  const labels = issues.flatMap(i => i.fields.labels || []);
+
+  const configIssues = issues.filter(i => (i.fields.labels||[]).includes('requiere-config'));
+  const failIssues   = issues.filter(i => (i.fields.labels||[]).includes('estado-fail'));
+
+  return {
+    stats: {
+      total:   issues.length,
+      pass:    issues.filter(i => (i.fields.labels||[]).includes('estado-pass')).length,
+      fail:    failIssues.length,
+      blocked: issues.filter(i => (i.fields.labels||[]).includes('estado-blocked')).length,
+    },
+    requiereConfig: configIssues.length > 0,
+    pasosConfig:    configIssues.map(i => `${i.key}: ${i.fields.summary}`),
+    bugsFijos:      failIssues.map(i => i.key),
+  };
+}
+
+async function agregarAlHistorialConfluence({ version, motivo, requiereConfig, pasosConfig, bugsFijos, stats, observaciones }) {
+  const fecha    = new Date().toLocaleDateString('es-CO');
+  const tasa     = stats.total > 0 ? `${Math.round((stats.pass / stats.total) * 100)}%` : '—';
+  const WIKI_V1  = window.location.origin + '/wiki/rest/api';
+
+  // Leer página actual (v1)
+  const resPage = await fetch(`${WIKI_V1}/content/${HISTORIAL_PAGE_ID}?expand=body.storage,version`, {
+    headers: { 'Accept': 'application/json' }
+  });
+  if (!resPage.ok) throw new Error(`Confluence GET: HTTP ${resPage.status}`);
+  const page    = await resPage.json();
+  const verNum  = page.version.number;
+  const current = page.body?.storage?.value || '';
+
+  const configBloque = requiereConfig && pasosConfig.length
+    ? `<ac:structured-macro ac:name="note"><ac:parameter ac:name="title">⚙️ Requiere configuración</ac:parameter><ac:rich-text-body><ol>${pasosConfig.map(p=>`<li>${p}</li>`).join('')}</ol></ac:rich-text-body></ac:structured-macro>`
+    : `<ac:structured-macro ac:name="tip"><ac:parameter ac:name="title"> Sin cambios de configuración</ac:parameter><ac:rich-text-body><p>El servidor no requiere cambios adicionales.</p></ac:rich-text-body></ac:structured-macro>`;
+
+  const bugsBloque = bugsFijos.length
+    ? `<p><strong>Bugs corregidos:</strong> ${bugsFijos.map(b=>`<a href="https://liceopinoverde.atlassian.net/browse/${b}">${b}</a>`).join(', ')}</p>`
+    : '';
+
+  const notasBloque = observaciones ? `<p><strong>Observaciones:</strong> ${observaciones}</p>` : '';
+
+  const entrada = `<h2>${version} — ${fecha}</h2>
+<table><tbody>
+  <tr><th>Versión</th><th>Fecha</th><th>Total</th><th> Pass</th><th> Fail</th><th> Blocked</th><th>Tasa</th></tr>
+  <tr><td><strong>${version}</strong></td><td>${fecha}</td><td>${stats.total}</td><td>${stats.pass}</td><td>${stats.fail}</td><td>${stats.blocked}</td><td><strong>${tasa}</strong></td></tr>
+</tbody></table>
+<p><strong>Motivo:</strong> ${motivo}</p>
+${configBloque}${bugsBloque}${notasBloque}<hr/>`;
+
+  // Deduplicar: si ya existe una entrada para esta versión, reemplazarla
+  const marcaInicio = `<h2>${version} `;
+  let nuevoContenido;
+  const idxInicio = current.indexOf(marcaInicio);
+  if (idxInicio !== -1) {
+    // Buscar el <hr/> que cierra esa entrada para delimitar el bloque
+    const idxHr = current.indexOf('<hr/>', idxInicio);
+    const fin = idxHr !== -1 ? idxHr + 5 : current.length;
+    nuevoContenido = current.slice(0, idxInicio) + entrada + current.slice(fin);
+  } else {
+    nuevoContenido = entrada + current;
+  }
+
+  // Actualizar página (v1)
+  const resUp = await fetch(`${WIKI_V1}/content/${HISTORIAL_PAGE_ID}`, {
+    method:  'PUT',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({
+      version: { number: verNum + 1 },
+      title:   'Historial de Versiones Publicadas',
+      type:    'page',
+      body:    { storage: { value: nuevoContenido, representation: 'storage' } }
+    })
+  });
+  if (!resUp.ok) {
+    const err = await resUp.json().catch(() => ({}));
+    throw new Error(`Confluence PUT: HTTP ${resUp.status} — ${JSON.stringify(err)}`);
+  }
+}
+
 async function promptPublicarVersion() {
   if (!versionActual) return alert('No hay versión activa');
-  if (!confirm(`¿Cerrar y publicar ${versionActual}?\n\nEsto marca la sesión como terminada en Jira.`)) return;
+
+  const publicada = versionActual;
+  const num       = parseInt(publicada.replace('test-v', ''), 10);
+  const siguiente = `test-v${String(num + 1).padStart(3, '0')}`;
+
+  // Mostrar modal con estado de carga
+  showModal('publish',
+    `<span style="font-size:18px;font-weight:700">Publicar ${publicada}</span>`,
+    `<div style="text-align:center;padding:32px;color:var(--g5)">Cargando datos de Jira...</div>`,
+    `<button onclick="closeModal()" style="padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:none;font-size:13px;cursor:pointer">Cancelar</button>`
+  );
+
+  let datos = { stats:{ total:0,pass:0,fail:0,blocked:0 }, requiereConfig:false, pasosConfig:[], bugsFijos:[] };
+  try { datos = await obtenerDatosVersion(publicada); } catch {}
+
+  abrirModalPublicar(publicada, siguiente, datos);
+}
+
+function abrirModalPublicar(publicada, siguiente, datos) {
+  const { stats, requiereConfig, pasosConfig, bugsFijos } = datos;
+  const tasa = stats.total > 0 ? Math.round((stats.pass / stats.total) * 100) + '%' : '—';
+
+  const bugsHtml = bugsFijos.length
+    ? bugsFijos.map(k => `<a href="https://liceopinoverde.atlassian.net/browse/${k}" target="_blank"
+        style="display:inline-block;padding:2px 8px;background:#fee2e2;color:#991b1b;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none;margin:2px">${k}</a>`).join('')
+    : '<span style="font-size:12px;color:var(--g4)">Ninguno</span>';
+
+  const configHtml = requiereConfig
+    ? `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px;font-size:12px;color:#92400e">
+        ⚙️ <strong>${pasosConfig.length} tarea${pasosConfig.length !== 1 ? 's' : ''} requieren configuración:</strong>
+        <ul style="margin:6px 0 0 0;padding-left:16px">${pasosConfig.map(p=>`<li>${p}</li>`).join('')}</ul>
+       </div>`
+    : `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;font-size:12px;color:#15803d"> Sin cambios de configuración en esta versión</div>`;
+
+  const body = `
+    <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:65px;text-align:center;background:var(--g0);border-radius:8px;padding:10px">
+        <div style="font-size:22px;font-weight:800;color:var(--g8)">${stats.total}</div>
+        <div style="font-size:11px;color:var(--g5)">Total</div>
+      </div>
+      <div style="flex:1;min-width:65px;text-align:center;background:#dcfce7;border-radius:8px;padding:10px">
+        <div style="font-size:22px;font-weight:800;color:#16a34a">${stats.pass}</div>
+        <div style="font-size:11px;color:#15803d">Pass</div>
+      </div>
+      <div style="flex:1;min-width:65px;text-align:center;background:#fee2e2;border-radius:8px;padding:10px">
+        <div style="font-size:22px;font-weight:800;color:#dc2626">${stats.fail}</div>
+        <div style="font-size:11px;color:#991b1b">Fail</div>
+      </div>
+      <div style="flex:1;min-width:65px;text-align:center;background:#fef3c7;border-radius:8px;padding:10px">
+        <div style="font-size:22px;font-weight:800;color:#d97706">${stats.blocked}</div>
+        <div style="font-size:11px;color:#92400e">Blocked</div>
+      </div>
+      <div style="flex:1;min-width:65px;text-align:center;background:#dbeafe;border-radius:8px;padding:10px">
+        <div style="font-size:22px;font-weight:800;color:#2563eb">${tasa}</div>
+        <div style="font-size:11px;color:#1d4ed8">Pass rate</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--g5);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Fails detectados (auto)</div>
+      ${bugsHtml}
+    </div>
+
+    <div style="margin-bottom:12px">${configHtml}</div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--g5);text-transform:uppercase;letter-spacing:.5px">Motivo de cierre <span style="color:#dc2626">*</span></label>
+        <textarea id="pub-motivo" rows="2" placeholder="Ej: Fix ChatKit + nuevo puerto MCP"
+          style="width:100%;margin-top:4px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:13px;resize:vertical;box-sizing:border-box"></textarea>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--g5);text-transform:uppercase;letter-spacing:.5px">Observaciones (opcional)</label>
+        <textarea id="pub-obs" rows="2" placeholder="Algo que deba saber el equipo sobre esta versión..."
+          style="width:100%;margin-top:4px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:13px;resize:vertical;box-sizing:border-box"></textarea>
+      </div>
+      <div style="background:var(--g0);border-radius:8px;padding:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--g5);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Siguiente sesión — ${siguiente}</div>
+        <input id="pub-siguiente-motivo" type="text" placeholder="¿Qué se va a probar en ${siguiente}?"
+          style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:13px;box-sizing:border-box">
+      </div>
+    </div>`;
+
+  const footer = `
+    <button onclick="closeModal()" style="padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:none;font-size:13px;cursor:pointer">Cancelar</button>
+    <button onclick="ejecutarPublicacion('${publicada}','${siguiente}')"
+      style="padding:8px 20px;border-radius:8px;background:var(--g8);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer">
+      ✓ Publicar y continuar
+    </button>`;
+
+  showModal('publish', `<span style="font-size:18px;font-weight:700">Publicar ${publicada}</span>`, body, footer);
+}
+
+async function ejecutarPublicacion(publicada, siguiente) {
+  const motivo    = document.getElementById('pub-motivo').value.trim() || 'Sin motivo';
+  const observaciones = document.getElementById('pub-obs').value.trim();
+  const motivoSig = document.getElementById('pub-siguiente-motivo').value.trim() || 'Nueva sesión';
+
+  closeModal();
+  setLoading(true);
+
   try {
-    const publicada = versionActual;
-    const num       = parseInt(publicada.replace('test-v', ''), 10);
+    // 1. Obtener datos de Jira
+    const datos = await obtenerDatosVersion(publicada);
+
+    // 2. Actualizar Confluence PRIMERO — si falla, no seguimos
+    await agregarAlHistorialConfluence({
+      version: publicada, motivo,
+      requiereConfig: datos.requiereConfig,
+      pasosConfig:    datos.pasosConfig,
+      bugsFijos:      datos.bugsFijos,
+      stats:          datos.stats,
+      observaciones
+    });
+
+    // 3. Publicar en Jira (solo si Confluence fue OK)
     await cerrarSesion();
     versionActual = null; versionActualId = null;
 
-    const motivo = prompt(`✓ ${publicada} publicada.\n\nMotivo para la nueva sesión (${`test-v${String(num + 1).padStart(3, '0')}`}):`, '');
-    if (motivo !== null) {
-      await iniciarSesion(motivo.trim() || 'Nueva sesión');
-    } else {
-      const badge = document.getElementById('version-actual');
-      if (badge) badge.textContent = 'sin versión';
-    }
+    // 4. Iniciar siguiente sesión
+    await iniciarSesion(motivoSig);
+
+    // 5. Mostrar éxito con link a Confluence
+    const confUrl = `https://liceopinoverde.atlassian.net/wiki/spaces/QD/pages/${HISTORIAL_PAGE_ID}`;
+    showModal('success',
+      `<div class="modal-icon success">
+        <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+       </div>
+       <div><div class="modal-title">${publicada} publicada</div><div class="modal-sub">Historial actualizado en Confluence</div></div>`,
+      `<div class="modal-card">
+         <div class="modal-card-label">Nueva sesión activa</div>
+         <div class="modal-tc">${motivoSig}</div>
+       </div>`,
+      `<a href="${confUrl}" target="_blank" style="flex:1;text-decoration:none">
+         <button class="modal-btn-primary" style="width:100%">Ver en Confluence</button>
+       </a>
+       <button class="modal-btn-secondary" onclick="closeModal()">Cerrar</button>`
+    );
+
   } catch(e) {
-    alert(`Error: ${e.message}`);
+    showError(`<strong>Error publicando:</strong><br>${e.message}`);
+  } finally {
+    setLoading(false);
   }
 }
 

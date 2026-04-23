@@ -7,7 +7,7 @@
 
 const http = require('http');
 
-const PROXY = { host: 'localhost', port: 8080 };
+const PROXY = { host: 'localhost' };
 
 const EPICS_META = {
   'login':      { epicKey: 'QAA-1', prefix: 'LG', nombre: 'Login & Autenticación',       moduloSistema: 'modulo-app-web',  severidadDefault: 'mayor'   },
@@ -217,14 +217,14 @@ async function main() {
     });
 
     if (res.status === 204 || res.status === 200) {
-      console.log(`✅ OK (${testCases.length} TCs)`);
+      console.log(` OK (${testCases.length} TCs)`);
     } else {
-      console.log(`❌ HTTP ${res.status}`);
+      console.log(` HTTP ${res.status}`);
       console.log('   ', JSON.stringify(res.body).substring(0, 200));
     }
   }
 
-  console.log('\n✅ Listo. Recargá el formulario — los módulos ahora cargan desde Jira.\n');
+  console.log('\n Listo. Recargá el formulario — los módulos ahora cargan desde Jira.\n');
 }
 
 main().catch(e => { console.error('Fatal:', e.message); process.exit(1); });
