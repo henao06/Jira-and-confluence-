@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Editor JSON — Hybred QA</title>
+<link rel="stylesheet" href="/styles.css">
+<style>
+.editor-wrap {
+  display: flex; flex-direction: column; gap: 0;
+  border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+  background: var(--g0);
+}
+.editor-toolbar {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  background: var(--g1); border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.editor-toolbar span { font-size: 12px; color: var(--g4); flex: 1; }
+.btn-tool {
+  padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--white); color: var(--g7); font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: background .12s;
+}
+.btn-tool:hover { background: var(--g1); }
+.btn-tool.primary {
+  background: var(--g8); color: #fff; border-color: var(--g8);
+}
+.btn-tool.primary:hover { opacity: .85; }
+.btn-tool.danger { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.btn-tool.danger:hover { background: #fecaca; }
+#json-editor {
+  width: 100%; min-height: 500px; resize: vertical;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 13px; line-height: 1.6; padding: 16px;
+  border: none; outline: none; background: #0f172a; color: #e2e8f0;
+  box-sizing: border-box; tab-size: 2;
+}
+#json-editor::selection { background: #334155; }
+.status-bar {
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+  background: var(--g1); border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--g4);
+}
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--g4);
+  flex-shrink: 0;
+}
+.status-dot.ok    { background: #16a34a; }
+.status-dot.error { background: #dc2626; }
+.status-dot.dirty { background: #f59e0b; }
+.epic-select {
+  padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--white); color: var(--g8); font-size: 13px;
+  outline: none; min-width: 260px;
+}
+.alert {
+  padding: 12px 16px; border-radius: 10px; font-size: 13px; margin-bottom: 16px;
+  display: none;
+}
+.alert.show { display: block; }
+.alert.success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+.alert.error   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+.alert.info    { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+.schema-hint {
+  background: var(--g0); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 16px; font-size: 12px; color: var(--g5); line-height: 1.7;
+}
+.schema-hint code {
+  background: var(--g1); padding: 1px 5px; border-radius: 4px;
+  font-family: monospace; color: var(--g7); font-size: 11px;
+}
+.schema-hint summary { cursor: pointer; font-weight: 600; color: var(--g6); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- Header -->
+<div class="hdr">
+  <div class="hdr-icon">
+    <svg fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+      <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+    </svg>
+  </div>
+  <div class="hdr-text">
+    <h1>Editor JSON de Jira</h1>
+    <p>Hybred · Estructura QA por Epic</p>
+  </div>
+  <div class="hdr-right">
+    <a href="/" class="btn-hdr-history">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+      </svg>
+      <span>Formulario</span>
+    </a>
+    <a href="/history" class="btn-hdr-history">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+      </svg>
+      <span>Historial</span>
+    </a>
+  </div>
+</div>
+
+<div class="card">
+
+  <!-- Selector de epic -->
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+    <label style="font-size:13px;font-weight:600;color:var(--g6)">Epic:</label>
+    <select class="epic-select" id="epic-select" onchange="cargarEpic()">
+      <option value="">Cargando epics...</option>
+    </select>
+    <button class="btn-tool" onclick="recargarEpic()" title="Recargar desde Jira">
+      <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:4px">
+        <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+      </svg>
+      Recargar
+    </button>
+  </div>
+
+  <!-- Alertas -->
+  <div class="alert" id="alert"></div>
+
+  <!-- Editor -->
+  <div class="editor-wrap" id="editor-wrap" style="display:none">
+    <div class="editor-toolbar">
+      <span id="epic-label">—</span>
+      <button class="btn-tool" onclick="formatearJSON()">Formatear</button>
+      <button class="btn-tool" onclick="validarJSON()">Validar</button>
+      <button class="btn-tool danger" onclick="revertir()">Revertir</button>
+      <button class="btn-tool primary" onclick="guardarEnJira()">Guardar en Jira</button>
+    </div>
+    <textarea id="json-editor" spellcheck="false" oninput="onEdit()"
+      onkeydown="handleTab(event)"></textarea>
+    <div class="status-bar">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">Listo</span>
+      <span style="margin-left:auto" id="char-count"></span>
+    </div>
+  </div>
+
+  <!-- Hint de estructura -->
+  <details class="schema-hint" style="margin-top:20px">
+    <summary>Estructura esperada del JSON</summary>
+    <pre style="margin:10px 0 0;white-space:pre-wrap;font-size:11px;color:var(--g6)">{
+  "meta": {
+    "moduloSistema":   "modulo-app-web",    // label que se pone en Jira
+    "prefix":          "TC",                // prefijo para IDs de test case
+    "severidadDefault":"severity-medio"     // severidad por defecto al marcar FAIL
+  },
+  "testCases": [
+    {
+      "id":               "TC-001",
+      "titulo":           "Login con credenciales válidas",   // → campo Descripción
+      "historia":         "US-012",                           // → Historia/Requerimiento (opcional)
+      "tipoTest":         "functional",                       // functional | regression | smoke | performance | security | ux | api
+      "prioridad":        "High",                             // Highest | High | Medium | Low | Lowest (opcional)
+      "navegador":        "Chrome",                           // Chrome | Firefox | Safari | Edge (opcional)
+      "sistemaOp":        "Windows 11",                       // Windows 11 | macOS | Linux | Android | iOS (opcional)
+      "precondiciones":   ["El usuario existe en el sistema"],
+      "pasos":            ["Ir a /login", "Ingresar email y contraseña", "Click en Entrar"],
+      "datos":            ["email: test@test.com", "pass: Test1234!"], // datos de prueba (opcional)
+      "rolUsuario":       "Estudiante",                       // rol que ejecuta el test (opcional)
+      "impacto":          "Los usuarios no pueden ingresar al sistema", // impacto si falla (opcional)
+      "resultadoEsperado":"Redirige al dashboard",            // string o array de strings
+      "postcondiciones":  ["La sesión queda activa"],         // opcional
+      "severidadSiFalla": "severity-critico"                  // severity-critico | severity-mayor | severity-medio | severity-bajo
+    }
+  ]
+}</pre>
+  </details>
+
+</div>
+</div>
+
+<script>
+const JIRA_BASE = window.location.origin;
+const EPICS_JQL = encodeURIComponent('project = QAA AND issuetype = Epic ORDER BY created ASC');
+
+let originalJSON = '';
+let currentEpicKey = '';
+
+// ── Cargar lista de epics ────────────────────────────────────────────────────
+async function cargarEpics() {
+  try {
+    const r = await fetch(
+      `${JIRA_BASE}/jira/rest/api/3/search/jql?jql=${EPICS_JQL}&fields=summary,key&maxResults=50`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    const d = await r.json();
+    const sel = document.getElementById('epic-select');
+    sel.innerHTML = '<option value="">— Seleccioná un Epic —</option>' +
+      (d.issues || []).map(e =>
+        `<option value="${e.key}">${e.key}: ${e.fields.summary}</option>`
+      ).join('');
+  } catch (e) {
+    showAlert('error', `No se pudieron cargar los epics: ${e.message}`);
+  }
+}
+
+// ── Cargar JSON de un epic ───────────────────────────────────────────────────
+async function cargarEpic() {
+  const key = document.getElementById('epic-select').value;
+  if (!key) { document.getElementById('editor-wrap').style.display = 'none'; return; }
+  currentEpicKey = key;
+
+  setStatus('', 'Cargando...');
+  hideAlert();
+
+  try {
+    const r = await fetch(
+      `${JIRA_BASE}/jira/rest/api/3/issue/${key}?fields=description,summary`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+
+    document.getElementById('epic-label').textContent =
+      `${key}: ${data.fields.summary}`;
+
+    const texto = extraerTexto(data.fields.description);
+    const json  = extraerJSON(texto);
+
+    const editor = document.getElementById('json-editor');
+    editor.value = json ? JSON.stringify(JSON.parse(json), null, 2) : '';
+    originalJSON = editor.value;
+
+    document.getElementById('editor-wrap').style.display = 'flex';
+    setStatus('ok', json ? 'JSON cargado' : 'Sin estructura QA — se creará una nueva');
+    actualizarContador();
+
+    if (!json) {
+      editor.value = JSON.stringify({
+        meta: { moduloSistema: 'modulo-', prefix: 'TC', severidadDefault: 'severity-medio' },
+        testCases: []
+      }, null, 2);
+      originalJSON = '';
+    }
+  } catch (e) {
+    showAlert('error', `Error al cargar ${key}: ${e.message}`);
+    setStatus('error', 'Error de carga');
+  }
+}
+
+async function recargarEpic() {
+  if (!currentEpicKey) return;
+  await cargarEpic();
+}
+
+// ── Extraer texto de ADF ─────────────────────────────────────────────────────
+function extraerTexto(node) {
+  if (!node) return '';
+  if (typeof node === 'string') return node;
+  if (node.type === 'text') return node.text || '';
+  if (Array.isArray(node.content)) return node.content.map(extraerTexto).join('');
+  return '';
+}
+
+function extraerJSON(texto) {
+  const iStart = texto.indexOf('QA_STRUCTURE_START');
+  const iEnd   = texto.lastIndexOf('QA_STRUCTURE_END');
+  if (iStart === -1 || iEnd === -1) return null;
+  const between   = texto.slice(iStart + 18, iEnd);
+  const jsonMatch = between.match(/\{[\s\S]*\}/);
+  return jsonMatch ? jsonMatch[0] : null;
+}
+
+// ── Acciones del editor ──────────────────────────────────────────────────────
+function onEdit() {
+  setStatus('dirty', 'Sin guardar');
+  actualizarContador();
+}
+
+function formatearJSON() {
+  const editor = document.getElementById('json-editor');
+  try {
+    const parsed = JSON.parse(editor.value);
+    editor.value = JSON.stringify(parsed, null, 2);
+    setStatus('ok', 'Formateado');
+    actualizarContador();
+  } catch (e) {
+    showAlert('error', `JSON inválido: ${e.message}`);
+    setStatus('error', 'JSON inválido');
+  }
+}
+
+function validarJSON() {
+  const editor = document.getElementById('json-editor');
+  try {
+    const parsed = JSON.parse(editor.value);
+    const meta = parsed.meta || {};
+    const tcs  = parsed.testCases || [];
+    const errores = [];
+    if (!meta.moduloSistema) errores.push('meta.moduloSistema falta');
+    if (!meta.prefix)        errores.push('meta.prefix falta');
+    tcs.forEach((tc, i) => {
+      if (!tc.id)     errores.push(`testCases[${i}] sin id`);
+      if (!tc.titulo) errores.push(`testCases[${i}] sin titulo`);
+    });
+    if (errores.length) {
+      showAlert('info', `JSON válido pero con advertencias:<br>• ${errores.join('<br>• ')}`);
+      setStatus('dirty', `${errores.length} advertencia(s)`);
+    } else {
+      showAlert('success', `JSON válido — ${tcs.length} test case(s), módulo: ${meta.moduloSistema}`);
+      setStatus('ok', 'Validado OK');
+    }
+  } catch (e) {
+    showAlert('error', `JSON inválido: ${e.message}`);
+    setStatus('error', 'JSON inválido');
+  }
+}
+
+function revertir() {
+  if (!confirm('Revertir todos los cambios?')) return;
+  document.getElementById('json-editor').value = originalJSON;
+  setStatus('ok', 'Revertido');
+  actualizarContador();
+  hideAlert();
+}
+
+async function guardarEnJira() {
+  const editor = document.getElementById('json-editor');
+  let parsed;
+  try {
+    parsed = JSON.parse(editor.value);
+  } catch (e) {
+    showAlert('error', `JSON inválido, corregilo antes de guardar: ${e.message}`);
+    return;
+  }
+
+  const jsonStr = JSON.stringify(parsed, null, 2);
+  const fullText = `QA_STRUCTURE_START\n${jsonStr}\nQA_STRUCTURE_END`;
+
+  // ADF: codeBlock con el contenido
+  const adf = {
+    version: 1,
+    type: 'doc',
+    content: [{
+      type: 'codeBlock',
+      attrs: { language: 'json' },
+      content: [{ type: 'text', text: fullText }]
+    }]
+  };
+
+  setStatus('', 'Guardando...');
+  try {
+    const r = await fetch(`${JIRA_BASE}/jira/rest/api/3/issue/${currentEpicKey}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ fields: { description: adf } })
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(`HTTP ${r.status} — ${JSON.stringify(err)}`);
+    }
+    originalJSON = editor.value;
+    setStatus('ok', 'Guardado en Jira');
+    showAlert('success', `Estructura de <strong>${currentEpicKey}</strong> actualizada en Jira correctamente.`);
+  } catch (e) {
+    showAlert('error', `Error al guardar: ${e.message}`);
+    setStatus('error', 'Error al guardar');
+  }
+}
+
+// ── Helpers UI ───────────────────────────────────────────────────────────────
+function setStatus(type, text) {
+  const dot  = document.getElementById('status-dot');
+  const span = document.getElementById('status-text');
+  dot.className  = 'status-dot' + (type ? ' ' + type : '');
+  span.textContent = text;
+}
+
+function actualizarContador() {
+  const v = document.getElementById('json-editor').value;
+  const tcs = (() => { try { return (JSON.parse(v).testCases||[]).length; } catch { return '?'; } })();
+  document.getElementById('char-count').textContent = `${v.length} chars · ${tcs} TCs`;
+}
+
+function showAlert(type, msg) {
+  const el = document.getElementById('alert');
+  el.className = `alert ${type} show`;
+  el.innerHTML = msg;
+}
+
+function hideAlert() {
+  document.getElementById('alert').className = 'alert';
+}
+
+// Tab key en el textarea
+function handleTab(e) {
+  if (e.key !== 'Tab') return;
+  e.preventDefault();
+  const el = e.target;
+  const s = el.selectionStart;
+  el.value = el.value.slice(0, s) + '  ' + el.value.slice(el.selectionEnd);
+  el.selectionStart = el.selectionEnd = s + 2;
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+cargarEpics();
+</script>
+</body>
+</html>

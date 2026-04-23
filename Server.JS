@@ -213,8 +213,9 @@ const server = http.createServer((req, res) => {
   }
 
   // ── Archivos estáticos ──
-  let filePath = parsed.pathname === '/'        ? '/Qa_form.html'
-               : parsed.pathname === '/history' ? '/history.html'
+  let filePath = parsed.pathname === '/'             ? '/Qa_form.html'
+               : parsed.pathname === '/history'      ? '/history.html'
+               : parsed.pathname === '/jira-editor'  ? '/jira_editor.html'
                : parsed.pathname;
   filePath = path.join(__dirname, filePath);
 

@@ -257,7 +257,7 @@
     <p>Hybred · QAA · Tiempo real desde Jira</p>
   </div>
   <div class="hdr-right">
-    <div class="hdr-badges"><span class="badge">ISO 29119</span><span class="badge">ISTQB</span></div>
+    <div class="hdr-badges"></div>
     <a href="/" class="btn-hdr-history">
       <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
         <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
@@ -431,29 +431,54 @@ function onSearchInput() {
   const val = document.getElementById('f-texto').value;
   document.getElementById('search-clear').style.display = val ? 'block' : 'none';
   clearTimeout(debounceTimer);
-  if (val.length < 2) { closeSuggestions(); return; }
-  debounceTimer = setTimeout(() => fetchSuggestions(val), 300);
+  if (val.length < 1) { closeSuggestions(); return; }
+  debounceTimer = setTimeout(() => fetchSuggestions(val), 280);
 }
 
 async function fetchSuggestions(text) {
   try {
-    const jql = `project = QAA AND issuetype != Epic AND summary ~ "${text.replace(/"/g,'')}" ORDER BY created DESC`;
-    const r   = await fetch(`${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=summary&maxResults=6`, { headers:{ 'Accept':'application/json' } });
-    const d   = await r.json();
+    const t = text.replace(/"/g, '').trim();
+    const isExactKey = /^QAA-\d+$/i.test(t);
+    let jql;
+    if (isExactKey) {
+      jql = `project = QAA AND issuetype != Epic AND key = "${t.toUpperCase()}"`;
+    } else {
+      // text ~ cubre summary + description + comentarios + adjuntos
+      jql = `project = QAA AND issuetype != Epic AND text ~ "${t}*" ORDER BY created DESC`;
+    }
+    const r = await fetch(
+      `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=summary,labels,status,fixVersions,priority&maxResults=8`,
+      { headers:{ 'Accept':'application/json' } }
+    );
+    const d = await r.json();
     const issues = d.issues || [];
-    const box  = document.getElementById('suggestions');
+    const box = document.getElementById('suggestions');
     if (!issues.length) { closeSuggestions(); return; }
-    box.innerHTML = issues.map(i =>
-      `<div class="suggestion-item" onclick="pickSuggestion('${i.key}','${i.fields.summary.replace(/'/g,"\\'")}')">
-        <span class="sug-key">${i.key}</span>
+
+    const estadoColor = { pass:'#16a34a', fail:'#dc2626', blocked:'#9333ea' };
+    box.innerHTML = issues.map(i => {
+      const labels  = i.fields.labels || [];
+      const estado  = labels.find(l => l.startsWith('estado-'))?.replace('estado-','') || '';
+      const version = i.fields.fixVersions?.[0]?.name || '';
+      const dot     = estado ? `<span style="width:7px;height:7px;border-radius:50%;background:${estadoColor[estado]||'#6b7280'};display:inline-block;flex-shrink:0"></span>` : '';
+      const safe    = i.fields.summary.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      return `<div class="suggestion-item" onclick="pickSuggestion('${i.key}','${safe}')">
+        <div style="display:flex;align-items:center;gap:6px;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:6px">${dot}<span class="sug-key">${i.key}</span></div>
+          <div style="display:flex;align-items:center;gap:6px">
+            ${estado ? `<span style="font-size:10px;font-weight:700;color:${estadoColor[estado]||'#6b7280'};text-transform:uppercase">${estado}</span>` : ''}
+            ${version ? `<span style="font-size:10px;color:var(--g4);white-space:nowrap">${version}</span>` : ''}
+          </div>
+        </div>
         <span class="sug-text">${i.fields.summary}</span>
-      </div>`).join('');
+      </div>`;
+    }).join('');
     box.style.display = 'block';
   } catch { closeSuggestions(); }
 }
 
-function pickSuggestion(key, summary) {
-  document.getElementById('f-texto').value = summary;
+function pickSuggestion(key) {
+  document.getElementById('f-texto').value = key;
   document.getElementById('search-clear').style.display = 'block';
   closeSuggestions();
   applyFilters();
@@ -530,7 +555,11 @@ function buildJQL() {
   if (g('f-severidad').value) parts.push(`labels = "${g('f-severidad').value}"`);
   if (g('f-desde').value)     parts.push(`created >= "${g('f-desde').value}"`);
   if (g('f-hasta').value)     parts.push(`created <= "${g('f-hasta').value}"`);
-  if (g('f-texto').value.trim()) parts.push(`summary ~ "${g('f-texto').value.trim().replace(/"/g,'')}"`);
+  const texto = g('f-texto').value.trim().replace(/"/g,'');
+  if (texto) {
+    if (/^QAA-\d+$/i.test(texto)) parts.push(`key = "${texto.toUpperCase()}"`);
+    else parts.push(`text ~ "${texto}"`);
+  }
   if (g('f-config').checked)  parts.push('labels = "requiere-config"');
   if (g('f-retest').checked)  parts.push('labels = "retest"');
   return parts.join(' AND ') + ' ORDER BY created DESC';

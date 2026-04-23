@@ -19,12 +19,10 @@
   </div>
   <div class="hdr-text">
     <h1>Caso de Prueba QA</h1>
-    <p>Hybred · Proyecto QAA · ISO/IEC 29119 · ISTQB</p>
+    <p>Hybred · Proyecto QAA</p>
   </div>
   <div class="hdr-right">
     <div class="hdr-badges">
-      <span class="badge">ISO 29119</span>
-      <span class="badge">ISTQB</span>
       <a class="badge badge-version" id="version-actual" href="https://liceopinoverde.atlassian.net/jira/software/projects/QAA/releases" target="_blank" title="Ver publicaciones en Jira">...</a>
       <button class="btn-version-avanzar" id="btn-avanzar-version" onclick="promptAvanzarVersion()" title="Nueva versión">
         <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
@@ -33,6 +31,12 @@
         <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
       </button>
     </div>
+    <a href="/jira-editor" class="btn-hdr-history" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#a5b4fc">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+      </svg>
+      <span>Editar JSON</span>
+    </a>
     <a href="/history" class="btn-hdr-history">
       <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
         <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
@@ -81,7 +85,7 @@
     </div>
     <div class="row2">
       <div class="field">
-        <label class="lbl" for="tipo-prueba">Tipo de prueba <span class="req">*</span> <span class="hint">ISO 29119</span></label>
+        <label class="lbl" for="tipo-prueba">Tipo de prueba <span class="req">*</span></label>
         <select id="tipo-prueba">
           <option value="" disabled selected>Seleccionar tipo...</option>
           <option value="type-funcional">Funcional</option>
@@ -229,7 +233,7 @@
       </div>
     </div>
     <div class="field">
-      <label class="lbl">Postcondiciones <span class="hint">ISO 29119 — opcional</span></label>
+      <label class="lbl">Postcondiciones <span class="hint">opcional</span></label>
       <div class="steps-list" id="postcon-wrap">
         <div class="step-row"><div class="step-num">1</div><input type="text" placeholder="Postcondición 1..."><button class="btn-rm" onclick="removePostcon(this)">×</button></div>
       </div>
@@ -279,7 +283,7 @@
       </div>
     </div>
     <div class="field" id="row-severity">
-      <label class="lbl">Severidad <span class="req">*</span> <span class="hint">Solo si Fail — ISTQB</span></label>
+      <label class="lbl">Severidad <span class="req">*</span> <span class="hint">Solo si Fail</span></label>
       <div class="btn-group">
         <button class="sev-btn critical" onclick="setSev('severity-critico',this)">Crítico</button>
         <button class="sev-btn major"    onclick="setSev('severity-mayor',this)">Mayor</button>
@@ -307,7 +311,7 @@
         </select>
       </div>
       <div class="field">
-        <label class="lbl" for="prioridad">Prioridad <span class="hint">ISTQB</span></label>
+        <label class="lbl" for="prioridad">Prioridad</label>
         <select id="prioridad">
           <option value="Medium" selected>Medium</option>
           <option value="Highest">Highest — Crítico</option>
@@ -1193,25 +1197,23 @@ function onTestCaseChange() {
   const tc = testCases.find(t => t.id === tcId);
   if (!tc) return;
 
-  const descField = document.getElementById('descripcion');
-  if (descField) descField.value = tc.titulo;
+  const setVal = (id, val) => { if (val != null) { const el = document.getElementById(id); if (el) el.value = val; } };
 
-  // Auto-fill preconditions
-  if (tc.precondiciones?.length) rebuildList('precon-wrap', tc.precondiciones, 'Precondición', 'removePrecon');
+  setVal('descripcion', tc.titulo);
+  setVal('historia',    tc.historia);
+  setVal('tipo-prueba', tc.tipoTest);
+  setVal('prioridad',   tc.prioridad);
+  setVal('navegador',   tc.navegador);
+  setVal('sistema-op',  tc.sistemaOp);
+  setVal('rol-usuario', tc.rolUsuario);
+  setVal('impacto',     tc.impacto);
 
-  // Auto-fill steps
-  if (tc.pasos?.length) rebuildList('steps-wrap', tc.pasos, 'Paso', 'removeStep');
+  if (tc.precondiciones?.length)  rebuildList('precon-wrap',  tc.precondiciones,  'Precondición', 'removePrecon');
+  if (tc.pasos?.length)           rebuildList('steps-wrap',   tc.pasos,           'Paso',         'removeStep');
+  if (tc.datos?.length)           rebuildList('datos-wrap',   tc.datos,           'Dato',         'removeDatos');
+  if (tc.postcondiciones?.length) rebuildList('postcon-wrap', tc.postcondiciones, 'Postcondición','removePostcon');
+  if (tc.resultadoEsperado)       rebuildList('esperado-wrap', Array.isArray(tc.resultadoEsperado) ? tc.resultadoEsperado : [tc.resultadoEsperado], 'Ítem', 'removeEsperado');
 
-  // Auto-fill expected result
-  if (tc.resultadoEsperado) rebuildList('esperado-wrap', [tc.resultadoEsperado], 'Ítem', 'removeEsperado');
-
-  // Pre-select test type if specified
-  if (tc.tipoTest) {
-    const tipoSel = document.getElementById('tipo-prueba');
-    if (tipoSel) tipoSel.value = tc.tipoTest;
-  }
-
-  // Store severity default for FAIL case
   window.severidadDefaultTC = tc.severidadSiFalla || estructura?.meta?.severidadDefault || null;
 
   persistForm();
