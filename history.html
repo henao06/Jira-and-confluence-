@@ -240,6 +240,13 @@
 
 /* ── Empty / loading ── */
 .state-row td { padding:48px 0; text-align:center; color:var(--g4); font-size:14px; }
+.btn-edit-issue {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:28px; height:28px; border-radius:6px;
+  border:1px solid var(--border); background:var(--g0);
+  color:var(--g5); cursor:pointer; text-decoration:none; transition:all .15s;
+}
+.btn-edit-issue:hover { background:rgba(99,102,241,.12); border-color:rgba(99,102,241,.4); color:#a5b4fc; }
 </style>
 </head>
 <body>
@@ -399,10 +406,11 @@
           <th>Versión</th>
           <th>Flags</th>
           <th>Fecha</th>
+          <th></th>
         </tr>
       </thead>
       <tbody id="history-body">
-        <tr class="state-row"><td colspan="11">Cargando...</td></tr>
+        <tr class="state-row"><td colspan="12">Cargando...</td></tr>
       </tbody>
     </table>
   </div>
@@ -605,7 +613,7 @@ function statusCls(statusCategory) {
 function renderIssues(issues) {
   if (!issues.length) {
     document.getElementById('history-body').innerHTML =
-      `<tr class="state-row"><td colspan="11">No hay resultados para estos filtros.</td></tr>`;
+      `<tr class="state-row"><td colspan="12">No hay resultados para estos filtros.</td></tr>`;
     return;
   }
 
@@ -669,6 +677,12 @@ function renderIssues(issues) {
       <td>${version ? `<span class="badge-ver">${version}</span>` : '—'}</td>
       <td>${flags}</td>
       <td class="date-cell">${fecha}</td>
+      <td><a class="btn-edit-issue" href="/?edit=${issue.key}" title="Editar en el formulario">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+      </a></td>
     </tr>`;
   }).join('');
 }
@@ -676,7 +690,7 @@ function renderIssues(issues) {
 // ── Load page ─────────────────────────────────────────────────────────────────
 async function loadPage(jql, page) {
   document.getElementById('history-body').innerHTML =
-    `<tr class="state-row"><td colspan="11">Cargando...</td></tr>`;
+    `<tr class="state-row"><td colspan="12">Cargando...</td></tr>`;
 
   const start = page * PAGE_SIZE;
   const url   = `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=summary,labels,status,fixVersions,parent,created,priority&maxResults=${PAGE_SIZE}&startAt=${start}`;
@@ -697,7 +711,7 @@ async function loadPage(jql, page) {
     document.getElementById('btn-next').disabled = isLast;
   } catch(e) {
     document.getElementById('history-body').innerHTML =
-      `<tr class="state-row"><td colspan="11" style="color:#b91c1c">Error: ${e.message}</td></tr>`;
+      `<tr class="state-row"><td colspan="12" style="color:#b91c1c">Error: ${e.message}</td></tr>`;
   }
 }
 

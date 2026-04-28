@@ -39,10 +39,6 @@ const ENV_ERROR = !PORT || !JIRA_HOST || !JIRA_EMAIL || !JIRA_TOKEN
 
 const AUTH = ENV_ERROR ? '' : 'Basic ' + Buffer.from(JIRA_EMAIL + ':' + JIRA_TOKEN).toString('base64');
 
-const HISTORY_DIR   = __dirname;
-const HISTORY_MAX   = 1000;
-const HISTORY_PREFIX = 'qa_history_';
-
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css':  'text/css',
@@ -51,45 +47,6 @@ const MIME = {
   '.jpg':  'image/jpeg',
   '.ico':  'image/x-icon',
 };
-
-// ── Helpers de historial ──────────────────────────────────────────────────────
-
-function historyFiles() {
-  return fs.readdirSync(HISTORY_DIR)
-    .filter(f => f.startsWith(HISTORY_PREFIX) && f.endsWith('.json'))
-    .sort();                         // qa_history_001.json, 002, ...
-}
-
-function readFile(filename) {
-  try { return JSON.parse(fs.readFileSync(path.join(HISTORY_DIR, filename), 'utf8')); }
-  catch { return []; }
-}
-
-function activeFile() {
-  const files = historyFiles();
-  if (!files.length) return `${HISTORY_PREFIX}001.json`;
-  const last = files[files.length - 1];
-  const records = readFile(last);
-  if (records.length >= HISTORY_MAX) {
-    const num = parseInt(last.replace(HISTORY_PREFIX, '').replace('.json', '')) + 1;
-    return `${HISTORY_PREFIX}${String(num).padStart(3, '0')}.json`;
-  }
-  return last;
-}
-
-function saveRecord(record) {
-  const filename = activeFile();
-  const filepath = path.join(HISTORY_DIR, filename);
-  const records  = readFile(filename);
-  records.push({ ...record, created_at: new Date().toISOString() });
-  fs.writeFileSync(filepath, JSON.stringify(records, null, 2), 'utf8');
-}
-
-function allRecords() {
-  return historyFiles()
-    .flatMap(f => readFile(f))
-    .reverse();                      // más reciente primero
-}
 
 // ── Servidor ──────────────────────────────────────────────────────────────────
 
@@ -112,31 +69,9 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ── GET /api/history ──
-  if (req.method === 'GET' && parsed.pathname === '/api/history') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(allRecords()));
-    return;
   }
 
-  // ── POST /api/history ──
-  if (req.method === 'POST' && parsed.pathname === '/api/history') {
-    let body = [];
-    req.on('data', chunk => body.push(chunk));
-    req.on('end', () => {
-      try {
-        const data = JSON.parse(Buffer.concat(body).toString());
-        saveRecord(data);
-        res.writeHead(201, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
-      } catch (e) {
-        res.writeHead(400); res.end(JSON.stringify({ error: e.message }));
-      }
-    });
-    return;
-  }
-
-  // ── PROXY: /jira/* → Jira API ──
+  // ── PROXY: /jira/* → Jira API (sigue redirects server-side) ──
   if (parsed.pathname.startsWith('/jira/')) {
     const jiraPath = parsed.pathname.replace('/jira', '') + (parsed.search || '');
     console.log(`[PROXY] ${req.method} ${jiraPath}`);
@@ -146,40 +81,55 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       const bodyData = Buffer.concat(body);
 
-      const headers = {
+      const baseHeaders = {
         'Authorization':      AUTH,
-        'Accept':             'application/json',
+        'Accept':             '*/*',
         'X-Atlassian-Token':  req.headers['x-atlassian-token'] || '',
       };
-
       if (bodyData.length > 0) {
-        headers['Content-Type']   = req.headers['content-type'] || 'application/json';
-        headers['Content-Length'] = bodyData.length;
+        baseHeaders['Content-Type']   = req.headers['content-type'] || 'application/json';
+        baseHeaders['Content-Length'] = bodyData.length;
       }
 
-      const options = {
-        hostname: JIRA_HOST,
-        port: 443,
-        path: jiraPath,
-        method: req.method,
-        headers,
-      };
+      function doRequest(hostname, path, method, headers, body, depth) {
+        if (depth > 5) { res.writeHead(508); res.end('Too many redirects'); return; }
 
-      const proxyReq = https.request(options, proxyRes => {
-        res.writeHead(proxyRes.statusCode, {
-          'Content-Type': proxyRes.headers['content-type'] || 'application/json',
-          'Access-Control-Allow-Origin': '*',
+        const options = { hostname, port: 443, path, method, headers };
+        const proxyReq = https.request(options, proxyRes => {
+          const status = proxyRes.statusCode;
+
+          if ([301, 302, 303, 307, 308].includes(status)) {
+            const location = proxyRes.headers['location'];
+            proxyRes.resume();
+            if (!location) { res.writeHead(502); res.end('Redirect sin Location'); return; }
+            try {
+              const u = new URL(location);
+              doRequest(u.hostname, u.pathname + (u.search || ''), 'GET',
+                { 'Authorization': AUTH, 'Accept': '*/*' }, null, depth + 1);
+            } catch {
+              res.writeHead(502); res.end('Location inválida');
+            }
+            return;
+          }
+
+          res.writeHead(status, {
+            'Content-Type': proxyRes.headers['content-type'] || 'application/octet-stream',
+            'Cache-Control': 'no-store',
+            'Access-Control-Allow-Origin': '*',
+          });
+          proxyRes.pipe(res);
         });
-        proxyRes.pipe(res);
-      });
 
-      proxyReq.on('error', err => {
-        console.error('[PROXY ERROR]', err.message);
-        res.writeHead(502); res.end(JSON.stringify({ error: err.message }));
-      });
+        proxyReq.on('error', err => {
+          console.error('[PROXY ERROR]', err.message);
+          if (!res.headersSent) { res.writeHead(502); res.end(JSON.stringify({ error: err.message })); }
+        });
 
-      if (bodyData.length > 0) proxyReq.write(bodyData);
-      proxyReq.end();
+        if (body && body.length > 0) proxyReq.write(body);
+        proxyReq.end();
+      }
+
+      doRequest(JIRA_HOST, jiraPath, req.method, baseHeaders, bodyData, 0);
     });
     return;
   }

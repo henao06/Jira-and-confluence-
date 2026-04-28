@@ -46,6 +46,16 @@
   </div>
 </div>
 
+<!-- ── Banner modo edición ── -->
+<div id="edit-banner" style="display:none;margin-bottom:12px;padding:12px 20px;border-radius:10px;background:rgba(99,102,241,.12);border:1.5px solid rgba(99,102,241,.35);align-items:center;gap:12px">
+  <svg width="18" height="18" fill="none" stroke="#a5b4fc" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  </svg>
+  <span style="font-size:13px;color:#a5b4fc;font-weight:600">Modo edición — <span id="edit-banner-key"></span></span>
+  <a href="/" style="margin-left:auto;font-size:12px;color:var(--g5);text-decoration:none;padding:4px 10px;border:1px solid var(--border);border-radius:6px">✕ Cancelar</a>
+</div>
+
 <!-- ── Form card ── -->
 <div class="card">
 
@@ -365,15 +375,22 @@
           <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/>
         </svg>
       </div>
-      <div><div class="sec-title">Imágenes de configuración</div><div class="sec-sub">Adjuntá capturas para guiar al configurador</div></div>
+      <div><div class="sec-title">Archivos de configuración</div><div class="sec-sub">Adjuntá capturas o archivos para guiar al configurador</div></div>
     </div>
     <div class="fields">
       <div id="config-previews" class="config-previews-wrap"></div>
-      <label class="config-upload-btn">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        Subir imágenes de configuración
-        <input type="file" accept="image/*" multiple style="display:none" onchange="onConfigFilePicked(this)">
-      </label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <label class="config-upload-btn">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Imágenes
+          <input type="file" accept="image/*" multiple style="display:none" onchange="onConfigFilePicked(this)">
+        </label>
+        <label class="config-upload-btn">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Archivos
+          <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.json,.xml,.zip,.md" multiple style="display:none" onchange="onConfigFilePicked(this)">
+        </label>
+      </div>
     </div>
   </div>
 
@@ -383,6 +400,10 @@
     <label class="config-check-label">
       <input type="checkbox" id="requiere-config" onchange="toggleConfigSection(this)">
       <span>⚙️ Requiere configuración</span>
+    </label>
+    <label class="config-check-label" id="bug-check-label" style="opacity:.4;cursor:not-allowed" title="Solo disponible cuando el resultado es Fail">
+      <input type="checkbox" id="reportar-bug" disabled>
+      <span>🐛 Reportar como bug en BG</span>
     </label>
     <button class="btn-submit" id="btn-submit" onclick="submitForm()">
       <svg id="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1034,16 +1055,247 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('fecha').value = new Date().toISOString().split('T')[0];
   document.getElementById('requiere-config').checked = false;
   document.getElementById('config-section').style.display = 'none';
-  sanitizeDraft();
-  restoreForm();
-  fetchNextTC();
-  fetchAssignees();
-  initMemoryListeners();
-  cargarEpicsDesdeJira();
-  inicializarSistemaVersiones();
+  document.getElementById('reportar-bug').checked = false;
+
+  const editKey = new URLSearchParams(window.location.search).get('edit');
+  if (editKey) {
+    window.editMode = { key: editKey.toUpperCase() };
+    // En modo edición no restauramos draft ni mostramos el TC ID genérico
+    fetchAssignees();
+    initMemoryListeners();
+    // Cargamos epics y versiones primero, luego el issue
+    Promise.all([cargarEpicsDesdeJira(), inicializarSistemaVersiones()])
+      .finally(() => loadIssueForEdit(window.editMode.key));
+  } else {
+    window.editMode = null;
+    sanitizeDraft();
+    restoreForm();
+    fetchNextTC();
+    fetchAssignees();
+    initMemoryListeners();
+    cargarEpicsDesdeJira();
+    inicializarSistemaVersiones();
+  }
 });
 
 const estructuraCache = {}; // epic key → parsed structure
+
+/* ── Modo edición ─────────────────────────────────────────────────────────── */
+
+function adfNodeText(node) {
+  if (!node) return '';
+  if (node.type === 'text') return node.text || '';
+  return (node.content || []).map(adfNodeText).join('');
+}
+
+function parseADFForEdit(adf) {
+  const kv = {};
+  const sections = {};
+  let section = null;
+
+  for (const node of (adf?.content || [])) {
+    if (node.type === 'rule') { section = null; continue; }
+    if (node.type === 'heading') {
+      section = adfNodeText(node).trim();
+      sections[section] = [];
+      continue;
+    }
+    if (node.type === 'orderedList') {
+      const items = (node.content || []).map(li => adfNodeText(li).trim()).filter(Boolean);
+      if (section) sections[section] = items;
+      continue;
+    }
+    if (node.type === 'paragraph') {
+      const text = adfNodeText(node).trim();
+      const colon = text.indexOf(':');
+      if (colon !== -1) {
+        const k = text.slice(0, colon).trim();
+        const v = text.slice(colon + 1).trim();
+        kv[k] = v;
+      }
+    }
+  }
+  return { kv, sections };
+}
+
+async function loadIssueForEdit(key) {
+  // ── UI inicial ──
+  const banner    = document.getElementById('edit-banner');
+  const bannerKey = document.getElementById('edit-banner-key');
+  const btnTxt    = document.getElementById('btn-txt');
+  const bannerTC  = document.getElementById('next-tc-banner');
+
+  if (banner)    banner.style.display = 'flex';
+  if (bannerKey) bannerKey.textContent = key;
+  if (btnTxt)    btnTxt.textContent = 'Actualizar en Jira';
+
+  const setTCField = () => {
+    const f = document.getElementById('tc-id');
+    if (f) { f.value = key; f.style.opacity = '1'; f.setAttribute('readonly', ''); }
+    if (bannerTC) {
+      bannerTC.textContent = 'Modo edición';
+      bannerTC.style.display = 'inline-block';
+      bannerTC.style.background = 'rgba(99,102,241,.5)';
+    }
+  };
+  setTCField();
+
+  try {
+    // ── 1. Fetch issue completo ──
+    const r = await fetch(
+      `${JIRA_BASE}/rest/api/3/issue/${key}?fields=summary,labels,description,priority,fixVersions,parent,attachment`,
+      { headers: { 'Authorization': AUTH, 'Accept': 'application/json' } }
+    );
+    if (!r.ok) throw new Error(`HTTP ${r.status} al cargar ${key}`);
+    const issue  = await r.json();
+    const f      = issue.fields;
+    const labels = f.labels || [];
+
+    // ── 2. Guardar TC prefix del summary ──
+    const tcPrefixMatch = (f.summary || '').match(/^(?:⚙️\s*)?([A-Za-z]+-\d+)\s*[—\-]/);
+    if (tcPrefixMatch) window.editMode.tcPrefix = tcPrefixMatch[1];
+
+    // ── 3. Seleccionar módulo y cargar sus TCs (sin que pise los campos después) ──
+    const parentKey = f.parent?.key;
+    if (parentKey) {
+      const modSel  = document.getElementById('modulo');
+      const moduloId = parentKey.toLowerCase();
+      if (modSel.querySelector(`option[value="${moduloId}"]`)) {
+        modSel.value = moduloId;
+        // Llamamos onModuloChange para cargar el selector de TCs,
+        // pero bloqueamos que llame a onTestCaseChange sobreescribiendo campos.
+        window._editLoadingBlock = true;
+        await onModuloChange();
+        window._editLoadingBlock = false;
+      }
+    }
+    // Restaurar TC field (onModuloChange lo pisa con el "siguiente" número)
+    setTCField();
+
+    // ── 4. Parsear descripción ADF ──
+    const { kv, sections } = parseADFForEdit(f.description);
+
+    // ── 5. Campos simples ──
+    const setV = (id, v) => { if (v != null && v !== '') { const el = document.getElementById(id); if (el) el.value = v; } };
+
+    const summaryDesc = (f.summary || '').replace(/^[⚙️\s]*[A-Za-z]+-\d+\s*[—\-]+\s*/, '');
+    setV('descripcion', summaryDesc);
+    if (kv['Tester'])          setV('tester',        kv['Tester']);
+    if (kv['Fecha'])           setV('fecha',         kv['Fecha']);
+    if (kv['Historia'])        setV('historia',      kv['Historia']);
+    if (kv['Impacto'])         setV('impacto',       kv['Impacto']);
+    if (kv['URL / Pantalla'])  setV('url-pantalla',  kv['URL / Pantalla']);
+    if (kv['Rol de usuario'])  setV('rol-usuario',   kv['Rol de usuario']);
+
+    // Tipo de prueba (de labels)
+    const TIPO_LABELS = ['type-funcional','type-regresion','type-ui','type-smoke','type-integracion','type-uat','type-rendimiento'];
+    const tipoLabel = labels.find(l => TIPO_LABELS.includes(l));
+    if (tipoLabel) setV('tipo-prueba', tipoLabel);
+
+    // Prioridad y versión build
+    if (f.priority?.name) setV('prioridad', f.priority.name);
+    const ver = (f.fixVersions||[])[0]?.name;
+    if (ver) setV('version', ver);
+
+    // Entorno → navegador / S.O.
+    if (kv['Entorno']) {
+      const parts = kv['Entorno'].split(' / ');
+      if (parts[0]) setV('navegador',  parts[0].trim());
+      if (parts[1]) setV('sistema-op', parts[1].trim());
+    }
+
+    // ── 6. Botones de estado / severidad / frecuencia ──
+    const eLbl = labels.find(l => l.startsWith('estado-'));
+    if (eLbl) {
+      const eKey = eLbl.replace('estado-', '');
+      const btn  = document.querySelector(`.e-btn[onclick*="'${eKey}'"]`);
+      if (btn) setEstado(eKey, btn);
+    }
+    const sLbl = labels.find(l => l.startsWith('severity-'));
+    if (sLbl) {
+      const btn = document.querySelector(`.sev-btn[onclick*="'${sLbl}'"]`);
+      if (btn) setSev(sLbl, btn);
+    }
+    if (kv['Frecuencia']) {
+      const btn = document.querySelector(`.e-btn[onclick*="'${kv['Frecuencia']}'"]`);
+      if (btn) setFreq(kv['Frecuencia'], btn);
+    }
+
+    // ── 7. Checkboxes ──
+    if (labels.includes('requiere-config')) {
+      const cb = document.getElementById('requiere-config');
+      if (cb) { cb.checked = true; toggleConfigSection(cb); }
+    }
+    if (labels.includes('retest')) {
+      const cb = document.getElementById('es-retest');
+      if (cb) { cb.checked = true; toggleRetest(cb); }
+    }
+
+    // ── 8. Listas dinámicas ──
+    const fillList = (wrapId, items, ph, removeFn) => {
+      if (items?.length) rebuildList(wrapId, items, ph, removeFn);
+    };
+    fillList('precon-wrap',   sections['Precondiciones'],     'Precondición', 'removePrecon');
+    fillList('datos-wrap',    sections['Datos de entrada'],   'Dato',         'removeDatos');
+    fillList('steps-wrap',    sections['Pasos a seguir'],     'Paso',         'removeStep');
+    fillList('esperado-wrap', sections['Resultado esperado'], 'Ítem',         'removeEsperado');
+    fillList('obtenido-wrap', sections['Resultado obtenido'], 'Ítem',         'removeObtenido');
+    fillList('postcon-wrap',  sections['Postcondiciones'],    'Postcondición','removePostcon');
+    fillList('soluc-wrap',    sections['Soluciones'],         'Solución',     'removeSoluc');
+    fillList('sugg-wrap',     sections['Sugerencias'],        'Sugerencia',   'removeSugg');
+
+    // ── 9. Adjuntos existentes ──
+    const wrap        = document.getElementById('previews-wrap');
+    const attachments = f.attachment || [];
+    window.existingAttachmentIds = attachments.map(a => a.id);
+
+    attachments.forEach(att => {
+      const proxyUrl = `/jira/rest/api/3/attachment/content/${att.id}`;
+      const shortName = att.filename.length > 14 ? att.filename.slice(0,12)+'…' : att.filename;
+      const item = document.createElement('div');
+      item.className = 'preview-item';
+      item.dataset.existingId = att.id;
+
+      if (att.mimeType?.startsWith('image/')) {
+        item.innerHTML = `
+          <img src="${proxyUrl}" title="${att.filename}"
+               style="width:90px;height:72px;object-fit:cover;border-radius:8px;border:1.5px solid var(--border)"
+               onerror="this.style.display='none'">
+          <button type="button" class="preview-remove" onclick="removeExistingAttachment(this,'${att.id}')">×</button>
+          <div class="preview-name">${shortName}</div>`;
+      } else {
+        const ext = att.filename.split('.').pop().toUpperCase();
+        item.innerHTML = `
+          <a href="${proxyUrl}" target="_blank" style="text-decoration:none">
+            <div class="preview-file-icon" title="${att.filename}">
+              <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <span class="preview-file-ext">${ext}</span>
+            </div>
+          </a>
+          <button type="button" class="preview-remove" onclick="removeExistingAttachment(this,'${att.id}')">×</button>
+          <div class="preview-name">${shortName}</div>`;
+      }
+      wrap?.appendChild(item);
+    });
+
+  } catch(e) {
+    console.error('[loadIssueForEdit]', e.message);
+    const banner = document.getElementById('edit-banner');
+    if (banner) banner.innerHTML += `<span style="color:#f87171;margin-left:8px">⚠ ${e.message}</span>`;
+  }
+}
+
+// IDs de adjuntos existentes que el usuario eliminó en el form
+window.removedAttachmentIds = [];
+window.existingAttachmentIds = [];
+
+function removeExistingAttachment(btn, id) {
+  btn.closest('.preview-item').remove();
+  window.removedAttachmentIds.push(id);
+}
 
 async function cargarEstructuraEpic(epicKey) {
   if (estructuraCache[epicKey]) return estructuraCache[epicKey];
@@ -1120,13 +1372,13 @@ async function obtenerEstadoModulo(moduloKey) {
 
 async function getNextNumero(epicKey) {
   try {
-    const jql = encodeURIComponent(`parent = ${epicKey} ORDER BY created ASC`);
-    const r   = await fetch(`/jira/rest/api/3/search/jql?jql=${jql}&maxResults=1`, {
+    const jql = encodeURIComponent(`parent = ${epicKey}`);
+    const r   = await fetch(`/jira/rest/api/3/search/jql?jql=${jql}&maxResults=0`, {
       headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
-    return String(((d.issues || []).length) + 1).padStart(3, '0');
+    return String((d.total || 0) + 1).padStart(3, '0');
   } catch(e) {
     console.warn('[getNextNumero]', e.message);
     return '001';
@@ -1187,6 +1439,7 @@ async function onModuloChange() {
 }
 
 function onTestCaseChange() {
+  if (window._editLoadingBlock) return; // modo edición: no pisar campos cargados desde Jira
   const modulo = document.getElementById('modulo').value;
   const tcId   = document.getElementById('test-case-select').value;
   if (!tcId || !modulo) return;
@@ -1268,6 +1521,12 @@ function setEstado(val, btn) {
   const isFail = val === 'fail';
   document.getElementById('row-severity').style.display  = isFail ? 'flex' : 'none';
   document.getElementById('row-frecuencia').style.display = isFail ? 'flex' : 'none';
+  const bugChk   = document.getElementById('reportar-bug');
+  const bugLabel = document.getElementById('bug-check-label');
+  bugChk.disabled         = !isFail;
+  bugLabel.style.opacity  = isFail ? '1' : '.4';
+  bugLabel.style.cursor   = isFail ? 'pointer' : 'not-allowed';
+  if (!isFail) bugChk.checked = false;
   if (!isFail) {
     severidad = ''; frecuencia = '';
     document.querySelectorAll('.sev-btn').forEach(b => b.classList.remove('active'));
@@ -1432,14 +1691,26 @@ function renderConfigPreviews() {
   if (!wrap) return;
   wrap.innerHTML = '';
   configFiles.forEach((file, i) => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const item = document.createElement('div');
-      item.className = 'preview-item';
-      item.innerHTML = `<img src="${e.target.result}" title="${file.name}"><button type="button" class="preview-remove" onclick="removeConfigImg(${i})">×</button><div class="preview-name">${file.name.length > 14 ? file.name.slice(0,12)+'…' : file.name}</div>`;
-      wrap.appendChild(item);
-    };
-    reader.readAsDataURL(file);
+    const item = document.createElement('div');
+    item.className = 'preview-item';
+    const shortName = file.name.length > 14 ? file.name.slice(0, 12) + '…' : file.name;
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        item.innerHTML = `<img src="${e.target.result}" title="${file.name}"><button type="button" class="preview-remove" onclick="removeConfigImg(${i})">×</button><div class="preview-name">${shortName}</div>`;
+      };
+      reader.readAsDataURL(file);
+    } else {
+      const ext = file.name.split('.').pop().toUpperCase();
+      item.innerHTML = `
+        <div class="preview-file-icon" title="${file.name}">
+          <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span class="preview-file-ext">${ext}</span>
+        </div>
+        <button type="button" class="preview-remove" onclick="removeConfigImg(${i})">×</button>
+        <div class="preview-name">${shortName}</div>`;
+    }
+    wrap.appendChild(item);
   });
 }
 
@@ -1512,7 +1783,7 @@ function handleOverlayClick(e) {
   if (e.target === document.getElementById('modal-overlay')) closeModal();
 }
 
-function showSuccess(tcId, issueKey, issueUrl, moduloNombre, tipoLabel, entorno, sevLbl) {
+function showSuccess(tcId, issueKey, issueUrl, moduloNombre, tipoLabel, entorno, sevLbl, bugKey, bugUrl) {
   const estadoLabel = { pass:'Pass', fail:`Fail — ${sevLbl}`, blocked:'Bloqueado' }[estado];
 
   const head = `
@@ -1522,15 +1793,21 @@ function showSuccess(tcId, issueKey, issueUrl, moduloNombre, tipoLabel, entorno,
       </svg>
     </div>
     <div>
-      <div class="modal-title">Caso enviado a Jira</div>
+      <div class="modal-title">${bugKey ? 'Enviado a QAA y BG' : 'Caso enviado a Jira'}</div>
       <div class="modal-sub">${estadoLabel}</div>
     </div>`;
+
+  const bugRow = bugKey ? `
+    <div class="modal-key" style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
+      🐛 Bug en BG: <a href="${bugUrl}" target="_blank" style="color:#dc2626;font-weight:700">${bugKey}</a>
+    </div>` : '';
 
   const body = `
     <div class="modal-card">
       <div class="modal-card-label">TC enviado</div>
       <div class="modal-tc">${tcId}</div>
       <div class="modal-key">Issue en Jira: <a href="${issueUrl}" target="_blank">${issueKey}</a></div>
+      ${bugRow}
     </div>
     <div class="modal-meta">
       <strong>Módulo:</strong> ${moduloNombre}<br>
@@ -1545,6 +1822,7 @@ function showSuccess(tcId, issueKey, issueUrl, moduloNombre, tipoLabel, entorno,
     <a href="${issueUrl}" target="_blank" style="flex:1;text-decoration:none">
       <button class="modal-btn-primary" style="width:100%">Ver en Jira</button>
     </a>
+    ${bugKey ? `<a href="${bugUrl}" target="_blank" style="text-decoration:none"><button class="modal-btn-secondary" style="color:#dc2626;border-color:#fca5a5">Ver bug BG</button></a>` : ''}
     <button class="modal-btn-secondary" onclick="closeModal()">Cerrar</button>`;
 
   showModal('success', head, body, footer);
@@ -1562,6 +1840,45 @@ function showSuccess(tcId, issueKey, issueUrl, moduloNombre, tipoLabel, entorno,
       softReset();
     }
   }, 1000);
+}
+
+function showUpdateSuccess(editKey, issueUrl, moduloNombre, tipoLabel, entorno, sevLbl) {
+  const estadoLabel = { pass:'Pass', fail:`Fail — ${sevLbl}`, blocked:'Bloqueado' }[estado] || '—';
+
+  const head = `
+    <div class="modal-icon success" style="background:rgba(99,102,241,.15)">
+      <svg fill="none" stroke="#a5b4fc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+    </div>
+    <div>
+      <div class="modal-title">Issue actualizado</div>
+      <div class="modal-sub">${estadoLabel}</div>
+    </div>`;
+
+  const body = `
+    <div class="modal-card">
+      <div class="modal-card-label">Issue editado</div>
+      <div class="modal-tc">${editKey}</div>
+      <div class="modal-key"><a href="${issueUrl}" target="_blank" style="color:#a5b4fc">${issueUrl}</a></div>
+    </div>
+    <div class="modal-meta">
+      <strong>Módulo:</strong> ${moduloNombre}<br>
+      <strong>Tipo:</strong> ${tipoLabel}<br>
+      <strong>Entorno:</strong> ${entorno}
+    </div>`;
+
+  const footer = `
+    <a href="${issueUrl}" target="_blank" style="flex:1;text-decoration:none">
+      <button class="modal-btn-primary" style="width:100%;background:rgba(99,102,241,.8)">Ver en Jira</button>
+    </a>
+    <a href="/history" style="text-decoration:none">
+      <button class="modal-btn-secondary">Ver historial</button>
+    </a>
+    <button class="modal-btn-secondary" onclick="closeModal()">Cerrar</button>`;
+
+  showModal('success', head, body, footer);
 }
 
 function showError(msg) {
@@ -2113,6 +2430,8 @@ async function submitForm() {
     mkB('Módulo: ' + moduloNombre),
     mkB('Tipo: ' + tipoLabel),
     mkB('Entorno: ' + entorno),
+    ...(urlPantalla ? [mkB('URL / Pantalla: ' + urlPantalla)] : []),
+    ...(rolUsuario  ? [mkB('Rol de usuario: ' + rolUsuario)]  : []),
     ...(historia ? [mkB('Historia: ' + historia)] : []),
     mkRule(),
     mkH('Resultado'), mkB('Estado: ' + estadoLbl),
@@ -2133,42 +2452,130 @@ async function submitForm() {
 
   try {
     const requiereConfig = document.getElementById('requiere-config').checked;
-    const numero  = await getNextNumero(epic.key);
-    const summary = `${requiereConfig ? '⚙️ ' : ''}${epic.prefix}-${numero} — ${desc}`;
-
+    const reportarBug    = document.getElementById('reportar-bug').checked;
     if (requiereConfig) labels.push('requiere-config');
 
-    const body = { fields:{
-      project:           { key: 'QAA' },
-      parent:            { key: epic.key },
-      summary,
-      issuetype:         { name: 'Tarea' },
-      customfield_10014: epic.key,
-      priority:          { name: requiereConfig ? 'High' : 'Medium' },
-      labels,
-      description,
-      ...(versionActual ? { fixVersions: [{ name: versionActual }] } : {}),
-    }};
+    if (window.editMode) {
+      // ══ MODO EDICIÓN: PUT sobre el issue existente ══════════════════════════
+      const editKey  = window.editMode.key;
+      const tcPrefix = window.editMode.tcPrefix || tcId;
+      const summary  = `${requiereConfig ? '⚙️ ' : ''}${tcPrefix} — ${desc}`;
+      const issueUrl = `https://liceopinoverde.atlassian.net/browse/${editKey}`;
 
-    const r = await fetch(`/jira/rest/api/3/issue`, {
-      method:'POST',
-      headers:{'Authorization':AUTH,'Content-Type':'application/json','Accept':'application/json'},
-      body:JSON.stringify(body)
-    });
-    if (!r.ok) { const e = await r.json(); throw new Error(e.errors ? Object.values(e.errors).join(', ') : JSON.stringify(e)); }
-
-    const created  = await r.json();
-    const issueKey = created.key;
-    const issueUrl = `https://liceopinoverde.atlassian.net/browse/${issueKey}`;
-
-    for (const file of uploadedFiles) {
-      const fd = new FormData(); fd.append('file', file);
-      await fetch(`/jira/rest/api/3/issue/${issueKey}/attachments`, {
-        method:'POST', headers:{'Authorization':AUTH,'X-Atlassian-Token':'no-check'}, body:fd
+      const r = await fetch(`/jira/rest/api/3/issue/${editKey}`, {
+        method: 'PUT',
+        headers: { 'Authorization':AUTH, 'Content-Type':'application/json', 'Accept':'application/json' },
+        body: JSON.stringify({ fields:{
+          summary,
+          labels,
+          description,
+          priority: { name: requiereConfig ? 'High' : 'Medium' },
+          ...(versionActual ? { fixVersions: [{ name: versionActual }] } : {}),
+        }})
       });
-    }
+      if (!r.ok) { const e = await r.json(); throw new Error(e.errors ? Object.values(e.errors).join(', ') : JSON.stringify(e)); }
 
-    if (configFiles.length > 0) {
+      // Eliminar adjuntos que el usuario quitó
+      for (const id of (window.removedAttachmentIds || [])) {
+        await fetch(`/jira/rest/api/3/attachment/${id}`, {
+          method:'DELETE', headers:{ 'Authorization':AUTH }
+        });
+      }
+
+      // Subir nuevos adjuntos de evidencia
+      for (const file of uploadedFiles) {
+        const fd = new FormData(); fd.append('file', file);
+        await fetch(`/jira/rest/api/3/issue/${editKey}/attachments`, {
+          method:'POST', headers:{'Authorization':AUTH,'X-Atlassian-Token':'no-check'}, body:fd
+        });
+      }
+
+      // Subir nuevos archivos de config
+      for (const file of configFiles) {
+        const ext = file.name.split('.').pop();
+        const renamed = new File([file], `config.${ext}`, { type: file.type });
+        const fd = new FormData(); fd.append('file', renamed);
+        await fetch(`/jira/rest/api/3/issue/${editKey}/attachments`, {
+          method:'POST', headers:{'Authorization':AUTH,'X-Atlassian-Token':'no-check'}, body:fd
+        });
+      }
+
+      showUpdateSuccess(editKey, issueUrl, moduloNombre, tipoLabel, entorno, sevLbl);
+
+    } else {
+      // ══ MODO CREACIÓN: POST normal ══════════════════════════════════════════
+
+      const numero  = await getNextNumero(epic.key);
+      const summary = `${requiereConfig ? '⚙️ ' : ''}${epic.prefix}-${numero} — ${desc}`;
+
+      // ── 1. Crear bug en BG primero ──
+      let bugKey = null, bugUrl = null;
+      if (estado === 'fail' && reportarBug) {
+        const sevSuffix    = severidad.replace(/^severity-/, '');
+        const prioridadBug = { critico:'Highest', mayor:'High', medio:'Medium', menor:'Low', bajo:'Low' }[sevSuffix] || 'Medium';
+        const bugDescription = { type:'doc', version:1, content:[
+          mkB(`Test Case: ${tcId}`),
+          mkB(`Módulo: ${moduloNombre}`),
+          mkB(`Versión: ${versionActual || '—'}`),
+          mkB(`Severidad: ${sevLbl}`),
+          mkB(`Entorno: ${entorno}`),
+          mkRule(),
+          mkH('Pasos para reproducir'), steps.length > 0 ? mkOrderedList(steps) : mkOrderedList(precon),
+          mkH('Resultado esperado'), mkOrderedList(esperado),
+          mkH('Resultado obtenido'), mkOrderedList(obtenido),
+          ...(impacto ? [mkH('Impacto'), mkP(impacto)] : []),
+          ...(soluciones.length > 0 ? [mkH('Solución propuesta'), mkOrderedList(soluciones)] : []),
+        ]};
+        const bugRes = await fetch(`/jira/rest/api/3/issue`, {
+          method:'POST',
+          headers:{'Authorization':AUTH,'Content-Type':'application/json','Accept':'application/json'},
+          body:JSON.stringify({ fields:{
+            project:     { key: 'BG' },
+            summary:     `[${moduloNombre}] ${tcId} — ${desc}`,
+            description: bugDescription,
+            issuetype:   { name: 'Error' },
+            priority:    { name: prioridadBug },
+            labels:      [ `severity-${sevSuffix}`, moduloLabel, 'qa-reported', ...(versionActual ? [versionActual] : []) ],
+          }})
+        });
+        if (!bugRes.ok) {
+          const e = await bugRes.json();
+          throw new Error(`Error al crear bug en BG: ${e.errors ? Object.values(e.errors).join(', ') : JSON.stringify(e)}`);
+        }
+        const bug = await bugRes.json();
+        bugKey = bug.key;
+        bugUrl = `https://liceopinoverde.atlassian.net/browse/${bugKey}`;
+      }
+
+      // ── 2. Crear issue en QAA ──
+      const r = await fetch(`/jira/rest/api/3/issue`, {
+        method:'POST',
+        headers:{'Authorization':AUTH,'Content-Type':'application/json','Accept':'application/json'},
+        body:JSON.stringify({ fields:{
+          project:           { key: 'QAA' },
+          parent:            { key: epic.key },
+          summary,
+          issuetype:         { name: 'Tarea' },
+          customfield_10014: epic.key,
+          priority:          { name: requiereConfig ? 'High' : 'Medium' },
+          labels,
+          description,
+          ...(versionActual ? { fixVersions: [{ name: versionActual }] } : {}),
+        }})
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.errors ? Object.values(e.errors).join(', ') : JSON.stringify(e)); }
+
+      const created  = await r.json();
+      const issueKey = created.key;
+      const issueUrl = `https://liceopinoverde.atlassian.net/browse/${issueKey}`;
+
+      // ── 3. Adjuntos ──
+      for (const file of uploadedFiles) {
+        const fd = new FormData(); fd.append('file', file);
+        await fetch(`/jira/rest/api/3/issue/${issueKey}/attachments`, {
+          method:'POST', headers:{'Authorization':AUTH,'X-Atlassian-Token':'no-check'}, body:fd
+        });
+      }
       for (const file of configFiles) {
         const ext = file.name.split('.').pop();
         const renamed = new File([file], `config.${ext}`, { type: file.type });
@@ -2177,81 +2584,36 @@ async function submitForm() {
           method:'POST', headers:{'Authorization':AUTH,'X-Atlassian-Token':'no-check'}, body:fd
         });
       }
-    }
 
-    if (esRetest && retestTc) {
-      await fetch(`/jira/rest/api/3/issueLink`, {
-        method:'POST',
-        headers:{'Authorization':AUTH,'Content-Type':'application/json'},
-        body:JSON.stringify({ type:{name:'Relates'}, inwardIssue:{key:issueKey}, outwardIssue:{key:retestTc.trim().toUpperCase()} })
-      });
-    }
-
-    // Crear bug automáticamente si el resultado es FAIL
-    if (estado === 'fail') {
-      const sevSuffix  = severidad.replace(/^severity-/, '');
-      const tipeSuffix = tipoPrueba.replace(/^type-/, '');
-      const prioridadBug = { critico:'Highest', mayor:'High', medio:'Medium', menor:'Low', bajo:'Low' }[sevSuffix] || 'Medium';
-      const bugBody = { fields:{
-        project:   { key: 'QAA' },
-        summary:   `[BUG] ${summary}`,
-        description,
-        issuetype: { name: 'Error' },
-        priority:  { name: prioridadBug },
-        labels:    [ `severity-${sevSuffix}`, `type-${tipeSuffix}`, epic.modulo, 'estado-abierto', ...(versionActual ? [versionActual] : []) ],
-      }};
-      try {
-        const bugRes = await fetch(`/jira/rest/api/3/issue`, {
+      // ── 4. Link retest ──
+      if (esRetest && retestTc) {
+        await fetch(`/jira/rest/api/3/issueLink`, {
           method:'POST',
-          headers:{'Authorization':AUTH,'Content-Type':'application/json','Accept':'application/json'},
-          body:JSON.stringify(bugBody)
+          headers:{'Authorization':AUTH,'Content-Type':'application/json'},
+          body:JSON.stringify({ type:{name:'Relates'}, inwardIssue:{key:issueKey}, outwardIssue:{key:retestTc.trim().toUpperCase()} })
         });
-        if (bugRes.ok) {
-          const bug = await bugRes.json();
-          // Vincular bug con la subtarea
-          await fetch(`/jira/rest/api/3/issueLink`, {
-            method:'POST',
-            headers:{'Authorization':AUTH,'Content-Type':'application/json'},
-            body:JSON.stringify({ type:{name:'Relates'}, inwardIssue:{key:issueKey}, outwardIssue:{key:bug.key} })
-          });
-        }
-      } catch(bugErr) {
-        console.warn('[Bug creation]', bugErr.message);
       }
+
+      // ── 5. Vincular BG <-> QAA ──
+      if (bugKey) {
+        await fetch(`/jira/rest/api/3/issueLink`, {
+          method:'POST',
+          headers:{'Authorization':AUTH,'Content-Type':'application/json'},
+          body:JSON.stringify({ type:{name:'Relates'}, inwardIssue:{key:issueKey}, outwardIssue:{key:bugKey} })
+        });
+      }
+
+      // ── 6. Avanzar TC ──
+      const nextNumero = await getNextNumero(epic.key);
+      const nextTC = `${epic.prefix}-${nextNumero}`;
+      document.getElementById('tc-id').value = nextTC;
+      document.getElementById('tc-id').removeAttribute('readonly');
+      document.getElementById('tc-id').style.opacity = '1';
+      const bannerTC = document.getElementById('next-tc-banner');
+      if (bannerTC) { bannerTC.textContent = `Próximo: ${nextTC}`; bannerTC.style.display = 'inline-block'; bannerTC.style.background = 'var(--g7)'; }
+
+      showSuccess(tcId, issueKey, issueUrl, moduloNombre, tipoLabel, entorno, sevLbl, bugKey, bugUrl);
     }
-
-    // Avanzar TC: reconsultar Jira para el próximo número real
-    const nextNumero = await getNextNumero(epic.key);
-    const nextTC = `${epic.prefix}-${nextNumero}`;
-    document.getElementById('tc-id').value = nextTC;
-    document.getElementById('tc-id').removeAttribute('readonly');
-    document.getElementById('tc-id').style.opacity = '1';
-    const banner = document.getElementById('next-tc-banner');
-    if (banner) { banner.textContent = `Próximo: ${nextTC}`; banner.style.display = 'inline-block'; banner.style.background = 'var(--g7)'; }
-
-    // Guardar historial con nuevos campos
-    fetch('/api/history', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        tc_id: tcId,
-        descripcion: desc,
-        modulo: moduloNombre,
-        estado: estadoLbl,
-        tester,
-        fecha,
-        jira_key: issueKey,
-        jira_url: issueUrl,
-        epic_key: epic.key,
-        labels,
-        tipo_prueba: tipoPrueba,
-        severidad: severidad || null,
-        ciclo: versionActual || '',
-        summary,
-      })
-    });
-
-    showSuccess(tcId, issueKey, issueUrl, moduloNombre, tipoLabel, entorno, sevLbl);
 
   } catch(e) {
     showError(`<strong>Error al conectar con Jira:</strong><br>${e.message}`);
@@ -2275,6 +2637,7 @@ function softReset() {
   renderPreviews();
   document.getElementById('es-retest').checked      = false;
   document.getElementById('requiere-config').checked = false;
+  document.getElementById('reportar-bug').checked   = false;
   configFiles = []; renderConfigPreviews();
   document.getElementById('config-section').style.display = 'none';
   document.getElementById('retest-extra').classList.remove('show');
@@ -2300,15 +2663,12 @@ function softReset() {
   document.getElementById('sugg-wrap').innerHTML =
     `<div class="step-row"><div class="step-num">1</div><input type="text" placeholder="Sugerencia 1..."><button class="btn-rm" onclick="removeSugg(this)">×</button></div>`;
   estado = ''; severidad = ''; frecuencia = '';
-  // Resetear test case select a estado vacío (mantener módulo activo)
-  const tcSel = document.getElementById('test-case-select');
+  // Recargar test cases del módulo activo desde Jira automáticamente
   const moduloActual = document.getElementById('modulo').value;
-  if (moduloActual && TEST_CASES[moduloActual]) {
-    const testCases = TEST_CASES[moduloActual];
-    tcSel.innerHTML = '<option value="">— Seleccioná un Test Case —</option>' +
-      testCases.map(tc => `<option value="${tc.id}">${tc.id}: ${tc.titulo}</option>`).join('');
-    tcSel.disabled = false;
+  if (moduloActual) {
+    onModuloChange();
   } else {
+    const tcSel = document.getElementById('test-case-select');
     tcSel.innerHTML = '<option value="">— Primero elegí un módulo —</option>';
     tcSel.disabled = true;
   }
