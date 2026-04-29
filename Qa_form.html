@@ -833,6 +833,7 @@ async function obtenerDatosVersion(nombreVersion) {
 
   const configIssues = issues.filter(i => (i.fields.labels||[]).includes('requiere-config'));
   const failIssues   = issues.filter(i => (i.fields.labels||[]).includes('estado-fail'));
+  const retestIssues = issues.filter(i => (i.fields.labels||[]).includes('retest'));
 
   return {
     stats: {
@@ -840,14 +841,16 @@ async function obtenerDatosVersion(nombreVersion) {
       pass:    issues.filter(i => (i.fields.labels||[]).includes('estado-pass')).length,
       fail:    failIssues.length,
       blocked: issues.filter(i => (i.fields.labels||[]).includes('estado-blocked')).length,
+      retest:  retestIssues.length,
     },
     requiereConfig: configIssues.length > 0,
     pasosConfig:    configIssues.map(i => `${i.key}: ${i.fields.summary}`),
     bugsFijos:      failIssues.map(i => i.key),
+    retestIssues:   retestIssues.map(i => `${i.key}: ${i.fields.summary}`),
   };
 }
 
-async function agregarAlHistorialConfluence({ version, motivo, requiereConfig, pasosConfig, bugsFijos, stats, observaciones }) {
+async function agregarAlHistorialConfluence({ version, motivo, requiereConfig, pasosConfig, bugsFijos, retestIssues, stats, observaciones }) {
   const fecha    = new Date().toLocaleDateString('es-CO');
   const tasa     = stats.total > 0 ? `${Math.round((stats.pass / stats.total) * 100)}%` : '—';
   const WIKI_V1  = window.location.origin + '/wiki/rest/api';
@@ -869,15 +872,19 @@ async function agregarAlHistorialConfluence({ version, motivo, requiereConfig, p
     ? `<p><strong>Bugs corregidos:</strong> ${bugsFijos.map(b=>`<a href="https://liceopinoverde.atlassian.net/browse/${b}">${b}</a>`).join(', ')}</p>`
     : '';
 
+  const retestBloque = (retestIssues||[]).length
+    ? `<ac:structured-macro ac:name="info"><ac:parameter ac:name="title">🔁 Re-tests ejecutados (${retestIssues.length})</ac:parameter><ac:rich-text-body><ol>${retestIssues.map(r=>`<li>${r}</li>`).join('')}</ol></ac:rich-text-body></ac:structured-macro>`
+    : '';
+
   const notasBloque = observaciones ? `<p><strong>Observaciones:</strong> ${observaciones}</p>` : '';
 
   const entrada = `<h2>${version} — ${fecha}</h2>
 <table><tbody>
-  <tr><th>Versión</th><th>Fecha</th><th>Total</th><th> Pass</th><th> Fail</th><th> Blocked</th><th>Tasa</th></tr>
-  <tr><td><strong>${version}</strong></td><td>${fecha}</td><td>${stats.total}</td><td>${stats.pass}</td><td>${stats.fail}</td><td>${stats.blocked}</td><td><strong>${tasa}</strong></td></tr>
+  <tr><th>Versión</th><th>Fecha</th><th>Total</th><th> Pass</th><th> Fail</th><th> Blocked</th><th>🔁 Retest</th><th>Tasa</th></tr>
+  <tr><td><strong>${version}</strong></td><td>${fecha}</td><td>${stats.total}</td><td>${stats.pass}</td><td>${stats.fail}</td><td>${stats.blocked}</td><td>${stats.retest||0}</td><td><strong>${tasa}</strong></td></tr>
 </tbody></table>
 <p><strong>Motivo:</strong> ${motivo}</p>
-${configBloque}${bugsBloque}${notasBloque}<hr/>`;
+${configBloque}${retestBloque}${bugsBloque}${notasBloque}<hr/>`;
 
   // Deduplicar: si ya existe una entrada para esta versión, reemplazarla
   const marcaInicio = `<h2>${version} `;
@@ -963,6 +970,10 @@ function abrirModalPublicar(publicada, siguiente, datos) {
         <div style="font-size:22px;font-weight:800;color:#d97706">${stats.blocked}</div>
         <div style="font-size:11px;color:#92400e">Blocked</div>
       </div>
+      <div style="flex:1;min-width:65px;text-align:center;background:#ede9fe;border-radius:8px;padding:10px">
+        <div style="font-size:22px;font-weight:800;color:#7c3aed">${stats.retest||0}</div>
+        <div style="font-size:11px;color:#6d28d9">🔁 Retest</div>
+      </div>
       <div style="flex:1;min-width:65px;text-align:center;background:#dbeafe;border-radius:8px;padding:10px">
         <div style="font-size:22px;font-weight:800;color:#2563eb">${tasa}</div>
         <div style="font-size:11px;color:#1d4ed8">Pass rate</div>
@@ -1022,6 +1033,7 @@ async function ejecutarPublicacion(publicada, siguiente) {
       requiereConfig: datos.requiereConfig,
       pasosConfig:    datos.pasosConfig,
       bugsFijos:      datos.bugsFijos,
+      retestIssues:   datos.retestIssues,
       stats:          datos.stats,
       observaciones
     });
@@ -2891,6 +2903,23 @@ function resetForm() {
   tcSel.innerHTML = '<option value="">— Primero elegí un módulo —</option>';
   tcSel.disabled = true;
 }
+</script>
+
+<script>
+// Spellcheck en español para inputs de texto libre (estáticos y dinámicos)
+const NO_SPELL = new Set(['tc-id','historia','version','url-pantalla','retest-tc','pub-siguiente-motivo']);
+
+function activarSpellcheck(root) {
+  (root.querySelectorAll ? root : document).querySelectorAll('input[type="text"], textarea').forEach(el => {
+    if (!el.readOnly && !NO_SPELL.has(el.id)) el.spellcheck = true;
+  });
+}
+
+activarSpellcheck(document);
+
+new MutationObserver(muts => muts.forEach(m =>
+  m.addedNodes.forEach(n => { if (n.nodeType === 1) activarSpellcheck(n); })
+)).observe(document.body, { childList: true, subtree: true });
 </script>
 </body>
 </html>
