@@ -69,8 +69,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  }
-
   // ── PROXY: /jira/* → Jira API (sigue redirects server-side) ──
   if (parsed.pathname.startsWith('/jira/')) {
     const jiraPath = parsed.pathname.replace('/jira', '') + (parsed.search || '');

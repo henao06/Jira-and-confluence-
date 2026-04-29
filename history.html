@@ -247,6 +247,30 @@
   color:var(--g5); cursor:pointer; text-decoration:none; transition:all .15s;
 }
 .btn-edit-issue:hover { background:rgba(99,102,241,.12); border-color:rgba(99,102,241,.4); color:#a5b4fc; }
+
+/* ── Missing TCs panel ── */
+.missing-panel {
+  margin:0 0 12px 0; border-radius:10px;
+  border:1px solid var(--border); background:var(--white);
+  overflow:hidden;
+}
+.missing-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 16px; cursor:pointer; user-select:none;
+  background:var(--g0); gap:8px;
+}
+.missing-header:hover { background:#f1f5f9; }
+.missing-summary { font-size:13px; color:var(--g7); flex:1; }
+.missing-toggle  { font-size:11px; color:var(--g4); flex-shrink:0; }
+.missing-body    { padding:0 16px 12px; }
+.missing-tc-row  {
+  display:flex; align-items:baseline; gap:8px;
+  padding:5px 0; border-bottom:1px solid var(--g1); font-size:12.5px;
+}
+.missing-tc-row:last-child { border-bottom:none; }
+.missing-tc-num  { color:var(--g4); font-size:11px; min-width:18px; text-align:right; flex-shrink:0; }
+.missing-tc-id   { color:#6d28d9; font-weight:600; font-size:11.5px; white-space:nowrap; flex-shrink:0; }
+.missing-tc-name { color:var(--g7); }
 </style>
 </head>
 <body>
@@ -387,6 +411,17 @@
       <div class="progress-seg seg-pass"  id="prog-pass"  style="width:0%"></div>
       <div class="progress-seg seg-fail"  id="prog-fail"  style="width:0%"></div>
       <div class="progress-seg seg-block" id="prog-block" style="width:0%"></div>
+    </div>
+  </div>
+
+  <!-- Missing TCs panel -->
+  <div id="missing-panel" class="missing-panel" style="display:none">
+    <div class="missing-header" onclick="toggleMissingPanel()">
+      <span class="missing-summary" id="missing-summary">Calculando cobertura...</span>
+      <span class="missing-toggle" id="missing-toggle">▼</span>
+    </div>
+    <div class="missing-body" id="missing-body" style="display:none">
+      <div id="missing-list"></div>
     </div>
   </div>
 
@@ -716,12 +751,61 @@ async function loadPage(jql, page) {
 }
 
 // ── Filtros ───────────────────────────────────────────────────────────────────
+const FILTERS_KEY = 'qa_history_filters';
+
+function saveFilters() {
+  const g = id => document.getElementById(id);
+  localStorage.setItem(FILTERS_KEY, JSON.stringify({
+    version:   g('f-version').value,
+    epic:      g('f-epic').value,
+    estado:    g('f-estado').value,
+    tipo:      g('f-tipo').value,
+    prioridad: g('f-prioridad').value,
+    severidad: g('f-severidad').value,
+    desde:     g('f-desde').value,
+    hasta:     g('f-hasta').value,
+    texto:     g('f-texto').value,
+    config:    g('f-config').checked,
+    retest:    g('f-retest').checked,
+  }));
+}
+
+function restoreFilters() {
+  try {
+    const s = JSON.parse(localStorage.getItem(FILTERS_KEY) || 'null');
+    if (!s) return;
+    const g = id => document.getElementById(id);
+    if (s.version)   g('f-version').value   = s.version;
+    if (s.epic)      g('f-epic').value       = s.epic;
+    if (s.estado)    g('f-estado').value     = s.estado;
+    if (s.tipo)      g('f-tipo').value       = s.tipo;
+    if (s.prioridad) g('f-prioridad').value  = s.prioridad;
+    if (s.severidad) g('f-severidad').value  = s.severidad;
+    if (s.desde)     g('f-desde').value      = s.desde;
+    if (s.hasta)     g('f-hasta').value      = s.hasta;
+    if (s.texto)   { g('f-texto').value = s.texto; g('search-clear').style.display = 'block'; }
+    g('f-config').checked = s.config || false;
+    g('f-retest').checked = s.retest || false;
+    // Abrir panel si hay algún filtro activo
+    const hayFiltros = s.version || s.epic || s.estado || s.tipo || s.prioridad ||
+                       s.severidad || s.desde || s.hasta || s.config || s.retest;
+    if (hayFiltros) {
+      document.getElementById('filters-panel').classList.add('open');
+      document.getElementById('btn-toggle').classList.add('active');
+    }
+    actualizarBadge();
+  } catch {}
+}
+
 function applyFilters() {
   closeSuggestions();
   currentPage = 0;
   currentJQL  = buildJQL();
   actualizarBadge();
+  saveFilters();
   loadPage(currentJQL, currentPage);
+  missingPanelOpen = false;
+  actualizarMissingPanel();
 }
 
 function clearFilters() {
@@ -730,6 +814,9 @@ function clearFilters() {
   ['f-config','f-retest'].forEach(id => document.getElementById(id).checked=false);
   document.getElementById('f-texto').value='';
   document.getElementById('search-clear').style.display='none';
+  localStorage.removeItem(FILTERS_KEY);
+  missingPanelOpen = false;
+  actualizarMissingPanel();
   applyFilters();
 }
 
@@ -842,11 +929,118 @@ async function applyTransition(key, id) {
   if(btn) btn.disabled=false;
 }
 
+// ── Cobertura de TCs ──────────────────────────────────────────────────────────
+const epicStructureCache = {};
+
+function extraerTextoADF(adf) {
+  if (typeof adf === 'string') return adf;
+  if (!adf?.content) return '';
+  let t = '';
+  function proc(n) {
+    if (!n) return;
+    if (n.type === 'codeBlock') { (n.content||[]).forEach(h => { if (h.text) t += h.text; }); t += '\n'; return; }
+    if (n.text) t += n.text;
+    (n.content||[]).forEach(proc);
+    if (['paragraph','heading','listItem'].includes(n.type)) t += '\n';
+  }
+  adf.content.forEach(proc);
+  return t;
+}
+
+async function cargarEstructuraEpic(epicKey) {
+  if (epicStructureCache[epicKey]) return epicStructureCache[epicKey];
+  const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${epicKey}?fields=description`, { headers:{ 'Accept':'application/json' } });
+  if (!r.ok) return null;
+  const d = await r.json();
+  const texto = extraerTextoADF(d.fields?.description);
+  const iS = texto.indexOf('QA_STRUCTURE_START'), iE = texto.lastIndexOf('QA_STRUCTURE_END');
+  if (iS === -1 || iE === -1) return null;
+  const m = texto.slice(iS + 18, iE).match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try { const e = JSON.parse(m[0]); epicStructureCache[epicKey] = e; return e; } catch { return null; }
+}
+
+function extractTCTitle(summary) {
+  let s = (summary || '').trim();
+  // Caso normal: "[ ⚙️ ] [ 🔁 ] [ TC-03 ] — Nombre del TC"
+  // Todo lo que está antes del primer " — " es prefijo irrelevante
+  const idx = s.indexOf(' — ');
+  if (idx !== -1) return s.slice(idx + 3).trim().toLowerCase();
+  // Sin separador: quitar emojis ⚙️ 🔁 del inicio y cualquier ID tipo TC-01 / TA-001
+  s = s.replace(/^[⚙️\u{1f501}\u{1f504}\s]+/gu, '');
+  s = s.replace(/^[A-Za-z]{1,4}-\d+\s*/i, '');
+  return s.trim().toLowerCase();
+}
+
+let missingPanelOpen = false;
+
+async function actualizarMissingPanel() {
+  const epicKey = document.getElementById('f-epic').value;
+  const version = document.getElementById('f-version').value;
+  const panel   = document.getElementById('missing-panel');
+  if (!epicKey) { panel.style.display = 'none'; return; }
+
+  panel.style.display = 'block';
+  document.getElementById('missing-summary').textContent = 'Calculando cobertura...';
+  document.getElementById('missing-list').innerHTML = '';
+
+  try {
+    const estructura = await cargarEstructuraEpic(epicKey);
+    if (!estructura?.testCases?.length) {
+      document.getElementById('missing-summary').textContent = 'Este módulo no tiene TCs configurados.';
+      return;
+    }
+    const tcs = estructura.testCases;
+
+    let jql = `parent = "${epicKey}"`;
+    if (version) jql += ` AND fixVersion = "${version}"`;
+    const res  = await fetch(`${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=summary&maxResults=200`, { headers:{ 'Accept':'application/json' } });
+    const data = await res.json();
+    const executedTitles = new Set((data.issues || []).map(i => extractTCTitle(i.fields?.summary || '')));
+
+    const missing = tcs.filter(tc => !executedTitles.has(tc.titulo.toLowerCase()));
+    const done    = tcs.length - missing.length;
+    const vLbl    = version ? ` · ${version}` : '';
+
+    const doneColor  = done === tcs.length ? '#10b981' : done === 0 ? '#dc2626' : '#f59e0b';
+    const pendText   = missing.length > 0
+      ? `<span style="color:#dc2626;font-weight:600">${missing.length} pendiente${missing.length > 1 ? 's' : ''}</span>`
+      : `<span style="color:#10b981;font-weight:600">✓ Completo</span>`;
+
+    document.getElementById('missing-summary').innerHTML =
+      `Cobertura${vLbl}: <strong style="color:${doneColor}">${done}/${tcs.length}</strong> ejecutado${done !== 1 ? 's' : ''} &nbsp;·&nbsp; ${pendText}`;
+
+    if (missing.length > 0) {
+      document.getElementById('missing-list').innerHTML =
+        missing.map((tc, i) => `
+          <div class="missing-tc-row">
+            <span class="missing-tc-num">${i + 1}.</span>
+            <span class="missing-tc-id">${tc.id}</span>
+            <span class="missing-tc-name">${tc.titulo}</span>
+          </div>`).join('');
+      // Abrir panel automáticamente si hay pendientes
+      if (!missingPanelOpen) toggleMissingPanel();
+    }
+  } catch(e) {
+    document.getElementById('missing-summary').textContent = `Error al calcular cobertura: ${e.message}`;
+  }
+}
+
+function toggleMissingPanel() {
+  const body   = document.getElementById('missing-body');
+  const toggle = document.getElementById('missing-toggle');
+  missingPanelOpen = !missingPanelOpen;
+  body.style.display  = missingPanelOpen ? 'block' : 'none';
+  toggle.textContent  = missingPanelOpen ? '▲' : '▼';
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   await cargarFiltros();
+  restoreFilters();
   currentJQL = buildJQL();
   loadPage(currentJQL, 0);
+  actualizarMissingPanel();
 });
 </script>
 </body>

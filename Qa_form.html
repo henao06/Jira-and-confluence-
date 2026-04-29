@@ -163,7 +163,7 @@
     </div>
     <div class="row2">
       <div class="field">
-        <label class="lbl" for="url-pantalla">URL / Pantalla <span class="req">*</span></label>
+        <label class="lbl" for="url-pantalla">URL / Pantalla <span class="hint">Opcional</span></label>
         <input type="text" id="url-pantalla" placeholder="https://app.hybred.edu.co/...">
       </div>
       <div class="field">
@@ -394,6 +394,14 @@
     </div>
   </div>
 
+  <!-- BG Assignee row -->
+  <div id="bg-assignee-wrap" style="display:none;padding:8px 24px;gap:10px;align-items:center;background:var(--g0);border-top:1px solid var(--border)">
+    <span style="font-size:.8rem;color:var(--g4);white-space:nowrap">Asignar bug a:</span>
+    <select id="bg-asignado" class="sel" style="padding:4px 10px;font-size:.82rem;min-width:180px;height:32px;max-width:280px">
+      <option value="">Sin asignar</option>
+    </select>
+  </div>
+
   <!-- Footer -->
   <div class="form-footer">
     <button class="btn-reset" onclick="resetForm()">Limpiar formulario</button>
@@ -402,7 +410,7 @@
       <span>⚙️ Requiere configuración</span>
     </label>
     <label class="config-check-label" id="bug-check-label" style="opacity:.4;cursor:not-allowed" title="Solo disponible cuando el resultado es Fail">
-      <input type="checkbox" id="reportar-bug" disabled>
+      <input type="checkbox" id="reportar-bug" disabled onchange="toggleBgAssignee(this)">
       <span>🐛 Reportar como bug en BG</span>
     </label>
     <button class="btn-submit" id="btn-submit" onclick="submitForm()">
@@ -1056,6 +1064,7 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('requiere-config').checked = false;
   document.getElementById('config-section').style.display = 'none';
   document.getElementById('reportar-bug').checked = false;
+  document.getElementById('bg-assignee-wrap').style.display = 'none';
 
   const editKey = new URLSearchParams(window.location.search).get('edit');
   if (editKey) {
@@ -1152,7 +1161,7 @@ async function loadIssueForEdit(key) {
     const labels = f.labels || [];
 
     // ── 2. Guardar TC prefix del summary ──
-    const tcPrefixMatch = (f.summary || '').match(/^(?:⚙️\s*)?([A-Za-z]+-\d+)\s*[—\-]/);
+    const tcPrefixMatch = (f.summary || '').match(/^(?:[⚙️🔁\s]*)?([A-Za-z]+-\d+)\s*[—\-]/);
     if (tcPrefixMatch) window.editMode.tcPrefix = tcPrefixMatch[1];
 
     // ── 3. Seleccionar módulo y cargar sus TCs (sin que pise los campos después) ──
@@ -1187,10 +1196,20 @@ async function loadIssueForEdit(key) {
     if (kv['URL / Pantalla'])  setV('url-pantalla',  kv['URL / Pantalla']);
     if (kv['Rol de usuario'])  setV('rol-usuario',   kv['Rol de usuario']);
 
-    // Tipo de prueba (de labels)
+    // Tipo de prueba — primero busca en la lista local, si no encuentra toma cualquier type-*
     const TIPO_LABELS = ['type-funcional','type-regresion','type-ui','type-smoke','type-integracion','type-uat','type-rendimiento'];
-    const tipoLabel = labels.find(l => TIPO_LABELS.includes(l));
-    if (tipoLabel) setV('tipo-prueba', tipoLabel);
+    const tipoLabel = labels.find(l => TIPO_LABELS.includes(l)) || labels.find(l => l.startsWith('type-'));
+    if (tipoLabel) {
+      const tipSel = document.getElementById('tipo-prueba');
+      if (tipSel && !tipSel.querySelector(`option[value="${tipoLabel}"]`)) {
+        const opt = document.createElement('option');
+        opt.value = tipoLabel;
+        opt.textContent = tipoLabel.replace(/^type-/, '').replace(/-/g, ' ')
+          .replace(/\b\w/g, c => c.toUpperCase());
+        tipSel.appendChild(opt);
+      }
+      setV('tipo-prueba', tipoLabel);
+    }
 
     // Prioridad y versión build
     if (f.priority?.name) setV('prioridad', f.priority.name);
@@ -1354,31 +1373,32 @@ async function obtenerEstadoModulo(moduloKey) {
   const totalTCs   = testCases.length;
 
   const jql = encodeURIComponent(`parent = ${epic.key} ORDER BY created ASC`);
-  const res  = await fetch(`/jira/rest/api/3/search/jql?jql=${jql}&fields=summary,labels,created&maxResults=200`, {
+  const res  = await fetch(`/jira/rest/api/3/search/jql?jql=${jql}&fields=summary,labels,created,fixVersions&maxResults=200`, {
     headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
 
-  const totalEjecuciones = (data.issues || []).length;
+  const issues          = data.issues || [];
+  const totalEjecuciones = issues.length;
   const siguienteNumero  = totalEjecuciones + 1;
   const siguienteId      = `${epic.prefix}-${String(siguienteNumero).padStart(3, '0')}`;
   const tcIndex          = totalTCs > 0 ? totalEjecuciones % totalTCs : 0;
   const siguienteTC      = testCases[tcIndex] ?? null;
   const cicloCompleto    = totalTCs > 0 && totalEjecuciones > 0 && totalEjecuciones % totalTCs === 0;
 
-  return { estructura, testCases, totalTCs, totalEjecuciones, siguienteId, siguienteTC, cicloCompleto, prefix: epic.prefix };
+  return { estructura, testCases, totalTCs, totalEjecuciones, siguienteId, siguienteTC, cicloCompleto, prefix: epic.prefix, issues };
 }
 
 async function getNextNumero(epicKey) {
   try {
     const jql = encodeURIComponent(`parent = ${epicKey}`);
-    const r   = await fetch(`/jira/rest/api/3/search/jql?jql=${jql}&maxResults=0`, {
+    const r   = await fetch(`/jira/rest/api/3/search/jql?jql=${jql}&maxResults=200&fields=key`, {
       headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
-    return String((d.total || 0) + 1).padStart(3, '0');
+    return String((d.issues || []).length + 1).padStart(3, '0');
   } catch(e) {
     console.warn('[getNextNumero]', e.message);
     return '001';
@@ -1402,6 +1422,7 @@ async function onModuloChange() {
   try {
     const estado = await obtenerEstadoModulo(modulo);
     window.estructuraActual = estado.estructura;
+    window.moduloIssues     = estado.issues || [];
 
     tcSel.innerHTML = '<option value="">— Seleccioná un Test Case —</option>' +
       estado.testCases.map(tc => `<option value="${tc.id}">${tc.id}: ${tc.titulo}</option>`).join('');
@@ -1452,10 +1473,46 @@ function onTestCaseChange() {
 
   const setVal = (id, val) => { if (val != null) { const el = document.getElementById(id); if (el) el.value = val; } };
 
+  // Mostrar el ID del TC seleccionado en el campo tc-id
+  const tcIdField = document.getElementById('tc-id');
+  if (tcIdField) { tcIdField.value = tc.id; tcIdField.removeAttribute('readonly'); tcIdField.style.opacity = '1'; }
+
+  // Auto-detectar re-test: ¿ya se ejecutó este TC en la versión actual?
+  const tcIssues = (window.moduloIssues || []).filter(i => {
+    const s = (i.fields?.summary || '').replace(/^[⚙️🔁\s]+/, '').trim();
+    return s.startsWith(tc.id + ' —') || s.startsWith(tc.id + '—');
+  });
+  const enVersionActual = versionActual
+    ? tcIssues.filter(i => (i.fields?.fixVersions || []).some(v => v.name === versionActual))
+    : tcIssues;
+  const retestCb = document.getElementById('es-retest');
+  if (enVersionActual.length > 0) {
+    retestCb.checked = true;
+    toggleRetest(retestCb);
+    document.getElementById('retest-tc').value = enVersionActual[enVersionActual.length - 1].key;
+  } else {
+    retestCb.checked = false;
+    toggleRetest(retestCb);
+    document.getElementById('retest-tc').value = '';
+  }
+
   setVal('descripcion', tc.titulo);
   setVal('historia',    tc.historia);
-  setVal('tipo-prueba', tc.tipoTest);
   setVal('prioridad',   tc.prioridad);
+
+  if (tc.tipoTest) {
+    const tipSel = document.getElementById('tipo-prueba');
+    if (tipSel) {
+      if (!tipSel.querySelector(`option[value="${tc.tipoTest}"]`)) {
+        const opt = document.createElement('option');
+        opt.value = tc.tipoTest;
+        opt.textContent = tc.tipoTest.replace(/^type-/, '').replace(/-/g, ' ')
+          .replace(/\b\w/g, c => c.toUpperCase());
+        tipSel.appendChild(opt);
+      }
+      tipSel.value = tc.tipoTest;
+    }
+  }
   setVal('navegador',   tc.navegador);
   setVal('sistema-op',  tc.sistemaOp);
   setVal('rol-usuario', tc.rolUsuario);
@@ -1493,6 +1550,32 @@ async function fetchNextTC() {
 }
 
 
+/* ── BG Assignee ── */
+let bgUsersLoaded = false;
+
+async function toggleBgAssignee(chk) {
+  const wrap = document.getElementById('bg-assignee-wrap');
+  if (!chk.checked) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'flex';
+  if (bgUsersLoaded) return;
+  const sel = document.getElementById('bg-asignado');
+  sel.innerHTML = '<option value="">Cargando…</option>';
+  try {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/user/assignable/search?project=BG&maxResults=50`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const users = await r.json();
+    if (!Array.isArray(users) || users.length === 0) throw new Error('Sin usuarios');
+    sel.innerHTML = '<option value="">Sin asignar</option>' +
+      users.map(u => `<option value="${u.accountId}">${u.displayName}</option>`).join('');
+    bgUsersLoaded = true;
+  } catch(e) {
+    console.error('[BG assignees]', e.message);
+    sel.innerHTML = '<option value="">Sin asignar</option>';
+  }
+}
+
 /* ── Assignees ── */
 async function fetchAssignees() {
   const sel = document.getElementById('asignado');
@@ -1526,7 +1609,10 @@ function setEstado(val, btn) {
   bugChk.disabled         = !isFail;
   bugLabel.style.opacity  = isFail ? '1' : '.4';
   bugLabel.style.cursor   = isFail ? 'pointer' : 'not-allowed';
-  if (!isFail) bugChk.checked = false;
+  if (!isFail) {
+    bugChk.checked = false;
+    document.getElementById('bg-assignee-wrap').style.display = 'none';
+  }
   if (!isFail) {
     severidad = ''; frecuencia = '';
     document.querySelectorAll('.sev-btn').forEach(b => b.classList.remove('active'));
@@ -1842,7 +1928,7 @@ function showSuccess(tcId, issueKey, issueUrl, moduloNombre, tipoLabel, entorno,
   }, 1000);
 }
 
-function showUpdateSuccess(editKey, issueUrl, moduloNombre, tipoLabel, entorno, sevLbl) {
+function showUpdateSuccess(editKey, issueUrl, moduloNombre, tipoLabel, entorno, sevLbl, bugKey, bugUrl) {
   const estadoLabel = { pass:'Pass', fail:`Fail — ${sevLbl}`, blocked:'Bloqueado' }[estado] || '—';
 
   const head = `
@@ -1853,9 +1939,16 @@ function showUpdateSuccess(editKey, issueUrl, moduloNombre, tipoLabel, entorno, 
       </svg>
     </div>
     <div>
-      <div class="modal-title">Issue actualizado</div>
+      <div class="modal-title">${bugKey ? 'Issue actualizado y bug creado' : 'Issue actualizado'}</div>
       <div class="modal-sub">${estadoLabel}</div>
     </div>`;
+
+  const bugRow = bugKey ? `
+    <div class="modal-card" style="border-color:#fca5a5">
+      <div class="modal-card-label" style="color:#dc2626">Bug en BG</div>
+      <div class="modal-tc" style="color:#dc2626">${bugKey}</div>
+      <div class="modal-key"><a href="${bugUrl}" target="_blank" style="color:#dc2626">${bugUrl}</a></div>
+    </div>` : '';
 
   const body = `
     <div class="modal-card">
@@ -1863,6 +1956,7 @@ function showUpdateSuccess(editKey, issueUrl, moduloNombre, tipoLabel, entorno, 
       <div class="modal-tc">${editKey}</div>
       <div class="modal-key"><a href="${issueUrl}" target="_blank" style="color:#a5b4fc">${issueUrl}</a></div>
     </div>
+    ${bugRow}
     <div class="modal-meta">
       <strong>Módulo:</strong> ${moduloNombre}<br>
       <strong>Tipo:</strong> ${tipoLabel}<br>
@@ -1873,6 +1967,7 @@ function showUpdateSuccess(editKey, issueUrl, moduloNombre, tipoLabel, entorno, 
     <a href="${issueUrl}" target="_blank" style="flex:1;text-decoration:none">
       <button class="modal-btn-primary" style="width:100%;background:rgba(99,102,241,.8)">Ver en Jira</button>
     </a>
+    ${bugKey ? `<a href="${bugUrl}" target="_blank" style="text-decoration:none"><button class="modal-btn-secondary" style="color:#dc2626;border-color:#fca5a5">Ver bug BG</button></a>` : ''}
     <a href="/history" style="text-decoration:none">
       <button class="modal-btn-secondary">Ver historial</button>
     </a>
@@ -2374,7 +2469,6 @@ async function submitForm() {
   const retestTc    = document.getElementById('retest-tc').value.trim();
 
   if (!moduloRaw)               return showError('Seleccioná un módulo.');
-  if (!urlPantalla)             return showError('Pegá la URL o pantalla donde ocurrió la prueba.');
   if (!rolUsuario)              return showError('Seleccioná el rol del usuario durante la prueba.');
   if (!tipoPrueba)              return showError('Seleccioná el tipo de prueba.');
   if (!desc)                    return showError('Agregá una descripción.');
@@ -2415,8 +2509,11 @@ async function submitForm() {
   const steps = Array.from(document.querySelectorAll('#steps-wrap .step-row input'))
     .map(inp => inp.value.trim() || null).filter(Boolean);
 
+  // En edit mode tc-id tiene la JIRA key; el ID de definición está en tcPrefix
+  const tcDefId = window.editMode ? (window.editMode.tcPrefix || tcId) : tcId;
+
   const infoRows = [
-    ['Identificador', tcId], ['Módulo', moduloNombre], ['Tipo de prueba', tipoLabel],
+    ['Identificador', tcDefId], ['Módulo', moduloNombre], ['Tipo de prueba', tipoLabel],
     ['Tester', tester], ['Fecha de ejecución', fecha],
     ['URL / Pantalla', urlPantalla], ['Rol de usuario', rolUsuario], ['Entorno', entorno],
     ...(historia ? [['Historia / Req.', historia]] : []),
@@ -2425,6 +2522,7 @@ async function submitForm() {
 
   // ADF description — solo nodos seguros (sin panel)
   const description = { type:'doc', version:1, content:[
+    mkB('Identificador: ' + tcDefId),
     mkB('Tester: ' + tester),
     mkB('Fecha: ' + fecha),
     mkB('Módulo: ' + moduloNombre),
@@ -2500,13 +2598,58 @@ async function submitForm() {
         });
       }
 
-      showUpdateSuccess(editKey, issueUrl, moduloNombre, tipoLabel, entorno, sevLbl);
+      // ── Crear bug en BG si está marcado ──
+      let editBugKey = null, editBugUrl = null;
+      if (estado === 'fail' && reportarBug) {
+        const sevSuffix    = severidad.replace(/^severity-/, '');
+        const prioridadBug = { critico:'Highest', mayor:'High', medio:'Medium', menor:'Low', bajo:'Low' }[sevSuffix] || 'Medium';
+        const bgDescription = { type:'doc', version:1, content:[
+          mkB(`Test Case: ${tcId}`),
+          mkB(`Módulo: ${moduloNombre}`),
+          mkB(`Versión: ${versionActual || '—'}`),
+          mkB(`Severidad: ${sevLbl}`),
+          mkB(`Entorno: ${entorno}`),
+          mkRule(),
+          mkH('Pasos para reproducir'), steps.length > 0 ? mkOrderedList(steps) : mkOrderedList(precon),
+          mkH('Resultado esperado'), mkOrderedList(esperado),
+          mkH('Resultado obtenido'), mkOrderedList(obtenido),
+          ...(impacto ? [mkH('Impacto'), mkP(impacto)] : []),
+          ...(soluciones.length > 0 ? [mkH('Solución propuesta'), mkOrderedList(soluciones)] : []),
+        ]};
+        const bgAsignadoId = document.getElementById('bg-asignado').value;
+        const bgRes = await fetch(`/jira/rest/api/3/issue`, {
+          method:'POST',
+          headers:{'Authorization':AUTH,'Content-Type':'application/json','Accept':'application/json'},
+          body:JSON.stringify({ fields:{
+            project:     { key: 'BG' },
+            summary:     `${tcId} — ${desc}`,
+            description: bgDescription,
+            issuetype:   { name: 'Tarea' },
+            priority:    { name: prioridadBug },
+            labels:      [ `severity-${sevSuffix}`, moduloLabel, 'qa-reported', ...(versionActual ? [versionActual] : []) ],
+            ...(bgAsignadoId ? { assignee: { accountId: bgAsignadoId } } : {}),
+          }})
+        });
+        if (!bgRes.ok) {
+          const e = await bgRes.json();
+          throw new Error(`Error al crear bug en BG: ${e.errors ? Object.values(e.errors).join(', ') : JSON.stringify(e)}`);
+        }
+        const bg = await bgRes.json();
+        editBugKey = bg.key;
+        editBugUrl = `https://liceopinoverde.atlassian.net/browse/${editBugKey}`;
+        await fetch(`/jira/rest/api/3/issueLink`, {
+          method:'POST',
+          headers:{'Authorization':AUTH,'Content-Type':'application/json'},
+          body:JSON.stringify({ type:{name:'Relates'}, inwardIssue:{key:editKey}, outwardIssue:{key:editBugKey} })
+        });
+      }
+
+      showUpdateSuccess(editKey, issueUrl, moduloNombre, tipoLabel, entorno, sevLbl, editBugKey, editBugUrl);
 
     } else {
       // ══ MODO CREACIÓN: POST normal ══════════════════════════════════════════
 
-      const numero  = await getNextNumero(epic.key);
-      const summary = `${requiereConfig ? '⚙️ ' : ''}${epic.prefix}-${numero} — ${desc}`;
+      const summary = `${requiereConfig ? '⚙️ ' : ''}${esRetest ? '🔁 ' : ''}${tcId} — ${desc}`;
 
       // ── 1. Crear bug en BG primero ──
       let bugKey = null, bugUrl = null;
@@ -2526,16 +2669,18 @@ async function submitForm() {
           ...(impacto ? [mkH('Impacto'), mkP(impacto)] : []),
           ...(soluciones.length > 0 ? [mkH('Solución propuesta'), mkOrderedList(soluciones)] : []),
         ]};
+        const bgAsignadoId = document.getElementById('bg-asignado').value;
         const bugRes = await fetch(`/jira/rest/api/3/issue`, {
           method:'POST',
           headers:{'Authorization':AUTH,'Content-Type':'application/json','Accept':'application/json'},
           body:JSON.stringify({ fields:{
             project:     { key: 'BG' },
-            summary:     `[${moduloNombre}] ${tcId} — ${desc}`,
+            summary:     `${tcId} — ${desc}`,
             description: bugDescription,
-            issuetype:   { name: 'Error' },
+            issuetype:   { name: 'Tarea' },
             priority:    { name: prioridadBug },
             labels:      [ `severity-${sevSuffix}`, moduloLabel, 'qa-reported', ...(versionActual ? [versionActual] : []) ],
+            ...(bgAsignadoId ? { assignee: { accountId: bgAsignadoId } } : {}),
           }})
         });
         if (!bugRes.ok) {
@@ -2603,14 +2748,12 @@ async function submitForm() {
         });
       }
 
-      // ── 6. Avanzar TC ──
-      const nextNumero = await getNextNumero(epic.key);
-      const nextTC = `${epic.prefix}-${nextNumero}`;
-      document.getElementById('tc-id').value = nextTC;
-      document.getElementById('tc-id').removeAttribute('readonly');
-      document.getElementById('tc-id').style.opacity = '1';
-      const bannerTC = document.getElementById('next-tc-banner');
-      if (bannerTC) { bannerTC.textContent = `Próximo: ${nextTC}`; bannerTC.style.display = 'inline-block'; bannerTC.style.background = 'var(--g7)'; }
+      // ── 6. Actualizar cache y refrescar módulo ──
+      window.moduloIssues = [...(window.moduloIssues || []), {
+        key: issueKey,
+        fields: { summary, fixVersions: versionActual ? [{ name: versionActual }] : [] }
+      }];
+      onModuloChange(); // sugiere el próximo TC automáticamente
 
       showSuccess(tcId, issueKey, issueUrl, moduloNombre, tipoLabel, entorno, sevLbl, bugKey, bugUrl);
     }
@@ -2638,6 +2781,7 @@ function softReset() {
   document.getElementById('es-retest').checked      = false;
   document.getElementById('requiere-config').checked = false;
   document.getElementById('reportar-bug').checked   = false;
+  document.getElementById('bg-assignee-wrap').style.display = 'none';
   configFiles = []; renderConfigPreviews();
   document.getElementById('config-section').style.display = 'none';
   document.getElementById('retest-extra').classList.remove('show');
