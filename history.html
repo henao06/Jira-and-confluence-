@@ -16,6 +16,9 @@
   --type-bg:#ede9fe; --type-fg:#6d28d9;
 }
 
+/* Historial ocupa pantalla completa */
+.page { max-width: 100%; padding: 0 20px; }
+
 /* ── Top bar ── */
 .top-bar {
   display:flex; align-items:center; gap:8px;
@@ -464,9 +467,10 @@
 <script>
 const JIRA_BASE = window.location.origin + '/jira';
 const JIRA_HOST = 'liceopinoverde.atlassian.net';
-const PAGE_SIZE = 50;
-let currentPage = 0;
-let currentJQL  = '';
+const PAGE_SIZE = 20;
+let currentPage  = 0;
+let currentJQL   = '';
+let pageTokens   = []; // pageTokens[i] = nextPageToken para llegar a la página i+1
 let debounceTimer = null;
 
 // ── Búsqueda con sugerencias ──────────────────────────────────────────────────
@@ -608,34 +612,50 @@ function buildJQL() {
   return parts.join(' AND ') + ' ORDER BY created DESC';
 }
 
-// ── Stats ─────────────────────────────────────────────────────────────────────
-function calcularStats(issues) {
-  let pass=0, fail=0, blocked=0, config=0, retest=0;
-  issues.forEach(i => {
-    const l = i.fields.labels || [];
-    if (l.includes('estado-pass'))    pass++;
-    if (l.includes('estado-fail'))    fail++;
-    if (l.includes('estado-blocked')) blocked++;
-    if (l.includes('requiere-config'))config++;
-    if (l.includes('retest'))         retest++;
-  });
-  const total = issues.length;
-  const rate  = total > 0 ? Math.round((pass/total)*100) : 0;
+// ── Stats (fetch completo con fields=labels, conteo local) ───────────────────
+async function fetchStats(jql) {
+  const baseJql = jql.replace(/\s+ORDER\s+BY\s+.*/i, '');
+  const h = { 'Accept':'application/json' };
+  let all = [], nextToken = null;
+  try {
+    while (true) {
+      let url = `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(baseJql)}&fields=labels&maxResults=100`;
+      if (nextToken) url += `&nextPageToken=${encodeURIComponent(nextToken)}`;
+      const r = await fetch(url, { headers: h });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      all.push(...(d.issues || []));
+      if (d.isLast || !d.nextPageToken) break;
+      nextToken = d.nextPageToken;
+    }
 
-  document.getElementById('s-total').textContent  = total;
-  document.getElementById('s-pass').textContent   = pass;
-  document.getElementById('s-fail').textContent   = fail;
-  document.getElementById('s-block').textContent  = blocked;
-  document.getElementById('s-rate').textContent   = total ? rate + '%' : '—';
-  document.getElementById('s-config').textContent = config;
-  document.getElementById('s-retest').textContent = retest;
+    let pass=0, fail=0, blocked=0, config=0, retest=0;
+    all.forEach(i => {
+      const l = i.fields?.labels || [];
+      if (l.includes('estado-pass'))    pass++;
+      if (l.includes('estado-fail'))    fail++;
+      if (l.includes('estado-blocked')) blocked++;
+      if (l.includes('requiere-config')) config++;
+      if (l.includes('retest'))         retest++;
+    });
+    const total = all.length;
+    const rate  = total > 0 ? Math.round((pass/total)*100) : 0;
 
-  if (total > 0) {
-    document.getElementById('progress-wrap').style.display = 'block';
-    document.getElementById('prog-pass').style.width  = ((pass/total)*100)+'%';
-    document.getElementById('prog-fail').style.width  = ((fail/total)*100)+'%';
-    document.getElementById('prog-block').style.width = ((blocked/total)*100)+'%';
-  }
+    document.getElementById('s-total').textContent  = total;
+    document.getElementById('s-pass').textContent   = pass;
+    document.getElementById('s-fail').textContent   = fail;
+    document.getElementById('s-block').textContent  = blocked;
+    document.getElementById('s-rate').textContent   = total ? rate+'%' : '—';
+    document.getElementById('s-config').textContent = config;
+    document.getElementById('s-retest').textContent = retest;
+
+    if (total > 0) {
+      document.getElementById('progress-wrap').style.display = 'block';
+      document.getElementById('prog-pass').style.width  = ((pass/total)*100)+'%';
+      document.getElementById('prog-fail').style.width  = ((fail/total)*100)+'%';
+      document.getElementById('prog-block').style.width = ((blocked/total)*100)+'%';
+    }
+  } catch(e) { console.error('fetchStats:', e); }
 }
 
 // ── Helpers render ────────────────────────────────────────────────────────────
@@ -661,14 +681,24 @@ function renderIssues(issues) {
     const eKey  = eLbl ? eLbl.replace('estado-','') : '';
     const eCls  = eKey==='pass'?'p-pass':eKey==='fail'?'p-fail':eKey==='blocked'?'p-block':'';
     const eTxt  = eKey==='pass'?'Pass':eKey==='fail'?'Fail':eKey==='blocked'?'Bloqueado':'—';
-    const eCell = eLbl ? `<span class="pill ${eCls}">${eTxt}</span>` : '—';
+    const eCell = `<div class="jira-cell">
+      ${eLbl
+        ? `<span class="pill ${eCls}" id="ep-${issue.key}">${eTxt}</span>`
+        : `<span id="ep-${issue.key}" style="color:var(--g4)">—</span>`}
+      <button class="btn-change" id="btn-e-${issue.key}" onclick="openEstadoPicker(event,'${issue.key}')">↕</button>
+    </div>`;
 
     // Severidad
     const sLbl  = labels.find(l => l.startsWith('severity-'));
     const sKey  = sLbl ? sLbl.replace('severity-','') : '';
     const sCls  = sKey ? `p-sev-${sKey}` : '';
-    const sTxt  = sKey ? sKey.charAt(0).toUpperCase()+sKey.slice(1) : '';
-    const sCell = sLbl ? `<span class="pill ${sCls}">${sTxt}</span>` : '—';
+    const sTxt  = sKey ? sKey.charAt(0).toUpperCase()+sKey.slice(1) : '—';
+    const sCell = `<div class="jira-cell">
+      ${sLbl
+        ? `<span class="pill ${sCls}" id="svp-${issue.key}">${sTxt}</span>`
+        : `<span id="svp-${issue.key}" style="color:var(--g4)">—</span>`}
+      <button class="btn-change" id="btn-sv-${issue.key}" onclick="openSeveridadPicker(event,'${issue.key}')">↕</button>
+    </div>`;
 
     // Tipo
     const TIPOS = ['smoke','regression','functional','performance','security','ux','api'];
@@ -727,8 +757,8 @@ async function loadPage(jql, page) {
   document.getElementById('history-body').innerHTML =
     `<tr class="state-row"><td colspan="12">Cargando...</td></tr>`;
 
-  const start = page * PAGE_SIZE;
-  const url   = `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=summary,labels,status,fixVersions,parent,created,priority&maxResults=${PAGE_SIZE}&startAt=${start}`;
+  let url = `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=summary,labels,status,fixVersions,parent,created,priority&maxResults=${PAGE_SIZE}`;
+  if (page > 0 && pageTokens[page - 1]) url += `&nextPageToken=${encodeURIComponent(pageTokens[page - 1])}`;
 
   try {
     const r      = await fetch(url, { headers:{ 'Accept':'application/json' } });
@@ -737,11 +767,14 @@ async function loadPage(jql, page) {
     const issues = data.issues || [];
     const isLast = data.isLast ?? (issues.length < PAGE_SIZE);
 
-    calcularStats(issues);
+    if (data.nextPageToken) pageTokens[page] = data.nextPageToken;
+
     renderIssues(issues);
 
+    const total      = data.total;
+    const totalPages = total != null ? Math.ceil(total / PAGE_SIZE) : null;
     document.getElementById('pag-info').textContent =
-      issues.length ? `Página ${page+1}${isLast?' (última)':''}` : '';
+      totalPages != null ? `Página ${page+1} de ${totalPages}` : `Página ${page+1}`;
     document.getElementById('btn-prev').disabled = page === 0;
     document.getElementById('btn-next').disabled = isLast;
   } catch(e) {
@@ -801,9 +834,11 @@ function applyFilters() {
   closeSuggestions();
   currentPage = 0;
   currentJQL  = buildJQL();
+  pageTokens  = [];
   actualizarBadge();
   saveFilters();
   loadPage(currentJQL, currentPage);
+  fetchStats(currentJQL);
   missingPanelOpen = false;
   actualizarMissingPanel();
 }
@@ -833,16 +868,17 @@ async function exportCSV() {
   btn.textContent = 'Exportando...';
 
   try {
-    let all = [], startAt = 0, isLast = false;
+    let all = [], nextToken = null, isLast = false;
     while (!isLast) {
-      const url = `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(currentJQL)}&fields=summary,labels,status,fixVersions,parent,created,priority&maxResults=100&startAt=${startAt}`;
-      const r   = await fetch(url, { headers:{ 'Accept':'application/json' } });
-      const d   = await r.json();
+      let url = `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(currentJQL)}&fields=summary,labels,status,fixVersions,parent,created,priority&maxResults=100`;
+      if (nextToken) url += `&nextPageToken=${encodeURIComponent(nextToken)}`;
+      const r      = await fetch(url, { headers:{ 'Accept':'application/json' } });
+      const d      = await r.json();
       const issues = d.issues || [];
       all.push(...issues);
-      isLast  = d.isLast ?? (issues.length < 100);
-      startAt += issues.length;
-      if (!issues.length) break;
+      isLast    = d.isLast ?? (issues.length < 100);
+      nextToken = d.nextPageToken || null;
+      if (!issues.length || !nextToken) break;
     }
 
     const TIPOS = ['smoke','regression','functional','performance','security','ux','api'];
@@ -891,8 +927,8 @@ function showPopover(btn, title, items) {
   const rect = btn.getBoundingClientRect();
   pop.style.display='block';
   const popH = pop.offsetHeight||200;
-  pop.style.top  = `${window.innerHeight-rect.bottom>=popH+8?rect.bottom+window.scrollY+4:rect.top+window.scrollY-popH-4}px`;
-  pop.style.left = `${Math.min(rect.left+window.scrollX, window.innerWidth-200)}px`;
+  pop.style.top  = `${window.innerHeight-rect.bottom>=popH+8?rect.bottom+4:rect.top-popH-4}px`;
+  pop.style.left = `${Math.min(rect.left, window.innerWidth-200)}px`;
 }
 
 function closePopover() { document.getElementById('popover').style.display='none'; activePopover=null; }
@@ -927,6 +963,70 @@ async function applyTransition(key, id) {
     if(pill){pill.textContent=s?.name||'';pill.className=`jira-status-pill ${statusCls(s?.statusCategory?.name)}`;}
   } catch { if(pill) pill.textContent='Error'; }
   if(btn) btn.disabled=false;
+}
+
+// ── Estado QA & Severidad pickers ────────────────────────────────────────────
+function openEstadoPicker(event, key) {
+  event.stopPropagation();
+  const pid = `e-${key}`;
+  const isToggle = activePopover?.key === pid;
+  closePopover();
+  if (isToggle) return;
+  activePopover = { key: pid };
+  const btn = document.getElementById(`btn-e-${key}`);
+  showPopover(btn, 'Estado QA', [
+    { label: 'Pass',      onclick: `applyLabelChange('${key}','estado-','estado-pass')` },
+    { label: 'Fail',      onclick: `applyLabelChange('${key}','estado-','estado-fail')` },
+    { label: 'Bloqueado', onclick: `applyLabelChange('${key}','estado-','estado-blocked')` },
+  ]);
+}
+
+function openSeveridadPicker(event, key) {
+  event.stopPropagation();
+  const pid = `sv-${key}`;
+  const isToggle = activePopover?.key === pid;
+  closePopover();
+  if (isToggle) return;
+  activePopover = { key: pid };
+  const btn = document.getElementById(`btn-sv-${key}`);
+  showPopover(btn, 'Severidad', [
+    { label: 'Crítico', onclick: `applyLabelChange('${key}','severity-','severity-critico')` },
+    { label: 'Mayor',   onclick: `applyLabelChange('${key}','severity-','severity-mayor')` },
+    { label: 'Medio',   onclick: `applyLabelChange('${key}','severity-','severity-medio')` },
+    { label: 'Bajo',    onclick: `applyLabelChange('${key}','severity-','severity-bajo')` },
+  ]);
+}
+
+async function applyLabelChange(key, prefix, newLabel) {
+  closePopover();
+  const isEstado = prefix === 'estado-';
+  const pill = document.getElementById(isEstado ? `ep-${key}` : `svp-${key}`);
+  const btn  = document.getElementById(isEstado ? `btn-e-${key}` : `btn-sv-${key}`);
+  const prevText = pill?.textContent;
+  if (btn)  btn.disabled = true;
+  if (pill) pill.textContent = '...';
+  try {
+    const info = await fetch(`${JIRA_BASE}/rest/api/3/issue/${key}?fields=labels`, { headers:{ 'Accept':'application/json' } }).then(r=>r.json());
+    const oldLabel = (info.fields?.labels||[]).find(l => l.startsWith(prefix));
+    const update = { labels: [] };
+    if (oldLabel) update.labels.push({ remove: oldLabel });
+    update.labels.push({ add: newLabel });
+    await fetch(`${JIRA_BASE}/rest/api/3/issue/${key}`, {
+      method: 'PUT',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ update })
+    });
+    if (isEstado) {
+      const eKey = newLabel.replace('estado-','');
+      const eCls = eKey==='pass'?'p-pass':eKey==='fail'?'p-fail':eKey==='blocked'?'p-block':'';
+      const eTxt = eKey==='pass'?'Pass':eKey==='fail'?'Fail':eKey==='blocked'?'Bloqueado':newLabel;
+      if (pill) { pill.className=`pill ${eCls}`; pill.textContent=eTxt; pill.style.color=''; }
+    } else {
+      const sKey = newLabel.replace('severity-','');
+      if (pill) { pill.className=`pill p-sev-${sKey}`; pill.textContent=sKey.charAt(0).toUpperCase()+sKey.slice(1); pill.style.color=''; }
+    }
+  } catch { if (pill) pill.textContent = prevText || 'Error'; }
+  if (btn) btn.disabled = false;
 }
 
 // ── Cobertura de TCs ──────────────────────────────────────────────────────────
@@ -1040,6 +1140,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   restoreFilters();
   currentJQL = buildJQL();
   loadPage(currentJQL, 0);
+  fetchStats(currentJQL);
   actualizarMissingPanel();
 });
 </script>
