@@ -973,7 +973,7 @@ function abrirModalPublicar(publicada, siguiente, datos) {
       </div>
       <div style="flex:1;min-width:65px;text-align:center;background:#ede9fe;border-radius:8px;padding:10px">
         <div style="font-size:22px;font-weight:800;color:#7c3aed">${stats.retest||0}</div>
-        <div style="font-size:11px;color:#6d28d9">🔁 Retest</div>
+        <div style="font-size:11px;color:#6d28d9"> Retest</div>
       </div>
       <div style="flex:1;min-width:65px;text-align:center;background:#dbeafe;border-radius:8px;padding:10px">
         <div style="font-size:22px;font-weight:800;color:#2563eb">${tasa}</div>
@@ -1174,7 +1174,7 @@ async function loadIssueForEdit(key) {
     const labels = f.labels || [];
 
     // ── 2. Guardar TC prefix del summary ──
-    const tcPrefixMatch = (f.summary || '').match(/^(?:[⚙️🔁\s]*)?([A-Za-z]+-\d+)\s*[—\-]/);
+    const tcPrefixMatch = (f.summary || '').match(/^(?:[⚙️\s]*)?([A-Za-z]+-\d+)\s*[—\-]/);
     if (tcPrefixMatch) window.editMode.tcPrefix = tcPrefixMatch[1];
 
     // ── 3. Seleccionar módulo y cargar sus TCs (sin que pise los campos después) ──
@@ -1492,7 +1492,7 @@ function onTestCaseChange() {
 
   // Auto-detectar re-test: ¿ya se ejecutó este TC en la versión actual?
   const tcIssues = (window.moduloIssues || []).filter(i => {
-    const s = (i.fields?.summary || '').replace(/^[⚙️🔁\s]+/, '').trim();
+    const s = (i.fields?.summary || '').replace(/^[⚙️\s]+/, '').trim();
     return s.startsWith(tc.id + ' —') || s.startsWith(tc.id + '—');
   });
   const enVersionActual = versionActual
@@ -2607,7 +2607,7 @@ async function submitForm() {
     } else {
       // ══ MODO CREACIÓN: POST normal ══════════════════════════════════════════
 
-      const summary = `${requiereConfig ? '⚙️ ' : ''}${esRetest ? '🔁 ' : ''}${tcId} — ${desc}`;
+      const summary = `${requiereConfig ? '⚙️ ' : ''}${esRetest ? ' ' : ''}${tcId} — ${desc}`;
 
       // ── 1. Crear bug en BG primero ──
       let bugKey = null, bugUrl = null;
