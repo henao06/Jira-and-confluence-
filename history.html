@@ -692,7 +692,7 @@ function renderIssues(issues) {
     // Flags
     const flags = [
       labels.includes('requiere-config') ? '<span class="flag-tag" title="Requiere configuración">⚙️</span>' : '',
-      labels.includes('retest')          ? '<span class="flag-tag" title="Retest">🔁</span>' : '',
+      labels.includes('retest')          ? '<span class="flag-tag" title="Retest"></span>' : '',
     ].filter(Boolean).join(' ') || '—';
 
     const version = (f.fixVersions||[])[0]?.name;
@@ -962,7 +962,7 @@ async function cargarEstructuraEpic(epicKey) {
 
 function extractTCTitle(summary) {
   let s = (summary || '').trim();
-  // Caso normal: "[ ⚙️ ] [ 🔁 ] [ TC-03 ] — Nombre del TC"
+  // Caso normal: "[ ⚙️ ] [  ] [ TC-03 ] — Nombre del TC"
   // Todo lo que está antes del primer " — " es prefijo irrelevante
   const idx = s.indexOf(' — ');
   if (idx !== -1) return s.slice(idx + 3).trim().toLowerCase();

@@ -470,9 +470,6 @@ select {
 .history-table a { color: var(--g7); font-weight: 700; text-decoration: none; font-size: 12.5px; }
 .history-table a:hover { text-decoration: underline; }
 .pill { display: inline-block; border-radius: 100px; padding: 2px 9px; font-size: 11px; font-weight: 700; }
-.pill-pass    { background: #d1fae5; color: #065f46; }
-.pill-fail    { background: var(--red-bg); color: var(--red); }
-.pill-blocked { background: var(--amber-bg); color: var(--amber); }
 .empty-state  { text-align: center; color: var(--muted); font-size: 13px; padding: 28px 16px; }
 
 /* ── Sugerencias de memoria ── */

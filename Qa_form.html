@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QA Testing — Hybred</title>
 <link rel="stylesheet" href="/styles.css">
+<script src="/bg_reporter.js" defer></script>
 
 </head>
 <body>
@@ -873,14 +874,14 @@ async function agregarAlHistorialConfluence({ version, motivo, requiereConfig, p
     : '';
 
   const retestBloque = (retestIssues||[]).length
-    ? `<ac:structured-macro ac:name="info"><ac:parameter ac:name="title">🔁 Re-tests ejecutados (${retestIssues.length})</ac:parameter><ac:rich-text-body><ol>${retestIssues.map(r=>`<li>${r}</li>`).join('')}</ol></ac:rich-text-body></ac:structured-macro>`
+    ? `<ac:structured-macro ac:name="info"><ac:parameter ac:name="title"> Re-tests ejecutados (${retestIssues.length})</ac:parameter><ac:rich-text-body><ol>${retestIssues.map(r=>`<li>${r}</li>`).join('')}</ol></ac:rich-text-body></ac:structured-macro>`
     : '';
 
   const notasBloque = observaciones ? `<p><strong>Observaciones:</strong> ${observaciones}</p>` : '';
 
   const entrada = `<h2>${version} — ${fecha}</h2>
 <table><tbody>
-  <tr><th>Versión</th><th>Fecha</th><th>Total</th><th> Pass</th><th> Fail</th><th> Blocked</th><th>🔁 Retest</th><th>Tasa</th></tr>
+  <tr><th>Versión</th><th>Fecha</th><th>Total</th><th> Pass</th><th> Fail</th><th> Blocked</th><th> Retest</th><th>Tasa</th></tr>
   <tr><td><strong>${version}</strong></td><td>${fecha}</td><td>${stats.total}</td><td>${stats.pass}</td><td>${stats.fail}</td><td>${stats.blocked}</td><td>${stats.retest||0}</td><td><strong>${tasa}</strong></td></tr>
 </tbody></table>
 <p><strong>Motivo:</strong> ${motivo}</p>
@@ -2012,19 +2013,10 @@ function mkH(text, level=3) { return { type:'heading', attrs:{level}, content:[{
 function mkP(text)           { return { type:'paragraph', content:[{type:'text',text:text||'—'}] }; }
 function mkB(text)           { return { type:'paragraph', content:[{type:'text',text,marks:[{type:'strong'}]}] }; }
 function mkRule()            { return { type:'rule' }; }
-function mkPanel(panelType, content) { return [{ type:'panel', attrs:{panelType}, content }]; }
 function mkOrderedList(items) {
   return { type:'orderedList', content: items.map(item => ({
     type:'listItem', content:[{ type:'paragraph', content:[{type:'text',text:item}] }]
   }))};
-}
-function mkTable(rows) {
-  return { type:'table', attrs:{isNumberColumnEnabled:false,layout:'default',width:760},
-    content: rows.map(([l,v]) => ({ type:'tableRow', content:[
-      {type:'tableHeader',attrs:{background:'#E3FCEF',colwidth:[160]},content:[{type:'paragraph',content:[{type:'text',text:l,marks:[{type:'strong'}]}]}]},
-      {type:'tableCell',content:[{type:'paragraph',content:[{type:'text',text:v||'—'}]}]}
-    ]}))
-  };
 }
 
 /* ── EPICS map — se llena dinámicamente desde Jira ── */
@@ -2524,14 +2516,6 @@ async function submitForm() {
   // En edit mode tc-id tiene la JIRA key; el ID de definición está en tcPrefix
   const tcDefId = window.editMode ? (window.editMode.tcPrefix || tcId) : tcId;
 
-  const infoRows = [
-    ['Identificador', tcDefId], ['Módulo', moduloNombre], ['Tipo de prueba', tipoLabel],
-    ['Tester', tester], ['Fecha de ejecución', fecha],
-    ['URL / Pantalla', urlPantalla], ['Rol de usuario', rolUsuario], ['Entorno', entorno],
-    ...(historia ? [['Historia / Req.', historia]] : []),
-    ...(esRetest  ? [['Re-test de', retestTc]] : []),
-  ];
-
   // ADF description — solo nodos seguros (sin panel)
   const description = { type:'doc', version:1, content:[
     mkB('Identificador: ' + tcDefId),
@@ -2613,47 +2597,9 @@ async function submitForm() {
       // ── Crear bug en BG si está marcado ──
       let editBugKey = null, editBugUrl = null;
       if (estado === 'fail' && reportarBug) {
-        const sevSuffix    = severidad.replace(/^severity-/, '');
-        const prioridadBug = { critico:'Highest', mayor:'High', medio:'Medium', menor:'Low', bajo:'Low' }[sevSuffix] || 'Medium';
-        const bgDescription = { type:'doc', version:1, content:[
-          mkB(`Test Case: ${tcId}`),
-          mkB(`Módulo: ${moduloNombre}`),
-          mkB(`Versión: ${versionActual || '—'}`),
-          mkB(`Severidad: ${sevLbl}`),
-          mkB(`Entorno: ${entorno}`),
-          mkRule(),
-          mkH('Pasos para reproducir'), steps.length > 0 ? mkOrderedList(steps) : mkOrderedList(precon),
-          mkH('Resultado esperado'), mkOrderedList(esperado),
-          mkH('Resultado obtenido'), mkOrderedList(obtenido),
-          ...(impacto ? [mkH('Impacto'), mkP(impacto)] : []),
-          ...(soluciones.length > 0 ? [mkH('Solución propuesta'), mkOrderedList(soluciones)] : []),
-        ]};
-        const bgAsignadoId = document.getElementById('bg-asignado').value;
-        const bgRes = await fetch(`/jira/rest/api/3/issue`, {
-          method:'POST',
-          headers:{'Authorization':AUTH,'Content-Type':'application/json','Accept':'application/json'},
-          body:JSON.stringify({ fields:{
-            project:     { key: 'BG' },
-            summary:     `${tcId} — ${desc}`,
-            description: bgDescription,
-            issuetype:   { name: 'Tarea' },
-            priority:    { name: prioridadBug },
-            labels:      [ `severity-${sevSuffix}`, moduloLabel, 'qa-reported', ...(versionActual ? [versionActual] : []) ],
-            ...(bgAsignadoId ? { assignee: { accountId: bgAsignadoId } } : {}),
-          }})
-        });
-        if (!bgRes.ok) {
-          const e = await bgRes.json();
-          throw new Error(`Error al crear bug en BG: ${e.errors ? Object.values(e.errors).join(', ') : JSON.stringify(e)}`);
-        }
-        const bg = await bgRes.json();
+        const bg = await crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, linkIssueKey: editKey });
         editBugKey = bg.key;
-        editBugUrl = `https://liceopinoverde.atlassian.net/browse/${editBugKey}`;
-        await fetch(`/jira/rest/api/3/issueLink`, {
-          method:'POST',
-          headers:{'Authorization':AUTH,'Content-Type':'application/json'},
-          body:JSON.stringify({ type:{name:'Relates'}, inwardIssue:{key:editKey}, outwardIssue:{key:editBugKey} })
-        });
+        editBugUrl = bg.url;
       }
 
       showUpdateSuccess(editKey, issueUrl, moduloNombre, tipoLabel, entorno, sevLbl, editBugKey, editBugUrl);
