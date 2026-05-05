@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QA Testing — Hybred</title>
 <link rel="stylesheet" href="/styles.css">
-<script src="/bg_reporter.js" defer></script>
 
 </head>
 <body>
@@ -413,6 +412,12 @@
     <label class="config-check-label" id="bug-check-label" style="opacity:.4;cursor:not-allowed" title="Solo disponible cuando el resultado es Fail">
       <input type="checkbox" id="reportar-bug" disabled onchange="toggleBgAssignee(this)">
       <span>🐛 Reportar como bug en BG</span>
+    </label>
+    <label class="checkbox-label">
+      <input type="checkbox" id="registrarEnBG"> FN BG
+    </label>
+    <label class="checkbox-label">
+      <input type="checkbox" id="registrarEnQAAFinalizada"> FN QAA
     </label>
     <button class="btn-submit" id="btn-submit" onclick="submitForm()">
       <svg id="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1240,6 +1245,59 @@ async function toggleBgAssignee(chk) {
     console.error('[BG assignees]', e.message);
     sel.innerHTML = '<option value="">Sin asignar</option>';
   }
+}
+
+async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, linkIssueKey }) {
+  const sevSuffix    = severidad.replace(/^severity-/, '');
+  const prioridadBug = { critico:'Highest', mayor:'High', medio:'Medium', menor:'Low', bajo:'Low' }[sevSuffix] || 'Medium';
+  const bgAsignadoId = document.getElementById('bg-asignado').value;
+
+  const bgDescription = { type:'doc', version:1, content:[
+    mkB(`Test Case: ${tcId}`),
+    mkB(`Módulo: ${moduloNombre}`),
+    mkB(`Versión: ${versionActual || '—'}`),
+    mkB(`Severidad: ${sevLbl}`),
+    mkB(`Entorno: ${entorno}`),
+    mkRule(),
+    mkH('Pasos para reproducir'), steps.length > 0 ? mkOrderedList(steps) : mkOrderedList(precon),
+    mkH('Resultado esperado'), mkOrderedList(esperado),
+    mkH('Resultado obtenido'), mkOrderedList(obtenido),
+    ...(impacto ? [mkH('Impacto'), mkP(impacto)] : []),
+    ...(soluciones.length > 0 ? [mkH('Solución propuesta'), mkOrderedList(soluciones)] : []),
+  ]};
+
+  const bugRes = await fetch(`${JIRA_BASE}/rest/api/3/issue`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({ fields: {
+      project:     { key: 'BG' },
+      summary:     `${tcId} — ${desc}`,
+      description: bgDescription,
+      issuetype:   { name: 'Tarea' },
+      priority:    { name: prioridadBug },
+      labels:      [ `severity-${sevSuffix}`, ...moduloLabel.split('+').map(s => s.trim()).filter(Boolean), 'qa-reported', ...(versionActual ? [versionActual] : []) ],
+      ...(bgAsignadoId ? { assignee: { accountId: bgAsignadoId } } : {}),
+    }})
+  });
+
+  if (!bugRes.ok) {
+    const e = await bugRes.json();
+    throw new Error(`BG: ${e.errors ? Object.values(e.errors).join(', ') : JSON.stringify(e)}`);
+  }
+
+  const bug    = await bugRes.json();
+  const bugKey = bug.key;
+  const bugUrl = `https://liceopinoverde.atlassian.net/browse/${bugKey}`;
+
+  if (linkIssueKey) {
+    await fetch(`${JIRA_BASE}/rest/api/3/issueLink`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: { name:'Relates' }, inwardIssue: { key: linkIssueKey }, outwardIssue: { key: bugKey } })
+    });
+  }
+
+  return { key: bugKey, url: bugUrl };
 }
 
 /* ── Assignees ── */
@@ -2154,10 +2212,13 @@ async function submitForm() {
 
   const tipoTest    = tipoPrueba;
   const moduloLabel = window.estructuraActual?.meta?.moduloSistema || epic.modulo;
+  const moduloLabels = moduloLabel
+    ? moduloLabel.split('+').map(s => s.trim()).filter(Boolean)
+    : [];
   const labels = [
     `estado-${estado.toLowerCase()}`,
     tipoTest,
-    moduloLabel,
+    ...moduloLabels,
     ...(versionActual ? [versionActual] : []),
     ...(estado === 'fail' && severidad ? [severidad] : []),
     ...(esRetest ? ['retest'] : []),
@@ -2262,48 +2323,7 @@ async function submitForm() {
 
       const summary = `${requiereConfig ? '⚙️ ' : ''}${esRetest ? ' ' : ''}${tcId} — ${desc}`;
 
-      // ── 1. Crear bug en BG primero ──
-      let bugKey = null, bugUrl = null;
-      if (estado === 'fail' && reportarBug) {
-        const sevSuffix    = severidad.replace(/^severity-/, '');
-        const prioridadBug = { critico:'Highest', mayor:'High', medio:'Medium', menor:'Low', bajo:'Low' }[sevSuffix] || 'Medium';
-        const bugDescription = { type:'doc', version:1, content:[
-          mkB(`Test Case: ${tcId}`),
-          mkB(`Módulo: ${moduloNombre}`),
-          mkB(`Versión: ${versionActual || '—'}`),
-          mkB(`Severidad: ${sevLbl}`),
-          mkB(`Entorno: ${entorno}`),
-          mkRule(),
-          mkH('Pasos para reproducir'), steps.length > 0 ? mkOrderedList(steps) : mkOrderedList(precon),
-          mkH('Resultado esperado'), mkOrderedList(esperado),
-          mkH('Resultado obtenido'), mkOrderedList(obtenido),
-          ...(impacto ? [mkH('Impacto'), mkP(impacto)] : []),
-          ...(soluciones.length > 0 ? [mkH('Solución propuesta'), mkOrderedList(soluciones)] : []),
-        ]};
-        const bgAsignadoId = document.getElementById('bg-asignado').value;
-        const bugRes = await fetch(`/jira/rest/api/3/issue`, {
-          method:'POST',
-          headers:{'Authorization':AUTH,'Content-Type':'application/json','Accept':'application/json'},
-          body:JSON.stringify({ fields:{
-            project:     { key: 'BG' },
-            summary:     `${tcId} — ${desc}`,
-            description: bugDescription,
-            issuetype:   { name: 'Tarea' },
-            priority:    { name: prioridadBug },
-            labels:      [ `severity-${sevSuffix}`, moduloLabel, 'qa-reported', ...(versionActual ? [versionActual] : []) ],
-            ...(bgAsignadoId ? { assignee: { accountId: bgAsignadoId } } : {}),
-          }})
-        });
-        if (!bugRes.ok) {
-          const e = await bugRes.json();
-          throw new Error(`Error al crear bug en BG: ${e.errors ? Object.values(e.errors).join(', ') : JSON.stringify(e)}`);
-        }
-        const bug = await bugRes.json();
-        bugKey = bug.key;
-        bugUrl = `https://liceopinoverde.atlassian.net/browse/${bugKey}`;
-      }
-
-      // ── 2. Crear issue en QAA ──
+      // ── 1. Crear issue en QAA ──
       const r = await fetch(`/jira/rest/api/3/issue`, {
         method:'POST',
         headers:{'Authorization':AUTH,'Content-Type':'application/json','Accept':'application/json'},
@@ -2324,6 +2344,53 @@ async function submitForm() {
       const created  = await r.json();
       const issueKey = created.key;
       const issueUrl = `https://liceopinoverde.atlassian.net/browse/${issueKey}`;
+
+      // ── 3b. Registrar en BG como finalizada (si está habilitado) ──
+      const registrarEnBG = document.getElementById('registrarEnBG')?.checked;
+      let bgFinalizadaKey = null;
+      if (registrarEnBG) {
+        const bgFinRes = await fetch(`/jira/rest/api/3/issue`, {
+          method: 'POST',
+          headers: { 'Authorization': AUTH, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ fields: {
+            project:     { key: 'BG' },
+            summary:     summary,
+            description: description,
+            issuetype:   { name: 'Tarea' },
+            labels:      labels,
+            ...(versionActual ? { fixVersions: [{ name: versionActual }] } : {}),
+          }})
+        });
+        if (bgFinRes.ok) {
+          const bgFinData = await bgFinRes.json();
+          bgFinalizadaKey = bgFinData.key;
+          // Transicionar a "Finalizada" (transition id: "31")
+          await fetch(`/jira/rest/api/3/issue/${bgFinalizadaKey}/transitions`, {
+            method: 'POST',
+            headers: { 'Authorization': AUTH, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transition: { id: '31' } })
+          });
+          // Vincular BG finalizada <-> QAA
+          await fetch(`/jira/rest/api/3/issueLink`, {
+            method: 'POST',
+            headers: { 'Authorization': AUTH, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type:          { name: 'Relates' },
+              inwardIssue:   { key: issueKey },
+              outwardIssue:  { key: bgFinalizadaKey }
+            })
+          });
+        }
+      }
+
+      // ── 3c. Transicionar QAA a "Finalizada" (si está habilitado) ──
+      if (document.getElementById('registrarEnQAAFinalizada')?.checked) {
+        await fetch(`/jira/rest/api/3/issue/${issueKey}/transitions`, {
+          method: 'POST',
+          headers: { 'Authorization': AUTH, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transition: { id: '31' } })
+        });
+      }
 
       // ── 3. Adjuntos ──
       for (const file of uploadedFiles) {
@@ -2350,13 +2417,12 @@ async function submitForm() {
         });
       }
 
-      // ── 5. Vincular BG <-> QAA ──
-      if (bugKey) {
-        await fetch(`/jira/rest/api/3/issueLink`, {
-          method:'POST',
-          headers:{'Authorization':AUTH,'Content-Type':'application/json'},
-          body:JSON.stringify({ type:{name:'Relates'}, inwardIssue:{key:issueKey}, outwardIssue:{key:bugKey} })
-        });
+      // ── 5. Crear bug en BG (independiente de QAA) ──
+      let bugKey = null, bugUrl = null;
+      if (estado === 'fail' && reportarBug) {
+        const bg = await crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, linkIssueKey: issueKey });
+        bugKey = bg.key;
+        bugUrl = bg.url;
       }
 
       // ── 6. Actualizar cache y refrescar módulo ──

@@ -61,7 +61,7 @@ async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual
       description: bgDescription,
       issuetype:   { name: 'Bug' },
       priority:    { name: prioridadBug },
-      labels:      [ `severity-${sevSuffix}`, moduloLabel, 'qa-reported', ...(versionActual ? [versionActual] : []) ],
+      labels:      [ `severity-${sevSuffix}`, ...moduloLabel.split('+').map(s => s.trim()).filter(Boolean), 'qa-reported', ...(versionActual ? [versionActual] : []) ],
       ...(bgAsignadoId ? { assignee: { accountId: bgAsignadoId } } : {}),
     }})
   });
