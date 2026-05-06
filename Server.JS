@@ -39,6 +39,29 @@ const ENV_ERROR = !PORT || !JIRA_HOST || !JIRA_EMAIL || !JIRA_TOKEN
 
 const AUTH = ENV_ERROR ? '' : 'Basic ' + Buffer.from(JIRA_EMAIL + ':' + JIRA_TOKEN).toString('base64');
 
+let myAccountId = null;
+
+function fetchMyself() {
+  if (ENV_ERROR) return;
+  const req = https.request(
+    { hostname: JIRA_HOST, port: 443, path: '/rest/api/3/myself', method: 'GET',
+      headers: { 'Authorization': AUTH, 'Accept': 'application/json' } },
+    res => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const me = JSON.parse(data);
+          if (me.accountId) { myAccountId = me.accountId; console.log(`  accountId resuelto: ${myAccountId}`); }
+          else console.warn('[MYSELF] respuesta sin accountId:', data.slice(0, 200));
+        } catch(e) { console.warn('[MYSELF] error parseando respuesta:', e.message); }
+      });
+    }
+  );
+  req.on('error', e => console.warn('[MYSELF] error de red:', e.message));
+  req.end();
+}
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css':  'text/css',
@@ -77,7 +100,21 @@ const server = http.createServer((req, res) => {
     let body = [];
     req.on('data', chunk => body.push(chunk));
     req.on('end', () => {
-      const bodyData = Buffer.concat(body);
+      let bodyData = Buffer.concat(body);
+
+      // Inyectar campos requeridos en creación de issues
+      if (req.method === 'POST' && jiraPath === '/rest/api/3/issue' && bodyData.length > 0) {
+        try {
+          const payload = JSON.parse(bodyData.toString());
+          if (payload.fields) {
+            if (!payload.fields.reporter && myAccountId)
+              payload.fields.reporter = { id: myAccountId };
+            if (!payload.fields.customfield_10238)
+              payload.fields.customfield_10238 = JIRA_EMAIL;
+            bodyData = Buffer.from(JSON.stringify(payload));
+          }
+        } catch(e) { console.warn('[INJECT] error parseando body:', e.message); }
+      }
 
       const baseHeaders = {
         'Authorization':      AUTH,
@@ -110,12 +147,17 @@ const server = http.createServer((req, res) => {
             return;
           }
 
-          res.writeHead(status, {
-            'Content-Type': proxyRes.headers['content-type'] || 'application/octet-stream',
-            'Cache-Control': 'no-store',
-            'Access-Control-Allow-Origin': '*',
-          });
-          proxyRes.pipe(res);
+          const ct = proxyRes.headers['content-type'] || 'application/octet-stream';
+          res.writeHead(status, { 'Content-Type': ct, 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
+
+          // Log completo de errores Jira para debugging
+          if (status >= 400 && method === 'POST' && path.includes('/issue')) {
+            let raw = '';
+            proxyRes.on('data', c => { raw += c; res.write(c); });
+            proxyRes.on('end', () => { console.log(`[JIRA ERROR ${status}]`, raw); res.end(); });
+          } else {
+            proxyRes.pipe(res);
+          }
         });
 
         proxyReq.on('error', err => {
@@ -182,4 +224,5 @@ server.listen(PORT, () => {
   console.log(`  Abrir en el navegador: http://localhost:${PORT}`);
   console.log('  Ctrl+C para detener');
   console.log('');
+  fetchMyself();
 });

@@ -459,6 +459,14 @@ const AUTH = '';
 let estado = '', severidad = '', frecuencia = '';
 let countdownTimer = null;
 const DRAFT_KEY = 'qa_form_draft';
+let myAccountId = null;
+
+async function fetchMyself() {
+  try {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/myself`, { headers: { 'Accept': 'application/json' } });
+    if (r.ok) { const me = await r.json(); myAccountId = me.accountId; }
+  } catch(e) { console.warn('[myself]', e.message); }
+}
 
 /* ── Memoria persistente (localStorage) ── */
 const MEM_KEY = 'qa_field_memory';
@@ -652,7 +660,7 @@ function sanitizeDraft() {
 }
 
 function rebuildList(wrapId, items, placeholder, removeFn) {
-  if (!items || items.length === 0) return;
+  if (!items) return;
   const wrap = document.getElementById(wrapId);
   wrap.innerHTML = '';
   items.forEach((val, i) => {
@@ -736,6 +744,8 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('config-section').style.display = 'none';
   document.getElementById('reportar-bug').checked = false;
   document.getElementById('bg-assignee-wrap').style.display = 'none';
+
+  fetchMyself();
 
   const editKey = new URLSearchParams(window.location.search).get('edit');
   if (editKey) {
@@ -1142,7 +1152,7 @@ function onTestCaseChange() {
   const tc = testCases.find(t => t.id === tcId);
   if (!tc) return;
 
-  const setVal = (id, val) => { if (val != null) { const el = document.getElementById(id); if (el) el.value = val; } };
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
 
   // Mostrar el ID del TC seleccionado en el campo tc-id
   const tcIdField = document.getElementById('tc-id');
@@ -1170,30 +1180,33 @@ function onTestCaseChange() {
   setVal('descripcion', tc.titulo);
   setVal('historia',    tc.historia);
   setVal('prioridad',   tc.prioridad);
-
-  if (tc.tipoTest) {
-    const tipSel = document.getElementById('tipo-prueba');
-    if (tipSel) {
-      if (!tipSel.querySelector(`option[value="${tc.tipoTest}"]`)) {
-        const opt = document.createElement('option');
-        opt.value = tc.tipoTest;
-        opt.textContent = tc.tipoTest.replace(/^type-/, '').replace(/-/g, ' ')
-          .replace(/\b\w/g, c => c.toUpperCase());
-        tipSel.appendChild(opt);
-      }
-      tipSel.value = tc.tipoTest;
-    }
-  }
   setVal('navegador',   tc.navegador);
   setVal('sistema-op',  tc.sistemaOp);
   setVal('rol-usuario', tc.rolUsuario);
   setVal('impacto',     tc.impacto);
 
-  if (tc.precondiciones?.length)  rebuildList('precon-wrap',  tc.precondiciones,  'Precondición', 'removePrecon');
-  if (tc.pasos?.length)           rebuildList('steps-wrap',   tc.pasos,           'Paso',         'removeStep');
-  if (tc.datos?.length)           rebuildList('datos-wrap',   tc.datos,           'Dato',         'removeDatos');
-  if (tc.postcondiciones?.length) rebuildList('postcon-wrap', tc.postcondiciones, 'Postcondición','removePostcon');
-  if (tc.resultadoEsperado)       rebuildList('esperado-wrap', Array.isArray(tc.resultadoEsperado) ? tc.resultadoEsperado : [tc.resultadoEsperado], 'Ítem', 'removeEsperado');
+  const tipSel = document.getElementById('tipo-prueba');
+  if (tipSel) {
+    if (tc.tipoTest) {
+      if (!tipSel.querySelector(`option[value="${tc.tipoTest}"]`)) {
+        const opt = document.createElement('option');
+        opt.value = tc.tipoTest;
+        opt.textContent = tc.tipoTest.replace(/^type-/, '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        tipSel.appendChild(opt);
+      }
+      tipSel.value = tc.tipoTest;
+    } else {
+      tipSel.value = '';
+    }
+  }
+
+  const emptyRow = [''];
+  rebuildList('precon-wrap',  tc.precondiciones?.length  ? tc.precondiciones  : emptyRow, 'Precondición', 'removePrecon');
+  rebuildList('steps-wrap',   tc.pasos?.length            ? tc.pasos           : emptyRow, 'Paso',         'removeStep');
+  rebuildList('datos-wrap',   tc.datos?.length            ? tc.datos           : emptyRow, 'Dato',         'removeDatos');
+  rebuildList('postcon-wrap', tc.postcondiciones?.length  ? tc.postcondiciones : emptyRow, 'Postcondición','removePostcon');
+  const esperado = tc.resultadoEsperado ? (Array.isArray(tc.resultadoEsperado) ? tc.resultadoEsperado : [tc.resultadoEsperado]) : emptyRow;
+  rebuildList('esperado-wrap', esperado, 'Ítem', 'removeEsperado');
 
   window.severidadDefaultTC = tc.severidadSiFalla || estructura?.meta?.severidadDefault || null;
 
@@ -1275,12 +1288,13 @@ async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual
       issuetype:   { name: 'Tarea' },
       labels:      [ `severity-${sevSuffix}`, ...moduloLabel.split('+').map(s => s.trim()).filter(Boolean), 'qa-reported', ...(versionActual ? [versionActual] : []) ],
       ...(bgAsignadoId ? { assignee: { accountId: bgAsignadoId } } : {}),
+      ...(myAccountId  ? { reporter:  { id: myAccountId } } : {}),
     }})
   });
 
   if (!bugRes.ok) {
     const e = await bugRes.json();
-    throw new Error(`BG: ${e.errors ? Object.values(e.errors).join(', ') : JSON.stringify(e)}`);
+    throw new Error(`BG: ${e.errors ? Object.entries(e.errors).map(([k,v])=>`${k}: ${v}`).join(', ') : JSON.stringify(e)}`);
   }
 
   const bug    = await bugRes.json();
@@ -2279,7 +2293,7 @@ async function submitForm() {
           ...(versionActual ? { fixVersions: [{ name: versionActual }] } : {}),
         }})
       });
-      if (!r.ok) { const e = await r.json(); throw new Error(e.errors ? Object.values(e.errors).join(', ') : JSON.stringify(e)); }
+      if (!r.ok) { const e = await r.json(); throw new Error(e.errors ? Object.entries(e.errors).map(([k,v])=>`${k}: ${v}`).join(', ') : JSON.stringify(e)); }
 
       // Eliminar adjuntos que el usuario quitó
       for (const id of (window.removedAttachmentIds || [])) {
@@ -2342,10 +2356,11 @@ async function submitForm() {
           priority:          { name: requiereConfig ? 'High' : 'Medium' },
           labels,
           description,
-          ...(versionActual ? { fixVersions: [{ name: versionActual }] } : {}),
+          ...(versionActual  ? { fixVersions: [{ name: versionActual }] } : {}),
+          ...(myAccountId    ? { reporter:    { id: myAccountId } } : {}),
         }})
       });
-      if (!r.ok) { const e = await r.json(); throw new Error(e.errors ? Object.values(e.errors).join(', ') : JSON.stringify(e)); }
+      if (!r.ok) { const e = await r.json(); throw new Error(e.errors ? Object.entries(e.errors).map(([k,v])=>`${k}: ${v}`).join(', ') : JSON.stringify(e)); }
 
       const created  = await r.json();
       const issueKey = created.key;
@@ -2365,6 +2380,7 @@ async function submitForm() {
             issuetype:   { name: 'Tarea' },
             labels:      labels,
             ...(versionActual ? { fixVersions: [{ name: versionActual }] } : {}),
+            ...(myAccountId   ? { reporter:    { id: myAccountId } } : {}),
           }})
         });
         if (bgFinRes.ok) {
