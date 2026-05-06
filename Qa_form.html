@@ -863,7 +863,7 @@ async function loadIssueForEdit(key) {
   try {
     // ── 1. Fetch issue completo ──
     const r = await fetch(
-      `${JIRA_BASE}/rest/api/3/issue/${key}?fields=summary,labels,description,priority,fixVersions,parent,attachment`,
+      `${JIRA_BASE}/rest/api/3/issue/${key}?fields=summary,labels,description,priority,fixVersions,parent,attachment,issuelinks`,
       { headers: { 'Authorization': AUTH, 'Accept': 'application/json' } }
     );
     if (!r.ok) throw new Error(`HTTP ${r.status} al cargar ${key}`);
@@ -958,7 +958,23 @@ async function loadIssueForEdit(key) {
     }
     if (labels.includes('retest')) {
       const cb = document.getElementById('es-retest');
-      if (cb) { cb.checked = true; toggleRetest(cb); }
+      if (cb) {
+        cb.checked = true;
+        toggleRetest(cb);
+        const retestLink = (f.issuelinks || []).find(l =>
+          (l.inwardIssue?.key  && l.inwardIssue.key  !== key) ||
+          (l.outwardIssue?.key && l.outwardIssue.key !== key)
+        );
+        if (retestLink) {
+          const linkedKey = (retestLink.inwardIssue?.key && retestLink.inwardIssue.key !== key)
+            ? retestLink.inwardIssue.key
+            : retestLink.outwardIssue?.key;
+          if (linkedKey) {
+            const tcField = document.getElementById('retest-tc');
+            if (tcField) tcField.value = linkedKey;
+          }
+        }
+      }
     }
 
     // ── 8. Listas dinámicas ──

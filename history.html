@@ -1132,33 +1132,62 @@ async function actualizarMissingPanel() {
 
     let jql = `parent = "${epicKey}"`;
     if (version) jql += ` AND fixVersion = "${version}"`;
-    const res  = await fetch(`${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=summary&maxResults=200`, { headers:{ 'Accept':'application/json' } });
+    let retestFailJql = `parent = "${epicKey}" AND labels = "retest" AND labels = "estado-fail"`;
+    if (version) retestFailJql += ` AND fixVersion = "${version}"`;
+
+    const [res, retestFailRes] = await Promise.all([
+      fetch(`${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=summary&maxResults=200`, { headers:{ 'Accept':'application/json' } }),
+      fetch(`${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(retestFailJql)}&fields=summary&maxResults=200`, { headers:{ 'Accept':'application/json' } }),
+    ]);
     const data = await res.json();
+    const retestFailData = await retestFailRes.json();
     const executedTitles = new Set((data.issues || []).map(i => extractTCTitle(i.fields?.summary || '')));
 
     const missing = tcs.filter(tc => !executedTitles.has(tc.titulo.toLowerCase()));
+    const retestFailed = (retestFailData.issues || []).map(issue => ({
+      id: issue.key,
+      titulo: extractTCTitle(issue.fields?.summary || '') || issue.key,
+      esRetestFallido: true,
+    }));
+
     const done    = tcs.length - missing.length;
     const vLbl    = version ? ` · ${version}` : '';
+    const total   = missing.length + retestFailed.length;
 
     const doneColor  = done === tcs.length ? '#10b981' : done === 0 ? '#dc2626' : '#f59e0b';
-    const pendText   = missing.length > 0
-      ? `<span style="color:#dc2626;font-weight:600">${missing.length} pendiente${missing.length > 1 ? 's' : ''}</span>`
+    const pendText   = total > 0
+      ? `<span style="color:#dc2626;font-weight:600">${total} pendiente${total > 1 ? 's' : ''}</span>`
       : `<span style="color:#10b981;font-weight:600">✓ Completo</span>`;
 
     document.getElementById('missing-summary').innerHTML =
       `Cobertura${vLbl}: <strong style="color:${doneColor}">${done}/${tcs.length}</strong> ejecutado${done !== 1 ? 's' : ''} &nbsp;·&nbsp; ${pendText}`;
 
-    if (missing.length > 0) {
+    if (total > 0) {
       const formUrl = tc => `/?modulo=${encodeURIComponent(epicKey.toLowerCase())}&tc=${encodeURIComponent(tc.id)}`;
-      document.getElementById('missing-list').innerHTML =
-        missing.map((tc, i) => `
+      const retestUrl = tc => `/?retest=${encodeURIComponent(tc.id)}`;
+      let idx = 0;
+      const missingRows = missing.map(tc => {
+        idx++;
+        return `
           <div class="missing-tc-row" style="cursor:pointer" title="Ejecutar ${tc.id}" onclick="window.location.href='${formUrl(tc)}'">
-            <span class="missing-tc-num">${i + 1}.</span>
+            <span class="missing-tc-num">${idx}.</span>
             <span class="missing-tc-id">${tc.id}</span>
             <span class="missing-tc-name">${tc.titulo}</span>
             <span class="missing-tc-go">▶ Ejecutar</span>
-          </div>`).join('');
-      // Abrir panel automáticamente si hay pendientes
+          </div>`;
+      });
+      const retestRows = retestFailed.map(tc => {
+        idx++;
+        return `
+          <div class="missing-tc-row" style="cursor:pointer" title="Re-ejecutar retest fallido ${tc.id}" onclick="window.location.href='${retestUrl(tc)}'">
+            <span class="missing-tc-num">${idx}.</span>
+            <span class="missing-tc-id">${tc.id}</span>
+            <span class="missing-tc-name">${tc.titulo}</span>
+            <span style="font-size:10px;padding:1px 6px;border-radius:10px;background:#fef3c7;color:#92400e;font-weight:600">🔁 Retest falló</span>
+            <span class="missing-tc-go">▶ Retest</span>
+          </div>`;
+      });
+      document.getElementById('missing-list').innerHTML = [...missingRows, ...retestRows].join('');
       if (!missingPanelOpen) toggleMissingPanel();
     }
   } catch(e) {
@@ -1210,7 +1239,7 @@ async function actualizarRetestPanel() {
   try {
     const [allFails, allRetests] = await Promise.all([
       fetchAllIssuesJql(failJql,   'summary,labels,parent'),
-      fetchAllIssuesJql(retestJql, 'issuelinks,summary'),
+      fetchAllIssuesJql(retestJql, 'issuelinks,summary,labels,parent'),
     ]);
 
     const retestados = new Set();
@@ -1221,7 +1250,8 @@ async function actualizarRetestPanel() {
       });
     });
 
-    const sinRetest = allFails.filter(i => !retestados.has(i.key));
+    const retestsFallidos = allRetests.filter(i => (i.fields.labels || []).includes('estado-fail'));
+    const sinRetest = [...allFails.filter(i => !retestados.has(i.key)), ...retestsFallidos.filter(i => !retestados.has(i.key))];
     document.getElementById('s-sin-retest').textContent = sinRetest.length || '✓';
 
     if (sinRetest.length === 0) {
@@ -1232,11 +1262,14 @@ async function actualizarRetestPanel() {
 
     document.getElementById('retest-summary').innerHTML =
       `Fail sin retest: <strong style="color:#dc2626">${sinRetest.length}</strong> de ${allFails.length} &nbsp;·&nbsp; ` +
-      `<span style="color:#10b981;font-weight:600">${allRetests.length} ya retestados</span>`;
+      `<span style="color:#10b981;font-weight:600">${allRetests.length - retestsFallidos.length} ya retestados</span>`;
 
     document.getElementById('retest-list').innerHTML = sinRetest.map((issue, i) => {
-      const sev = (issue.fields.labels || []).find(l => l.startsWith('severity-'))?.replace('severity-', '') || '';
+      const labels   = issue.fields.labels || [];
+      const isRetestFallido = labels.includes('retest');
+      const sev = labels.find(l => l.startsWith('severity-'))?.replace('severity-', '') || '';
       const sevBadge = sev ? `<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:#fee2e2;color:#991b1b;font-weight:600">${sev}</span>` : '';
+      const retestBadge = isRetestFallido ? `<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:#fef3c7;color:#92400e;font-weight:600">🔁 Retest falló</span>` : '';
       const summary  = issue.fields.summary || '';
       const rawTcId  = summary.replace(/^[⚙️\u{1F501}\u{1F504}\s]+/gu, '').split(' — ')[0].trim();
       const modulo   = (issue.fields.parent?.key || epicKey || '').toLowerCase();
@@ -1251,6 +1284,7 @@ async function actualizarRetestPanel() {
         <span class="missing-tc-id">${rawTcId || issue.key}</span>
         <span class="missing-tc-name">${summary}</span>
         ${sevBadge}
+        ${retestBadge}
         ${formUrl ? '<span class="missing-tc-go">▶ Retest</span>' : ''}
       </div>`;
     }).join('');
