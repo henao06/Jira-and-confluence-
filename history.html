@@ -268,12 +268,16 @@
 .missing-body    { padding:0 16px 12px; }
 .missing-tc-row  {
   display:flex; align-items:baseline; gap:8px;
-  padding:5px 0; border-bottom:1px solid var(--g1); font-size:12.5px;
+  padding:5px 8px; border-bottom:1px solid var(--g1); font-size:12.5px;
+  border-radius:6px; transition:background .15s;
 }
 .missing-tc-row:last-child { border-bottom:none; }
+.missing-tc-row:hover { background:#f5f3ff; }
+.missing-tc-row:hover .missing-tc-go { opacity:1; }
 .missing-tc-num  { color:var(--g4); font-size:11px; min-width:18px; text-align:right; flex-shrink:0; }
 .missing-tc-id   { color:#6d28d9; font-weight:600; font-size:11.5px; white-space:nowrap; flex-shrink:0; }
-.missing-tc-name { color:var(--g7); }
+.missing-tc-name { color:var(--g7); flex:1; }
+.missing-tc-go   { opacity:0; color:#7c3aed; font-size:11px; font-weight:600; white-space:nowrap; flex-shrink:0; transition:opacity .15s; }
 </style>
 </head>
 <body>
@@ -1145,12 +1149,14 @@ async function actualizarMissingPanel() {
       `Cobertura${vLbl}: <strong style="color:${doneColor}">${done}/${tcs.length}</strong> ejecutado${done !== 1 ? 's' : ''} &nbsp;·&nbsp; ${pendText}`;
 
     if (missing.length > 0) {
+      const formUrl = tc => `/?modulo=${encodeURIComponent(epicKey.toLowerCase())}&tc=${encodeURIComponent(tc.id)}`;
       document.getElementById('missing-list').innerHTML =
         missing.map((tc, i) => `
-          <div class="missing-tc-row">
+          <div class="missing-tc-row" style="cursor:pointer" title="Ejecutar ${tc.id}" onclick="window.location.href='${formUrl(tc)}'">
             <span class="missing-tc-num">${i + 1}.</span>
             <span class="missing-tc-id">${tc.id}</span>
             <span class="missing-tc-name">${tc.titulo}</span>
+            <span class="missing-tc-go">▶ Ejecutar</span>
           </div>`).join('');
       // Abrir panel automáticamente si hay pendientes
       if (!missingPanelOpen) toggleMissingPanel();
@@ -1203,7 +1209,7 @@ async function actualizarRetestPanel() {
 
   try {
     const [allFails, allRetests] = await Promise.all([
-      fetchAllIssuesJql(failJql,   'summary,labels'),
+      fetchAllIssuesJql(failJql,   'summary,labels,parent'),
       fetchAllIssuesJql(retestJql, 'issuelinks,summary'),
     ]);
 
@@ -1231,12 +1237,21 @@ async function actualizarRetestPanel() {
     document.getElementById('retest-list').innerHTML = sinRetest.map((issue, i) => {
       const sev = (issue.fields.labels || []).find(l => l.startsWith('severity-'))?.replace('severity-', '') || '';
       const sevBadge = sev ? `<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:#fee2e2;color:#991b1b;font-weight:600">${sev}</span>` : '';
-      const url = `https://liceopinoverde.atlassian.net/browse/${issue.key}`;
-      return `<div class="missing-tc-row">
+      const summary  = issue.fields.summary || '';
+      const rawTcId  = summary.replace(/^[⚙️\u{1F501}\u{1F504}\s]+/gu, '').split(' — ')[0].trim();
+      const modulo   = (issue.fields.parent?.key || epicKey || '').toLowerCase();
+      const formUrl  = modulo && rawTcId
+        ? `/?modulo=${encodeURIComponent(modulo)}&tc=${encodeURIComponent(rawTcId)}&retest=${encodeURIComponent(issue.key)}`
+        : null;
+      const rowAttrs = formUrl
+        ? `style="cursor:pointer" title="Hacer retest de ${rawTcId}" onclick="window.location.href='${formUrl}'"`
+        : '';
+      return `<div class="missing-tc-row" ${rowAttrs}>
         <span class="missing-tc-num">${i + 1}.</span>
-        <a class="missing-tc-id" href="${url}" target="_blank">${issue.key}</a>
-        <span class="missing-tc-name">${issue.fields.summary || ''}</span>
+        <span class="missing-tc-id">${rawTcId || issue.key}</span>
+        <span class="missing-tc-name">${summary}</span>
         ${sevBadge}
+        ${formUrl ? '<span class="missing-tc-go">▶ Retest</span>' : ''}
       </div>`;
     }).join('');
 

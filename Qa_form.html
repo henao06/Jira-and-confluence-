@@ -738,7 +738,7 @@ document.addEventListener('click',  e => {
   if (e.target.matches('.e-btn, .sev-btn')) setTimeout(persistForm, 0);
 });
 
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('fecha').value = new Date().toISOString().split('T')[0];
   document.getElementById('requiere-config').checked = false;
   document.getElementById('config-section').style.display = 'none';
@@ -747,15 +747,45 @@ window.addEventListener('DOMContentLoaded', () => {
 
   fetchMyself();
 
-  const editKey = new URLSearchParams(window.location.search).get('edit');
+  const params      = new URLSearchParams(window.location.search);
+  const editKey     = params.get('edit');
+  const paramModulo = params.get('modulo');
+  const paramTc     = params.get('tc');
+
   if (editKey) {
     window.editMode = { key: editKey.toUpperCase() };
-    // En modo edición no restauramos draft ni mostramos el TC ID genérico
     fetchAssignees();
     initMemoryListeners();
-    // Cargamos epics y versiones primero, luego el issue
     Promise.all([cargarEpicsDesdeJira(), inicializarSistemaVersiones()])
       .finally(() => loadIssueForEdit(window.editMode.key));
+
+  } else if (paramModulo && paramTc) {
+    // Llegamos desde history — pre-seleccionar módulo y TC
+    window.editMode = null;
+    fetchAssignees();
+    initMemoryListeners();
+    inicializarSistemaVersiones();
+    await cargarEpicsDesdeJira();
+    const modSel = document.getElementById('modulo');
+    if (modSel.querySelector(`option[value="${paramModulo}"]`)) {
+      modSel.value = paramModulo;
+      await onModuloChange();
+      const tcSel = document.getElementById('test-case-select');
+      if (tcSel.querySelector(`option[value="${paramTc}"]`)) {
+        tcSel.value = paramTc;
+        onTestCaseChange();
+      }
+    }
+    // Si viene con ?retest, pre-marcar el checkbox y el campo
+    const paramRetest = params.get('retest');
+    if (paramRetest) {
+      const cb = document.getElementById('es-retest');
+      if (cb && !cb.checked) { cb.checked = true; toggleRetest(cb); }
+      const rf = document.getElementById('retest-tc');
+      if (rf) rf.value = paramRetest;
+    }
+    history.replaceState(null, '', '/');
+
   } else {
     window.editMode = null;
     sanitizeDraft();
@@ -1796,11 +1826,14 @@ async function cargarEpicsDesdeJira() {
 
     select.disabled = false;
 
-    // Restaurar módulo del draft si existe
-    const savedModulo = (() => { try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}').modulo; } catch { return ''; } })();
-    if (savedModulo && select.querySelector(`option[value="${savedModulo}"]`)) {
-      select.value = savedModulo;
-      onModuloChange();
+    // Restaurar módulo del draft (salvo que se llegue desde history con ?tc)
+    const _tcParam = new URLSearchParams(window.location.search).get('tc');
+    if (!_tcParam) {
+      const savedModulo = (() => { try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}').modulo; } catch { return ''; } })();
+      if (savedModulo && select.querySelector(`option[value="${savedModulo}"]`)) {
+        select.value = savedModulo;
+        onModuloChange();
+      }
     }
 
   } catch(e) {
