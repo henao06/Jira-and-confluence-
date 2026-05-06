@@ -1,4 +1,4 @@
-from turtle import *
+""" from turtle import *
 from colorsys import *
 
 bgcolor("black")
@@ -13,4 +13,4 @@ for i in range(3):
 
 
 
-done()
+done() """

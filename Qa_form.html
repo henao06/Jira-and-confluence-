@@ -1249,7 +1249,6 @@ async function toggleBgAssignee(chk) {
 
 async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, linkIssueKey }) {
   const sevSuffix    = severidad.replace(/^severity-/, '');
-  const prioridadBug = { critico:'Highest', mayor:'High', medio:'Medium', menor:'Low', bajo:'Low' }[sevSuffix] || 'Medium';
   const bgAsignadoId = document.getElementById('bg-asignado').value;
 
   const bgDescription = { type:'doc', version:1, content:[
@@ -1274,7 +1273,6 @@ async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual
       summary:     `${tcId} — ${desc}`,
       description: bgDescription,
       issuetype:   { name: 'Tarea' },
-      priority:    { name: prioridadBug },
       labels:      [ `severity-${sevSuffix}`, ...moduloLabel.split('+').map(s => s.trim()).filter(Boolean), 'qa-reported', ...(versionActual ? [versionActual] : []) ],
       ...(bgAsignadoId ? { assignee: { accountId: bgAsignadoId } } : {}),
     }})
@@ -2323,7 +2321,15 @@ async function submitForm() {
 
       const summary = `${requiereConfig ? '⚙️ ' : ''}${esRetest ? ' ' : ''}${tcId} — ${desc}`;
 
-      // ── 1. Crear issue en QAA ──
+      // ── 1. Crear bug en BG primero (bloquea si falla) ──
+      let bugKey = null, bugUrl = null;
+      if (estado === 'fail' && reportarBug) {
+        const bg = await crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, linkIssueKey: null });
+        bugKey = bg.key;
+        bugUrl = bg.url;
+      }
+
+      // ── 2. Crear issue en QAA ──
       const r = await fetch(`/jira/rest/api/3/issue`, {
         method:'POST',
         headers:{'Authorization':AUTH,'Content-Type':'application/json','Accept':'application/json'},
@@ -2417,12 +2423,13 @@ async function submitForm() {
         });
       }
 
-      // ── 5. Crear bug en BG (independiente de QAA) ──
-      let bugKey = null, bugUrl = null;
-      if (estado === 'fail' && reportarBug) {
-        const bg = await crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, linkIssueKey: issueKey });
-        bugKey = bg.key;
-        bugUrl = bg.url;
+      // ── 5. Vincular BG <-> QAA ──
+      if (bugKey) {
+        await fetch(`${JIRA_BASE}/rest/api/3/issueLink`, {
+          method:'POST',
+          headers:{'Authorization':AUTH,'Content-Type':'application/json'},
+          body:JSON.stringify({ type:{name:'Relates'}, inwardIssue:{key:issueKey}, outwardIssue:{key:bugKey} })
+        });
       }
 
       // ── 6. Actualizar cache y refrescar módulo ──
