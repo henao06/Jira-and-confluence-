@@ -391,6 +391,14 @@
       <label class="filter-check-item"><input type="checkbox" id="f-config"> ⚙️ Requiere configuración</label>
       <label class="filter-check-item"><input type="checkbox" id="f-retest"> 🔁 Solo retest</label>
     </div>
+    <div class="filter-group" style="margin-top:10px">
+      <span class="filter-label">🔁 Estado Retest (Fail)</span>
+      <select class="filter-select" id="f-retest-estado">
+        <option value="">Todos</option>
+        <option value="fail-pendiente">⏳ Pendiente retest</option>
+        <option value="fail-retestado">✅ Ya retestado</option>
+      </select>
+    </div>
     <div class="filters-footer">
       <button class="btn-apply" onclick="applyFilters()">Aplicar</button>
       <button class="btn-clear-all" onclick="clearFilters()">Limpiar todo</button>
@@ -406,6 +414,10 @@
     <div class="stat-card s-rate"><span class="stat-num" id="s-rate">—</span><span class="stat-lbl">Pass rate</span></div>
     <div class="stat-card"><span class="stat-num" id="s-config">—</span><span class="stat-lbl">⚙️ Config</span></div>
     <div class="stat-card"><span class="stat-num" id="s-retest">—</span><span class="stat-lbl">🔁 Retest</span></div>
+    <div class="stat-card s-fail" id="s-sin-retest-card" style="cursor:pointer" onclick="toggleRetestPanel()" title="Ver cuáles fail les falta retest">
+      <span class="stat-num" id="s-sin-retest">—</span>
+      <span class="stat-lbl">⚠️ Sin retest</span>
+    </div>
   </div>
 
   <!-- Progress bar -->
@@ -414,6 +426,17 @@
       <div class="progress-seg seg-pass"  id="prog-pass"  style="width:0%"></div>
       <div class="progress-seg seg-fail"  id="prog-fail"  style="width:0%"></div>
       <div class="progress-seg seg-block" id="prog-block" style="width:0%"></div>
+    </div>
+  </div>
+
+  <!-- Fail sin retest panel -->
+  <div id="retest-panel" class="missing-panel" style="display:none;border-color:#fca5a5">
+    <div class="missing-header" onclick="toggleRetestPanel()" style="background:#fff5f5">
+      <span class="missing-summary" id="retest-summary">Analizando retests...</span>
+      <span class="missing-toggle" id="retest-toggle">▼</span>
+    </div>
+    <div class="missing-body" id="retest-body" style="display:none">
+      <div id="retest-list"></div>
     </div>
   </div>
 
@@ -555,7 +578,7 @@ function toggleFilters() {
 }
 
 function actualizarBadge() {
-  const selects = ['f-version','f-epic','f-estado','f-tipo','f-prioridad','f-severidad','f-desde','f-hasta'];
+  const selects = ['f-version','f-epic','f-estado','f-tipo','f-prioridad','f-severidad','f-desde','f-hasta','f-retest-estado'];
   const checks  = ['f-config','f-retest'];
   const texto   = document.getElementById('f-texto').value.trim();
   let n = selects.filter(id => document.getElementById(id).value).length
@@ -609,6 +632,13 @@ function buildJQL() {
   }
   if (g('f-config').checked)  parts.push('labels = "requiere-config"');
   if (g('f-retest').checked)  parts.push('labels = "retest"');
+  const retestEstado = g('f-retest-estado').value;
+  if (retestEstado === 'fail-pendiente') {
+    parts.push('labels = "estado-fail"');
+    parts.push('labels not in ("retest")');
+  } else if (retestEstado === 'fail-retestado') {
+    parts.push('labels = "retest"');
+  }
   return parts.join(' AND ') + ' ORDER BY created DESC';
 }
 
@@ -798,8 +828,9 @@ function saveFilters() {
     desde:     g('f-desde').value,
     hasta:     g('f-hasta').value,
     texto:     g('f-texto').value,
-    config:    g('f-config').checked,
-    retest:    g('f-retest').checked,
+    config:       g('f-config').checked,
+    retest:       g('f-retest').checked,
+    retestEstado: g('f-retest-estado').value,
   }));
 }
 
@@ -819,9 +850,10 @@ function restoreFilters() {
     if (s.texto)   { g('f-texto').value = s.texto; g('search-clear').style.display = 'block'; }
     g('f-config').checked = s.config || false;
     g('f-retest').checked = s.retest || false;
+    if (s.retestEstado) g('f-retest-estado').value = s.retestEstado;
     // Abrir panel si hay algún filtro activo
     const hayFiltros = s.version || s.epic || s.estado || s.tipo || s.prioridad ||
-                       s.severidad || s.desde || s.hasta || s.config || s.retest;
+                       s.severidad || s.desde || s.hasta || s.config || s.retest || s.retestEstado;
     if (hayFiltros) {
       document.getElementById('filters-panel').classList.add('open');
       document.getElementById('btn-toggle').classList.add('active');
@@ -840,11 +872,13 @@ function applyFilters() {
   loadPage(currentJQL, currentPage);
   fetchStats(currentJQL);
   missingPanelOpen = false;
+  retestPanelOpen  = false;
   actualizarMissingPanel();
+  actualizarRetestPanel();
 }
 
 function clearFilters() {
-  ['f-version','f-epic','f-estado','f-tipo','f-prioridad','f-severidad'].forEach(id => document.getElementById(id).value='');
+  ['f-version','f-epic','f-estado','f-tipo','f-prioridad','f-severidad','f-retest-estado'].forEach(id => document.getElementById(id).value='');
   ['f-desde','f-hasta'].forEach(id => document.getElementById(id).value='');
   ['f-config','f-retest'].forEach(id => document.getElementById(id).checked=false);
   document.getElementById('f-texto').value='';
@@ -1134,6 +1168,92 @@ function toggleMissingPanel() {
   toggle.textContent  = missingPanelOpen ? '▲' : '▼';
 }
 
+// ── Fail sin retest ───────────────────────────────────────────────────────────
+let retestPanelOpen = false;
+
+async function fetchAllIssuesJql(jql, fields) {
+  const h = { 'Accept': 'application/json' };
+  let all = [], nextToken = null;
+  while (true) {
+    let url = `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=${fields}&maxResults=100`;
+    if (nextToken) url += `&nextPageToken=${encodeURIComponent(nextToken)}`;
+    const r = await fetch(url, { headers: h });
+    if (!r.ok) break;
+    const d = await r.json();
+    all.push(...(d.issues || []));
+    if (d.isLast || !d.nextPageToken) break;
+    nextToken = d.nextPageToken;
+  }
+  return all;
+}
+
+async function actualizarRetestPanel() {
+  const panel = document.getElementById('retest-panel');
+  panel.style.display = 'block';
+  document.getElementById('retest-summary').textContent = 'Analizando retests...';
+  document.getElementById('retest-list').innerHTML = '';
+
+  const version  = document.getElementById('f-version').value;
+  const epicKey  = document.getElementById('f-epic').value;
+
+  let failJql   = 'project = QAA AND labels = "estado-fail" AND labels not in ("retest")';
+  let retestJql = 'project = QAA AND labels = "retest"';
+  if (version)  { failJql += ` AND fixVersion = "${version}"`; retestJql += ` AND fixVersion = "${version}"`; }
+  if (epicKey)  { failJql += ` AND parent = "${epicKey}"`;     retestJql += ` AND parent = "${epicKey}"`; }
+
+  try {
+    const [allFails, allRetests] = await Promise.all([
+      fetchAllIssuesJql(failJql,   'summary,labels'),
+      fetchAllIssuesJql(retestJql, 'issuelinks,summary'),
+    ]);
+
+    const retestados = new Set();
+    allRetests.forEach(issue => {
+      (issue.fields.issuelinks || []).forEach(link => {
+        if (link.inwardIssue?.key)  retestados.add(link.inwardIssue.key);
+        if (link.outwardIssue?.key) retestados.add(link.outwardIssue.key);
+      });
+    });
+
+    const sinRetest = allFails.filter(i => !retestados.has(i.key));
+    document.getElementById('s-sin-retest').textContent = sinRetest.length || '✓';
+
+    if (sinRetest.length === 0) {
+      document.getElementById('retest-summary').innerHTML =
+        `<span style="color:#10b981;font-weight:600">✓ Todos los fail tienen retest</span>`;
+      return;
+    }
+
+    document.getElementById('retest-summary').innerHTML =
+      `Fail sin retest: <strong style="color:#dc2626">${sinRetest.length}</strong> de ${allFails.length} &nbsp;·&nbsp; ` +
+      `<span style="color:#10b981;font-weight:600">${allRetests.length} ya retestados</span>`;
+
+    document.getElementById('retest-list').innerHTML = sinRetest.map((issue, i) => {
+      const sev = (issue.fields.labels || []).find(l => l.startsWith('severity-'))?.replace('severity-', '') || '';
+      const sevBadge = sev ? `<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:#fee2e2;color:#991b1b;font-weight:600">${sev}</span>` : '';
+      const url = `https://liceopinoverde.atlassian.net/browse/${issue.key}`;
+      return `<div class="missing-tc-row">
+        <span class="missing-tc-num">${i + 1}.</span>
+        <a class="missing-tc-id" href="${url}" target="_blank">${issue.key}</a>
+        <span class="missing-tc-name">${issue.fields.summary || ''}</span>
+        ${sevBadge}
+      </div>`;
+    }).join('');
+
+    if (!retestPanelOpen) toggleRetestPanel();
+  } catch(e) {
+    document.getElementById('retest-summary').textContent = `Error: ${e.message}`;
+  }
+}
+
+function toggleRetestPanel() {
+  const body   = document.getElementById('retest-body');
+  const toggle = document.getElementById('retest-toggle');
+  retestPanelOpen = !retestPanelOpen;
+  body.style.display   = retestPanelOpen ? 'block' : 'none';
+  toggle.textContent   = retestPanelOpen ? '▲' : '▼';
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   await cargarFiltros();
@@ -1142,6 +1262,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadPage(currentJQL, 0);
   fetchStats(currentJQL);
   actualizarMissingPanel();
+  actualizarRetestPanel();
 });
 </script>
 </body>
