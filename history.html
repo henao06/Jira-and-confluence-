@@ -1270,11 +1270,25 @@ function toggleRetestPanel() {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+let _filterDebounce = null;
+function applyFiltersDebounced() {
+  clearTimeout(_filterDebounce);
+  _filterDebounce = setTimeout(applyFilters, 400);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   await cargarFiltros();
   restoreFilters();
   currentJQL = buildJQL();
   loadPage(currentJQL, 0);
+
+  // Auto-buscar al cambiar cualquier filtro
+  ['f-version','f-epic','f-estado','f-tipo','f-prioridad','f-severidad','f-retest-estado']
+    .forEach(id => document.getElementById(id)?.addEventListener('change', applyFilters));
+  ['f-config','f-retest']
+    .forEach(id => document.getElementById(id)?.addEventListener('change', applyFilters));
+  ['f-desde','f-hasta']
+    .forEach(id => document.getElementById(id)?.addEventListener('change', applyFiltersDebounced));
   fetchStats(currentJQL);
   actualizarMissingPanel();
   actualizarRetestPanel();
