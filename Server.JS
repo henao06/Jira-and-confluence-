@@ -107,8 +107,6 @@ const server = http.createServer((req, res) => {
         try {
           const payload = JSON.parse(bodyData.toString());
           if (payload.fields) {
-            if (!payload.fields.reporter && myAccountId)
-              payload.fields.reporter = { id: myAccountId };
             if (!payload.fields.customfield_10238)
               payload.fields.customfield_10238 = JIRA_EMAIL;
             bodyData = Buffer.from(JSON.stringify(payload));

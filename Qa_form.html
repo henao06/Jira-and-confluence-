@@ -1334,7 +1334,6 @@ async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual
       issuetype:   { name: 'Tarea' },
       labels:      [ `severity-${sevSuffix}`, ...moduloLabel.split('+').map(s => s.trim()).filter(Boolean), 'qa-reported', ...(versionActual ? [versionActual] : []) ],
       ...(bgAsignadoId ? { assignee: { accountId: bgAsignadoId } } : {}),
-      ...(myAccountId  ? { reporter:  { id: myAccountId } } : {}),
     }})
   });
 
@@ -2338,7 +2337,7 @@ async function submitForm() {
           summary,
           labels,
           description,
-          priority: { name: requiereConfig ? 'High' : 'Medium' },
+          priority: { name: prioridad },
           ...(versionActual ? { fixVersions: [{ name: versionActual }] } : {}),
         }})
       });
@@ -2406,7 +2405,6 @@ async function submitForm() {
           labels,
           description,
           ...(versionActual  ? { fixVersions: [{ name: versionActual }] } : {}),
-          ...(myAccountId    ? { reporter:    { id: myAccountId } } : {}),
         }})
       });
       if (!r.ok) { const e = await r.json(); throw new Error(e.errors ? Object.entries(e.errors).map(([k,v])=>`${k}: ${v}`).join(', ') : JSON.stringify(e)); }
@@ -2429,7 +2427,6 @@ async function submitForm() {
             issuetype:   { name: 'Tarea' },
             labels:      labels,
             ...(versionActual ? { fixVersions: [{ name: versionActual }] } : {}),
-            ...(myAccountId   ? { reporter:    { id: myAccountId } } : {}),
           }})
         });
         if (bgFinRes.ok) {
