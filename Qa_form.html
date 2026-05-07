@@ -1306,7 +1306,7 @@ async function toggleBgAssignee(chk) {
   }
 }
 
-async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, linkIssueKey }) {
+async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, sugerencias, linkIssueKey }) {
   const sevSuffix    = severidad.replace(/^severity-/, '');
   const bgAsignadoId = document.getElementById('bg-asignado').value;
 
@@ -1321,7 +1321,8 @@ async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual
     mkH('Resultado esperado'), mkOrderedList(esperado),
     mkH('Resultado obtenido'), mkOrderedList(obtenido),
     ...(impacto ? [mkH('Impacto'), mkP(impacto)] : []),
-    ...(soluciones.length > 0 ? [mkH('Solución propuesta'), mkOrderedList(soluciones)] : []),
+    ...(soluciones.length > 0   ? [mkH('Solución propuesta'), mkOrderedList(soluciones)]  : []),
+    ...(sugerencias.length > 0  ? [mkH('Sugerencias'),        mkOrderedList(sugerencias)] : []),
   ]};
 
   const bugRes = await fetch(`${JIRA_BASE}/rest/api/3/issue`, {
@@ -1345,6 +1346,21 @@ async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual
   const bug    = await bugRes.json();
   const bugKey = bug.key;
   const bugUrl = `https://liceopinoverde.atlassian.net/browse/${bugKey}`;
+
+  for (const file of uploadedFiles) {
+    const fd = new FormData(); fd.append('file', file);
+    await fetch(`${JIRA_BASE}/rest/api/3/issue/${bugKey}/attachments`, {
+      method:'POST', headers:{'Authorization':AUTH,'X-Atlassian-Token':'no-check'}, body:fd
+    });
+  }
+  for (const file of configFiles) {
+    const ext = file.name.split('.').pop();
+    const renamed = new File([file], `config.${ext}`, { type: file.type });
+    const fd = new FormData(); fd.append('file', renamed);
+    await fetch(`${JIRA_BASE}/rest/api/3/issue/${bugKey}/attachments`, {
+      method:'POST', headers:{'Authorization':AUTH,'X-Atlassian-Token':'no-check'}, body:fd
+    });
+  }
 
   if (linkIssueKey) {
     await fetch(`${JIRA_BASE}/rest/api/3/issueLink`, {
@@ -2371,7 +2387,7 @@ async function submitForm() {
       // ── Crear bug en BG si está marcado ──
       let editBugKey = null, editBugUrl = null;
       if (estado === 'fail' && reportarBug) {
-        const bg = await crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, linkIssueKey: editKey });
+        const bg = await crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, sugerencias, linkIssueKey: editKey });
         editBugKey = bg.key;
         editBugUrl = bg.url;
       }
@@ -2386,7 +2402,7 @@ async function submitForm() {
       // ── 1. Crear bug en BG primero (bloquea si falla) ──
       let bugKey = null, bugUrl = null;
       if (estado === 'fail' && reportarBug) {
-        const bg = await crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, linkIssueKey: null });
+        const bg = await crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, sugerencias, linkIssueKey: null });
         bugKey = bg.key;
         bugUrl = bg.url;
       }
