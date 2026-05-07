@@ -633,8 +633,6 @@ function persistForm() {
     postcondiciones:Array.from(document.querySelectorAll('#postcon-wrap .step-row input')).map(i => i.value),
     impacto:       document.getElementById('impacto').value,
     prioridad:     document.getElementById('prioridad').value,
-    esRetest:      document.getElementById('es-retest').checked,
-    retestTc:      document.getElementById('retest-tc').value,
     estado, severidad, frecuencia,
     steps:      Array.from(document.querySelectorAll('#steps-wrap .step-row input')).map(i => i.value),
     obtenido:   Array.from(document.querySelectorAll('#obtenido-wrap .step-row input')).map(i => i.value),
@@ -696,13 +694,6 @@ function restoreForm() {
   set('version', d.version); set('url-pantalla', d.urlPantalla);
   set('rol-usuario', d.rolUsuario);
   set('impacto', d.impacto); set('prioridad', d.prioridad);
-  set('retest-tc', d.retestTc);
-
-  if (d.esRetest) {
-    document.getElementById('es-retest').checked = true;
-    document.getElementById('retest-extra').classList.add('show');
-  }
-
   // Listas dinámicas
   rebuildList('precon-wrap',   d.precondiciones, 'Precondición', 'removePrecon');
   rebuildList('datos-wrap',    d.datos,           'Dato',         'removeDatos');
@@ -1190,7 +1181,12 @@ function onTestCaseChange() {
   if (window._editLoadingBlock) return; // modo edición: no pisar campos cargados desde Jira
   const modulo = document.getElementById('modulo').value;
   const tcId   = document.getElementById('test-case-select').value;
-  if (!tcId || !modulo) return;
+  if (!tcId || !modulo) {
+    const cb = document.getElementById('es-retest');
+    cb.checked = false; toggleRetest(cb);
+    document.getElementById('retest-tc').value = '';
+    return;
+  }
 
   // Try structure from Jira first, fall back to hardcoded
   const estructura = window.estructuraActual;
