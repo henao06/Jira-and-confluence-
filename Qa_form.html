@@ -804,28 +804,37 @@ function parseADFForEdit(adf) {
   const sections = {};
   let section = null;
 
-  for (const node of (adf?.content || [])) {
-    if (node.type === 'rule') { section = null; continue; }
-    if (node.type === 'heading') {
-      section = adfNodeText(node).trim();
-      sections[section] = [];
-      continue;
-    }
-    if (node.type === 'orderedList') {
-      const items = (node.content || []).map(li => adfNodeText(li).trim()).filter(Boolean);
-      if (section) sections[section] = items;
-      continue;
-    }
-    if (node.type === 'paragraph') {
-      const text = adfNodeText(node).trim();
-      const colon = text.indexOf(':');
-      if (colon !== -1) {
-        const k = text.slice(0, colon).trim();
-        const v = text.slice(colon + 1).trim();
-        kv[k] = v;
+  function processNodes(nodes) {
+    for (const node of (nodes || [])) {
+      if (!node) continue;
+      if (node.type === 'rule') { section = null; continue; }
+      if (node.type === 'heading') {
+        section = adfNodeText(node).trim();
+        sections[section] = [];
+        continue;
+      }
+      if (node.type === 'orderedList' || node.type === 'bulletList') {
+        const items = (node.content || []).map(li => adfNodeText(li).trim()).filter(Boolean);
+        if (section) sections[section] = items;
+        continue;
+      }
+      if (node.type === 'paragraph') {
+        const text = adfNodeText(node).trim();
+        const colon = text.indexOf(':');
+        if (colon > 0 && colon < 35) {
+          const k = text.slice(0, colon).trim();
+          const v = text.slice(colon + 1).trim();
+          if (k) kv[k] = v;
+        }
+        continue;
+      }
+      if (node.content?.length) {
+        processNodes(node.content);
       }
     }
   }
+
+  processNodes(adf?.content);
   return { kv, sections };
 }
 
@@ -968,6 +977,76 @@ async function loadIssueForEdit(key) {
       }
     }
 
+    const bgLink = (f.issuelinks || []).find(l => {
+      const k = (l.inwardIssue?.key || l.outwardIssue?.key || '');
+      return k.startsWith('BG-');
+    });
+    if (bgLink) {
+      window.editMode.bgKey = bgLink.inwardIssue?.key?.startsWith('BG-')
+        ? bgLink.inwardIssue.key
+        : bgLink.outwardIssue.key;
+
+      const bugCb = document.getElementById('reportar-bug');
+      if (bugCb && !bugCb.checked) {
+        bugCb.checked = true;
+        await toggleBgAssignee(bugCb);
+      }
+
+      try {
+        const bgRes = await fetch(
+          `${JIRA_BASE}/rest/api/3/issue/${window.editMode.bgKey}?fields=assignee,attachment`,
+          { headers: { 'Authorization': AUTH, 'Accept': 'application/json' } }
+        );
+        if (bgRes.ok) {
+          const bgIssue = await bgRes.json();
+          const bgAccountId = bgIssue.fields?.assignee?.accountId;
+          if (bgAccountId) {
+            const sel = document.getElementById('bg-asignado');
+            const trySelect = (attempts) => {
+              if (!sel) return;
+              const opt = sel.querySelector(`option[value="${bgAccountId}"]`);
+              if (opt) { sel.value = bgAccountId; }
+              else if (attempts > 0) setTimeout(() => trySelect(attempts - 1), 300);
+            };
+            trySelect(10);
+          }
+          const bgAttachments = bgIssue.fields?.attachment || [];
+          window.existingBgAttachmentIds = bgAttachments.map(a => a.id);
+          const wrap = document.getElementById('previews-wrap');
+          bgAttachments.forEach(att => {
+            const proxyUrl = `/jira/rest/api/3/attachment/content/${att.id}`;
+            const shortName = att.filename.length > 14 ? att.filename.slice(0,12)+'…' : att.filename;
+            const item = document.createElement('div');
+            item.className = 'preview-item';
+            item.dataset.bgAttachmentId = att.id;
+            if (att.mimeType?.startsWith('image/')) {
+              item.innerHTML = `
+                <img src="${proxyUrl}" title="${att.filename}"
+                     style="width:90px;height:72px;object-fit:cover;border-radius:8px;border:1.5px solid var(--border)"
+                     onerror="this.style.display='none'">
+                <button type="button" class="preview-remove" onclick="removeExistingBgAttachment(this,'${att.id}')">×</button>
+                <div class="preview-name" style="font-size:9px">[BG] ${shortName}</div>`;
+            } else {
+              const ext = att.filename.split('.').pop().toUpperCase();
+              item.innerHTML = `
+                <a href="${proxyUrl}" target="_blank" style="text-decoration:none">
+                  <div class="preview-file-icon" title="${att.filename}">
+                    <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                    <span class="preview-file-ext">${ext}</span>
+                  </div>
+                </a>
+                <button type="button" class="preview-remove" onclick="removeExistingBgAttachment(this,'${att.id}')">×</button>
+                <div class="preview-name" style="font-size:9px">[BG] ${shortName}</div>`;
+            }
+            wrap?.appendChild(item);
+          });
+        }
+      } catch(e) { console.warn('[BG load assignee]', e.message); }
+    }
+
     // ── 8. Listas dinámicas ──
     const fillList = (wrapId, items, ph, removeFn) => {
       if (items?.length) rebuildList(wrapId, items, ph, removeFn);
@@ -986,6 +1065,10 @@ async function loadIssueForEdit(key) {
     const attachments = f.attachment || [];
     window.existingAttachmentIds = attachments.map(a => a.id);
 
+    if (attachments.length > 0) {
+      document.getElementById('upload-empty').style.display = 'none';
+      document.getElementById('upload-filled').style.display = '';
+    }
     attachments.forEach(att => {
       const proxyUrl = `/jira/rest/api/3/attachment/content/${att.id}`;
       const shortName = att.filename.length > 14 ? att.filename.slice(0,12)+'…' : att.filename;
@@ -1028,10 +1111,16 @@ async function loadIssueForEdit(key) {
 // IDs de adjuntos existentes que el usuario eliminó en el form
 window.removedAttachmentIds = [];
 window.existingAttachmentIds = [];
+window.removedBgAttachmentIds = [];
 
 function removeExistingAttachment(btn, id) {
   btn.closest('.preview-item').remove();
   window.removedAttachmentIds.push(id);
+}
+
+function removeExistingBgAttachment(btn, id) {
+  btn.closest('.preview-item').remove();
+  window.removedBgAttachmentIds.push(id);
 }
 
 async function cargarEstructuraEpic(epicKey) {
@@ -1302,7 +1391,7 @@ async function toggleBgAssignee(chk) {
   }
 }
 
-async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, sugerencias, linkIssueKey }) {
+async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, tipoPrueba, urlPantalla, steps, precon, esperado, obtenido, impacto, soluciones, sugerencias, linkIssueKey }) {
   const sevSuffix    = severidad.replace(/^severity-/, '');
   const bgAsignadoId = document.getElementById('bg-asignado').value;
 
@@ -1312,6 +1401,8 @@ async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual
     mkB(`Versión: ${versionActual || '—'}`),
     mkB(`Severidad: ${sevLbl}`),
     mkB(`Entorno: ${entorno}`),
+    ...(tipoPrueba ? [mkB(`Tipo de prueba: ${tipoPrueba}`)] : []),
+    ...(urlPantalla ? [mkB(`URL / Pantalla: ${urlPantalla}`)] : []),
     mkRule(),
     mkH('Pasos para reproducir'), steps.length > 0 ? mkOrderedList(steps) : mkOrderedList(precon),
     mkH('Resultado esperado'), mkOrderedList(esperado),
@@ -1602,12 +1693,15 @@ function onFilePicked(input) {
 }
 
 function renderPreviews() {
-  const wrap  = document.getElementById('previews-wrap');
+  const wrap   = document.getElementById('previews-wrap');
   const empty  = document.getElementById('upload-empty');
   const filled = document.getElementById('upload-filled');
-  wrap.innerHTML = '';
 
-  if (uploadedFiles.length === 0) {
+  // Eliminar solo los previews de nuevas subidas — no tocar los adjuntos existentes
+  Array.from(wrap.querySelectorAll('.preview-item:not([data-existing-id]):not([data-bg-attachment-id])')).forEach(el => el.remove());
+
+  const hasExisting = wrap.querySelector('[data-existing-id], [data-bg-attachment-id]');
+  if (uploadedFiles.length === 0 && !hasExisting) {
     empty.style.display  = '';
     filled.style.display = 'none';
     return;
@@ -2361,6 +2455,11 @@ async function submitForm() {
           method:'DELETE', headers:{ 'Authorization':AUTH }
         });
       }
+      for (const id of (window.removedBgAttachmentIds || [])) {
+        await fetch(`/jira/rest/api/3/attachment/${id}`, {
+          method:'DELETE', headers:{ 'Authorization':AUTH }
+        });
+      }
 
       // Subir nuevos adjuntos de evidencia
       for (const file of uploadedFiles) {
@@ -2380,10 +2479,53 @@ async function submitForm() {
         });
       }
 
-      // ── Crear bug en BG si está marcado ──
       let editBugKey = null, editBugUrl = null;
-      if (estado === 'fail' && reportarBug) {
-        const bg = await crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, sugerencias, linkIssueKey: editKey });
+
+      if (window.editMode.bgKey) {
+        const bgKey = window.editMode.bgKey;
+        editBugKey = bgKey;
+        editBugUrl = `https://liceopinoverde.atlassian.net/browse/${bgKey}`;
+
+        const bgDescription = { type:'doc', version:1, content:[
+          mkB(`Test Case: ${tcId}`),
+          mkB(`Módulo: ${moduloNombre}`),
+          mkB(`Versión: ${versionActual || '—'}`),
+          mkB(`Severidad: ${sevLbl}`),
+          mkB(`Entorno: ${entorno}`),
+          ...(tipoPrueba ? [mkB(`Tipo de prueba: ${tipoPrueba}`)] : []),
+          ...(urlPantalla ? [mkB(`URL / Pantalla: ${urlPantalla}`)] : []),
+          mkRule(),
+          mkH('Pasos para reproducir'), steps.length > 0 ? mkOrderedList(steps) : mkOrderedList(precon),
+          mkH('Resultado esperado'), mkOrderedList(esperado),
+          mkH('Resultado obtenido'), mkOrderedList(obtenido),
+          ...(impacto       ? [mkH('Impacto'),           mkP(impacto)]              : []),
+          ...(soluciones.length > 0  ? [mkH('Solución propuesta'), mkOrderedList(soluciones)]  : []),
+          ...(sugerencias.length > 0 ? [mkH('Sugerencias'),        mkOrderedList(sugerencias)] : []),
+        ]};
+
+        await fetch(`/jira/rest/api/3/issue/${bgKey}`, {
+          method: 'PUT',
+          headers: { 'Authorization': AUTH, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ fields: { description: bgDescription } })
+        });
+
+        for (const file of uploadedFiles) {
+          const fd = new FormData(); fd.append('file', file);
+          await fetch(`/jira/rest/api/3/issue/${bgKey}/attachments`, {
+            method: 'POST', headers: { 'Authorization': AUTH, 'X-Atlassian-Token': 'no-check' }, body: fd
+          });
+        }
+        for (const file of configFiles) {
+          const ext = file.name.split('.').pop();
+          const renamed = new File([file], `config.${ext}`, { type: file.type });
+          const fd = new FormData(); fd.append('file', renamed);
+          await fetch(`/jira/rest/api/3/issue/${bgKey}/attachments`, {
+            method: 'POST', headers: { 'Authorization': AUTH, 'X-Atlassian-Token': 'no-check' }, body: fd
+          });
+        }
+
+      } else if (estado === 'fail' && reportarBug) {
+        const bg = await crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, tipoPrueba, urlPantalla, steps, precon, esperado, obtenido, impacto, soluciones, sugerencias, linkIssueKey: editKey });
         editBugKey = bg.key;
         editBugUrl = bg.url;
       }
@@ -2398,7 +2540,7 @@ async function submitForm() {
       // ── 1. Crear bug en BG primero (bloquea si falla) ──
       let bugKey = null, bugUrl = null;
       if (estado === 'fail' && reportarBug) {
-        const bg = await crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, sugerencias, linkIssueKey: null });
+        const bg = await crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, tipoPrueba, urlPantalla, steps, precon, esperado, obtenido, impacto, soluciones, sugerencias, linkIssueKey: null });
         bugKey = bg.key;
         bugUrl = bg.url;
       }
