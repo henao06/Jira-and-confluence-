@@ -342,8 +342,8 @@
       </div>
     </div>
     <div class="field">
-      <label class="lbl">Evidencia <span class="hint">Varias imágenes</span></label>
-      <input type="file" id="evidence" accept="image/*" multiple style="display:none" onchange="onFilePicked(this)">
+      <label class="lbl">Evidencia <span class="hint">Imágenes, videos o archivos</span></label>
+      <input type="file" id="evidence" accept="*/*" multiple style="display:none" onchange="onFilePicked(this)">
       <div id="upload-zone">
         <!-- Estado vacío -->
         <div class="upload-area" id="upload-empty" onclick="document.getElementById('evidence').click()">
@@ -1065,11 +1065,40 @@ async function loadIssueForEdit(key) {
     const attachments = f.attachment || [];
     window.existingAttachmentIds = attachments.map(a => a.id);
 
-    if (attachments.length > 0) {
+    const evidenceAtts = attachments.filter(a => !a.filename.startsWith('config.'));
+    const configAtts   = attachments.filter(a =>  a.filename.startsWith('config.'));
+
+    if (evidenceAtts.length > 0) {
       document.getElementById('upload-empty').style.display = 'none';
       document.getElementById('upload-filled').style.display = '';
     }
+    if (configAtts.length > 0) {
+      document.getElementById('config-section').style.display = 'block';
+      const configWrap = document.getElementById('config-previews');
+      configAtts.forEach(att => {
+        const proxyUrl  = `/jira/rest/api/3/attachment/content/${att.id}`;
+        const shortName = att.filename.length > 14 ? att.filename.slice(0,12)+'…' : att.filename;
+        const item = document.createElement('div');
+        item.className = 'preview-item';
+        item.dataset.existingId = att.id;
+        const ext = att.filename.split('.').pop().toUpperCase();
+        item.innerHTML = `
+          <a href="${proxyUrl}" target="_blank" style="text-decoration:none">
+            <div class="preview-file-icon" title="${att.filename}">
+              <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <span class="preview-file-ext">${ext}</span>
+            </div>
+          </a>
+          <button type="button" class="preview-remove" onclick="removeExistingAttachment(this,'${att.id}')">×</button>
+          <div class="preview-name">${shortName}</div>`;
+        configWrap?.appendChild(item);
+      });
+    }
     attachments.forEach(att => {
+      if (att.filename.startsWith('config.')) return;
       const proxyUrl = `/jira/rest/api/3/attachment/content/${att.id}`;
       const shortName = att.filename.length > 14 ? att.filename.slice(0,12)+'…' : att.filename;
       const item = document.createElement('div');
@@ -1659,7 +1688,7 @@ function onConfigFilePicked(input) {
 function renderConfigPreviews() {
   const wrap = document.getElementById('config-previews');
   if (!wrap) return;
-  wrap.innerHTML = '';
+  Array.from(wrap.querySelectorAll('.preview-item:not([data-existing-id])')).forEach(el => el.remove());
   configFiles.forEach((file, i) => {
     const item = document.createElement('div');
     item.className = 'preview-item';
@@ -1708,21 +1737,35 @@ function renderPreviews() {
   }
 
   empty.style.display  = 'none';
-  filled.style.display = '';
+  filled.style.display = 'block';
 
   uploadedFiles.forEach((file, i) => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const item = document.createElement('div');
-      item.className = 'preview-item';
+    const item = document.createElement('div');
+    item.className = 'preview-item';
+    const shortName = file.name.length > 14 ? file.name.slice(0,12)+'…' : file.name;
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        item.innerHTML = `
+          <img src="${e.target.result}" title="${file.name}" onclick="openLb(${i})" style="cursor:zoom-in">
+          <button type="button" class="preview-remove" onclick="removeImg(${i})" title="Quitar">×</button>
+          <div class="preview-name">${shortName}</div>`;
+      };
+      reader.readAsDataURL(file);
+    } else {
+      const ext = file.name.split('.').pop().toUpperCase();
       item.innerHTML = `
-        <img src="${e.target.result}" title="${file.name}" onclick="openLb(${i})" style="cursor:zoom-in">
-        <button type="button" class="preview-remove" onclick="removeImg(${i})" title="Quitar imagen">×</button>
-        <div class="preview-name">${file.name.length > 14 ? file.name.slice(0,12)+'…' : file.name}</div>
-      `;
-      wrap.appendChild(item);
-    };
-    reader.readAsDataURL(file);
+        <div class="preview-file-icon" title="${file.name}">
+          <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <span class="preview-file-ext">${ext}</span>
+        </div>
+        <button type="button" class="preview-remove" onclick="removeImg(${i})" title="Quitar">×</button>
+        <div class="preview-name">${shortName}</div>`;
+    }
+    wrap.appendChild(item);
   });
 }
 
@@ -2503,10 +2546,22 @@ async function submitForm() {
           ...(sugerencias.length > 0 ? [mkH('Sugerencias'),        mkOrderedList(sugerencias)] : []),
         ]};
 
+        const bgSevSuffix = severidad.replace(/^severity-/, '');
+        const bgLabels = [
+          `severity-${bgSevSuffix}`,
+          ...moduloLabel.split('+').map(s => s.trim()).filter(Boolean),
+          'qa-reported',
+          ...(versionActual ? [versionActual] : []),
+        ];
         await fetch(`/jira/rest/api/3/issue/${bgKey}`, {
           method: 'PUT',
           headers: { 'Authorization': AUTH, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ fields: { description: bgDescription } })
+          body: JSON.stringify({ fields: {
+            summary:     `${tcId} — ${desc}`,
+            description: bgDescription,
+            labels:      bgLabels,
+            priority:    { name: prioridad },
+          }})
         });
 
         for (const file of uploadedFiles) {

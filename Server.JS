@@ -137,8 +137,11 @@ const server = http.createServer((req, res) => {
             if (!location) { res.writeHead(502); res.end('Redirect sin Location'); return; }
             try {
               const u = new URL(location);
+              const redirectHeaders = u.hostname === JIRA_HOST
+                ? { 'Authorization': AUTH, 'Accept': '*/*' }
+                : { 'Accept': '*/*' };
               doRequest(u.hostname, u.pathname + (u.search || ''), 'GET',
-                { 'Authorization': AUTH, 'Accept': '*/*' }, null, depth + 1);
+                redirectHeaders, null, depth + 1);
             } catch {
               res.writeHead(502); res.end('Location inválida');
             }
