@@ -148,25 +148,25 @@
   "meta": {
     "moduloSistema":   "modulo-app-web",    // label que se pone en Jira
     "prefix":          "TC",                // prefijo para IDs de test case
-    "severidadDefault":"severity-medio"     // severidad por defecto al marcar FAIL
+    "severidadDefault":"severity-medio"     // severidad pre-seleccionada al marcar FAIL
   },
   "testCases": [
     {
-      "id":               "TC-001",
-      "titulo":           "Login con credenciales válidas",   // → campo Descripción
-      "historia":         "US-012",                           // → Historia/Requerimiento (opcional)
-      "tipoTest":         "functional",                       // functional | regression | smoke | performance | security | ux | api
-      "prioridad":        "High",                             // Highest | High | Medium | Low | Lowest (opcional)
-      "navegador":        "Chrome",                           // Chrome | Firefox | Safari | Edge (opcional)
-      "sistemaOp":        "Windows 11",                       // Windows 11 | macOS | Linux | Android | iOS (opcional)
+      "id":               "TC-001",                            // REQUERIDO — debe ser único
+      "titulo":           "Login con credenciales válidas",    // REQUERIDO → campo Descripción
+      "historia":         "US-012",                            // opcional → Historia / Requerimiento
+      "tipoTest":         "type-funcional",                    // type-funcional | type-regresion | type-ui | type-smoke | type-integracion | type-uat | type-rendimiento
+      "prioridad":        "High",                              // Highest | High | Medium | Low | Lowest | Sin especificar
+      "navegador":        "Chrome",                            // Chrome | Firefox | Safari | Edge
+      "sistemaOp":        "Windows 11",                        // Windows 11 | macOS | Linux | Android | iOS
+      "rolUsuario":       "Estudiante",                        // rol que ejecuta el test
       "precondiciones":   ["El usuario existe en el sistema"],
       "pasos":            ["Ir a /login", "Ingresar email y contraseña", "Click en Entrar"],
-      "datos":            ["email: test@test.com", "pass: Test1234!"], // datos de prueba (opcional)
-      "rolUsuario":       "Estudiante",                       // rol que ejecuta el test (opcional)
-      "impacto":          "Los usuarios no pueden ingresar al sistema", // impacto si falla (opcional)
-      "resultadoEsperado":"Redirige al dashboard",            // string o array de strings
-      "postcondiciones":  ["La sesión queda activa"],         // opcional
-      "severidadSiFalla": "severity-critico"                  // severity-critico | severity-mayor | severity-medio | severity-bajo
+      "datos":            ["email: test@test.com", "pass: Test1234!"],
+      "resultadoEsperado":"Redirige al dashboard",             // string o array de strings
+      "postcondiciones":  ["La sesión queda activa"],
+      "impacto":          "Los usuarios no pueden ingresar al sistema",
+      "severidadSiFalla": "severity-critico"                   // severity-critico | severity-mayor | severity-medio | severity-bajo
     }
   ]
 }</pre>
