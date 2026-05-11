@@ -42,24 +42,27 @@ const AUTH = ENV_ERROR ? '' : 'Basic ' + Buffer.from(JIRA_EMAIL + ':' + JIRA_TOK
 let myAccountId = null;
 
 function fetchMyself() {
-  if (ENV_ERROR) return;
-  const req = https.request(
-    { hostname: JIRA_HOST, port: 443, path: '/rest/api/3/myself', method: 'GET',
-      headers: { 'Authorization': AUTH, 'Accept': 'application/json' } },
-    res => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const me = JSON.parse(data);
-          if (me.accountId) { myAccountId = me.accountId; console.log(`  accountId resuelto: ${myAccountId}`); }
-          else console.warn('[MYSELF] respuesta sin accountId:', data.slice(0, 200));
-        } catch(e) { console.warn('[MYSELF] error parseando respuesta:', e.message); }
-      });
-    }
-  );
-  req.on('error', e => console.warn('[MYSELF] error de red:', e.message));
-  req.end();
+  if (ENV_ERROR) return Promise.resolve();
+  return new Promise(resolve => {
+    const req = https.request(
+      { hostname: JIRA_HOST, port: 443, path: '/rest/api/3/myself', method: 'GET',
+        headers: { 'Authorization': AUTH, 'Accept': 'application/json' } },
+      res => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            const me = JSON.parse(data);
+            if (me.accountId) { myAccountId = me.accountId; console.log(`  accountId resuelto: ${myAccountId}`); }
+            else console.warn('[MYSELF] respuesta sin accountId:', data.slice(0, 200));
+          } catch(e) { console.warn('[MYSELF] error parseando respuesta:', e.message); }
+          resolve();
+        });
+      }
+    );
+    req.on('error', e => { console.warn('[MYSELF] error de red:', e.message); resolve(); });
+    req.end();
+  });
 }
 
 const MIME = {
@@ -109,6 +112,8 @@ const server = http.createServer((req, res) => {
           if (payload.fields) {
             if (!payload.fields.customfield_10238)
               payload.fields.customfield_10238 = JIRA_EMAIL;
+            if (!payload.fields.customfield_10271)
+              payload.fields.customfield_10271 = JIRA_EMAIL;
             bodyData = Buffer.from(JSON.stringify(payload));
           }
         } catch(e) { console.warn('[INJECT] error parseando body:', e.message); }

@@ -146,9 +146,12 @@
     <summary>Estructura esperada del JSON</summary>
     <pre style="margin:10px 0 0;white-space:pre-wrap;font-size:11px;color:var(--g6)">{
   "meta": {
-    "moduloSistema":   "modulo-app-web",    // label que se pone en Jira
-    "prefix":          "TC",                // prefijo para IDs de test case
-    "severidadDefault":"severity-medio"     // severidad pre-seleccionada al marcar FAIL
+    "moduloSistema":        "modulo-app-web",     // label que se pone en Jira. REQUERIDO
+    "prefix":               "TC",                 // prefijo para IDs de test case. REQUERIDO
+    "nombre":               "Login & Autenticación", // nombre legible — se muestra en el select de módulos
+    "severidadDefault":     "critico",            // severity-critico | severity-mayor | severity-medio | severity-bajo (sin prefijo también funciona)
+    "tiposAplicables":      ["funcional", "integracion", "ui"], // filtra el select Tipo de prueba. Sin esto muestra todos
+    "ambientesSugeridos":   ["desarrollo", "staging", "produccion"] // chips informativos bajo el tipo de prueba
   },
   "testCases": [
     {
@@ -166,9 +169,14 @@
       "resultadoEsperado":"Redirige al dashboard",             // string o array de strings
       "postcondiciones":  ["La sesión queda activa"],
       "impacto":          "Los usuarios no pueden ingresar al sistema",
-      "severidadSiFalla": "severity-critico"                   // severity-critico | severity-mayor | severity-medio | severity-bajo
+      "severidadSiFalla": "critico"                            // severity-critico | critico — el prefijo "severity-" es opcional
     }
-  ]
+  ],
+  "datosPrueba": {                                             // opcional — se muestra como panel de referencia en el form
+    "usuarios": {
+      "estudianteValido": { "email": "...", "password": "...", "rol": "Estudiante" }
+    }
+  }
 }</pre>
   </details>
 

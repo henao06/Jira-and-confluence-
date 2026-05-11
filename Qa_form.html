@@ -83,6 +83,7 @@
         <select id="modulo" onchange="onModuloChange()">
           <option value="">Cargando módulos...</option>
         </select>
+        <div id="modulo-nombre-hint" style="display:none;margin-top:4px;font-size:11px;color:#a5b4fc;font-weight:600;padding:2px 0 0 2px"></div>
       </div>
     </div>
     <div class="row2">
@@ -112,6 +113,7 @@
         <input type="text" id="historia" placeholder="Ej: US-012 o REQ-045">
       </div>
     </div>
+    <div id="ambientes-sugeridos-wrap" style="display:none;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 2px;font-size:11px"></div>
     <div class="field">
       <label class="lbl" for="descripcion">Descripción del caso <span class="req">*</span></label>
       <input type="text" id="descripcion" placeholder="¿Qué funcionalidad se está probando?">
@@ -209,6 +211,7 @@
           <div class="step-row"><div class="step-num">1</div><input type="text" placeholder="Dato 1..."><button class="btn-rm" onclick="removeDatos(this)">×</button></div>
         </div>
         <button class="btn-add" onclick="addDatos()">+ Agregar dato</button>
+        <div id="datos-prueba-panel" style="display:none"></div>
       </div>
     </div>
     <div class="field">
@@ -791,6 +794,87 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 const estructuraCache = {}; // epic key → parsed structure
 
+const TIPO_PRUEBA_ALL = [
+  { value: 'type-funcional',   label: 'Funcional' },
+  { value: 'type-regresion',   label: 'Regresión' },
+  { value: 'type-ui',          label: 'UI' },
+  { value: 'type-smoke',       label: 'Smoke' },
+  { value: 'type-integracion', label: 'Integración' },
+  { value: 'type-uat',         label: 'UAT' },
+  { value: 'type-rendimiento', label: 'Rendimiento' },
+];
+
+function aplicarMeta(estructura) {
+  const meta = estructura?.meta || {};
+
+  // nombre del módulo
+  const nombreHint = document.getElementById('modulo-nombre-hint');
+  if (nombreHint) {
+    if (meta.nombre) { nombreHint.textContent = meta.nombre; nombreHint.style.display = 'block'; }
+    else             { nombreHint.style.display = 'none'; }
+  }
+
+  // tiposAplicables → filtrar select tipo-prueba
+  const tipSel     = document.getElementById('tipo-prueba');
+  const prevTipo   = tipSel.value;
+  const normalizar = t => t.startsWith('type-') ? t : `type-${t}`;
+  const aplicables = meta.tiposAplicables?.length ? meta.tiposAplicables.map(normalizar) : null;
+  tipSel.innerHTML = '<option value="" disabled>Seleccionar tipo...</option>';
+  TIPO_PRUEBA_ALL.forEach(({ value, label }) => {
+    if (!aplicables || aplicables.includes(value)) {
+      const opt = document.createElement('option'); opt.value = value; opt.textContent = label;
+      tipSel.appendChild(opt);
+    }
+  });
+  if (prevTipo && tipSel.querySelector(`option[value="${prevTipo}"]`)) tipSel.value = prevTipo;
+
+  // ambientesSugeridos → chips informativos
+  const ambWrap = document.getElementById('ambientes-sugeridos-wrap');
+  if (ambWrap) {
+    const ambientes = meta.ambientesSugeridos;
+    if (ambientes?.length) {
+      const nombres = { desarrollo: 'Desarrollo', dev: 'Dev', staging: 'Staging', qa: 'QA', produccion: 'Producción', production: 'Producción' };
+      ambWrap.innerHTML = `<span style="color:var(--g5);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Ambientes:</span>` +
+        ambientes.map(a => `<span style="padding:2px 8px;border-radius:6px;font-weight:600;background:rgba(99,102,241,.12);color:#a5b4fc;border:1px solid rgba(99,102,241,.25)">${nombres[a] || a}</span>`).join('');
+      ambWrap.style.display = 'flex';
+    } else {
+      ambWrap.style.display = 'none';
+    }
+  }
+
+  // datosPrueba → panel de referencia colapsable
+  const dpPanel = document.getElementById('datos-prueba-panel');
+  if (dpPanel) {
+    const dp = estructura?.datosPrueba;
+    if (dp && Object.keys(dp).length > 0) {
+      dpPanel.innerHTML = renderDatosPrueba(dp);
+      dpPanel.style.display = 'block';
+    } else {
+      dpPanel.style.display = 'none';
+    }
+  }
+}
+
+function renderDatosPrueba(dp) {
+  let rows = '';
+  for (const [group, items] of Object.entries(dp)) {
+    if (!items || typeof items !== 'object') continue;
+    rows += `<div style="margin-top:6px"><div style="font-size:10px;font-weight:700;color:var(--g5);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">${group}</div><div style="display:flex;flex-direction:column;gap:3px">`;
+    for (const [key, val] of Object.entries(items)) {
+      if (val && typeof val === 'object') {
+        const pairs = Object.entries(val).map(([k,v]) =>
+          `<span style="background:var(--g0);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-size:10px"><span style="color:var(--g4)">${k}:</span> <b style="color:var(--g8)">${v}</b></span>`
+        ).join('');
+        rows += `<div style="background:var(--g1);border-radius:6px;padding:5px 8px;font-size:11px"><span style="font-weight:600;color:var(--g6);font-size:10px">${key}</span><div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:3px">${pairs}</div></div>`;
+      }
+    }
+    rows += `</div></div>`;
+  }
+  return `<details style="margin-top:8px"><summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--g5);user-select:none;list-style:none;display:flex;align-items:center;gap:4px">
+    <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+    Datos de referencia del módulo</summary><div style="padding-top:2px">${rows}</div></details>`;
+}
+
 /* ── Modo edición ─────────────────────────────────────────────────────────── */
 
 function adfNodeText(node) {
@@ -1260,6 +1344,8 @@ async function onModuloChange() {
     window.estructuraActual = estado.estructura;
     window.moduloIssues     = estado.issues || [];
 
+    aplicarMeta(estado.estructura);
+
     tcSel.innerHTML = '<option value="">— Seleccioná un Test Case —</option>' +
       estado.testCases.map(tc => `<option value="${tc.id}">${tc.id}: ${tc.titulo}</option>`).join('');
     tcSel.disabled = false;
@@ -1285,6 +1371,7 @@ async function onModuloChange() {
       testCases.map(tc => `<option value="${tc.id}">${tc.id}: ${tc.titulo}</option>`).join('');
     tcSel.disabled = false;
     window.estructuraActual = null;
+    aplicarMeta(null);
 
     const numero = await getNextNumero(epic.key);
     const nextId = `${epic.prefix}-${numero}`;
@@ -1348,13 +1435,14 @@ function onTestCaseChange() {
   const tipSel = document.getElementById('tipo-prueba');
   if (tipSel) {
     if (tc.tipoTest) {
-      if (!tipSel.querySelector(`option[value="${tc.tipoTest}"]`)) {
+      const tipoNorm = tc.tipoTest.startsWith('type-') ? tc.tipoTest : `type-${tc.tipoTest}`;
+      if (!tipSel.querySelector(`option[value="${tipoNorm}"]`)) {
         const opt = document.createElement('option');
-        opt.value = tc.tipoTest;
-        opt.textContent = tc.tipoTest.replace(/^type-/, '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        opt.value = tipoNorm;
+        opt.textContent = tipoNorm.replace(/^type-/, '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         tipSel.appendChild(opt);
       }
-      tipSel.value = tc.tipoTest;
+      tipSel.value = tipoNorm;
     } else {
       tipSel.value = '';
     }
@@ -1368,7 +1456,8 @@ function onTestCaseChange() {
   const esperado = tc.resultadoEsperado ? (Array.isArray(tc.resultadoEsperado) ? tc.resultadoEsperado : [tc.resultadoEsperado]) : emptyRow;
   rebuildList('esperado-wrap', esperado, 'Ítem', 'removeEsperado');
 
-  window.severidadDefaultTC = tc.severidadSiFalla || estructura?.meta?.severidadDefault || null;
+  const normSev = s => s ? (s.startsWith('severity-') ? s : `severity-${s}`) : null;
+  window.severidadDefaultTC = normSev(tc.severidadSiFalla) || normSev(estructura?.meta?.severidadDefault) || null;
 
   persistForm();
 }
@@ -1958,7 +2047,7 @@ async function cargarEpicsDesdeJira() {
       const moduloId = epicKey.toLowerCase();
       const summary  = issue.fields.summary || epicKey;
 
-      let prefix = null, modulo = 'modulo-app-web', severidadDefault = 'severity-mayor';
+      let prefix = null, modulo = 'modulo-app-web', severidadDefault = 'severity-mayor', nombre = null;
       try {
         const texto  = extraerTextoDeADF(issue.fields.description);
         const iStart = texto.indexOf('QA_STRUCTURE_START');
@@ -1969,7 +2058,9 @@ async function cargarEpicsDesdeJira() {
             const estructura = JSON.parse(jsonMatch[0]);
             prefix           = estructura.meta?.prefix;
             modulo           = estructura.meta?.moduloSistema || modulo;
-            severidadDefault = estructura.meta?.severidadDefault || severidadDefault;
+            nombre           = estructura.meta?.nombre || null;
+            const rawSev     = estructura.meta?.severidadDefault;
+            severidadDefault = rawSev ? (rawSev.startsWith('severity-') ? rawSev : `severity-${rawSev}`) : severidadDefault;
             estructuraCache[epicKey] = estructura;
           }
         }
@@ -1980,11 +2071,11 @@ async function cargarEpicsDesdeJira() {
         prefix = m ? m[1] : epicKey.replace('QAA-', 'M');
       }
 
-      EPICS[moduloId] = { key: epicKey, prefix, modulo, severidadDefault };
+      EPICS[moduloId] = { key: epicKey, prefix, modulo, severidadDefault, nombre };
 
       const opt = document.createElement('option');
       opt.value = moduloId;
-      opt.textContent = summary;
+      opt.textContent = nombre || summary;
       select.appendChild(opt);
     }
 
