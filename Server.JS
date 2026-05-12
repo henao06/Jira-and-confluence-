@@ -39,7 +39,9 @@ const ENV_ERROR = !PORT || !JIRA_HOST || !JIRA_EMAIL || !JIRA_TOKEN
 
 const AUTH = ENV_ERROR ? '' : 'Basic ' + Buffer.from(JIRA_EMAIL + ':' + JIRA_TOKEN).toString('base64');
 
-let myAccountId = null;
+let myAccountId        = null;
+let myDisplayName      = null;
+let dependenciaDefault = null; // primer id válido de customfield_10370
 
 function fetchMyself() {
   if (ENV_ERROR) return Promise.resolve();
@@ -53,8 +55,11 @@ function fetchMyself() {
         res.on('end', () => {
           try {
             const me = JSON.parse(data);
-            if (me.accountId) { myAccountId = me.accountId; console.log(`  accountId resuelto: ${myAccountId}`); }
-            else console.warn('[MYSELF] respuesta sin accountId:', data.slice(0, 200));
+            if (me.accountId) {
+              myAccountId   = me.accountId;
+              myDisplayName = me.displayName || JIRA_EMAIL;
+              console.log(`  accountId resuelto: ${myAccountId}`);
+            } else console.warn('[MYSELF] respuesta sin accountId:', data.slice(0, 200));
           } catch(e) { console.warn('[MYSELF] error parseando respuesta:', e.message); }
           resolve();
         });
@@ -63,6 +68,46 @@ function fetchMyself() {
     req.on('error', e => { console.warn('[MYSELF] error de red:', e.message); resolve(); });
     req.end();
   });
+}
+
+function jiraGet(path) {
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      { hostname: JIRA_HOST, port: 443, path, method: 'GET',
+        headers: { 'Authorization': AUTH, 'Accept': 'application/json' } },
+      res => {
+        let data = '';
+        res.on('data', c => data += c);
+        res.on('end', () => { try { resolve(JSON.parse(data)); } catch(e) { reject(e); } });
+      }
+    );
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+async function fetchFieldDefaults() {
+  if (ENV_ERROR) return;
+  try {
+    // Buscar una issue QAA existente que tenga el campo seteado
+    const search = await jiraGet(
+      '/rest/api/3/search?jql=project%3DQAA%20ORDER%20BY%20created%20DESC&maxResults=3&fields=customfield_10370,issuetype,summary'
+    );
+    const issues = search?.issues || [];
+    console.log(`[FIELDS] issues encontradas: ${issues.length}`);
+    for (const issue of issues) {
+      const val = issue.fields?.customfield_10370;
+      console.log(`  ${issue.key} (${issue.fields?.issuetype?.name}): customfield_10370 =`, JSON.stringify(val));
+      if (val && val.id) {
+        dependenciaDefault = { id: val.id };
+        console.log(`  → usando: "${val.value}" (id ${val.id})`);
+        return;
+      }
+    }
+    console.warn('[FIELDS] ninguna issue con customfield_10370 seteado');
+  } catch(e) {
+    console.warn('[FIELDS] error resolviendo customfield_10370:', e.message);
+  }
 }
 
 const MIME = {
@@ -105,15 +150,16 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       let bodyData = Buffer.concat(body);
 
-      // Inyectar campos requeridos en creación de issues
+      // Inyectar campos requeridos en creación de issues (solo cuando viene del formulario principal)
       if (req.method === 'POST' && jiraPath === '/rest/api/3/issue' && bodyData.length > 0) {
         try {
           const payload = JSON.parse(bodyData.toString());
           if (payload.fields) {
-            if (!payload.fields.customfield_10238)
-              payload.fields.customfield_10238 = JIRA_EMAIL;
-            if (!payload.fields.customfield_10271)
-              payload.fields.customfield_10271 = JIRA_EMAIL;
+            if (!payload.fields.customfield_10271) payload.fields.customfield_10271 = JIRA_EMAIL;
+            if (!payload.fields.customfield_10337) payload.fields.customfield_10337 = myDisplayName || JIRA_EMAIL;
+            if (!payload.fields.customfield_10370 && dependenciaDefault) payload.fields.customfield_10370 = dependenciaDefault;
+            console.log('[INJECT] customfield_10370 enviado:', JSON.stringify(payload.fields.customfield_10370));
+            console.log('[INJECT] dependenciaDefault al momento de inyectar:', JSON.stringify(dependenciaDefault));
             bodyData = Buffer.from(JSON.stringify(payload));
           }
         } catch(e) { console.warn('[INJECT] error parseando body:', e.message); }
@@ -209,9 +255,10 @@ const server = http.createServer((req, res) => {
   }
 
   // ── Archivos estáticos ──
-  let filePath = parsed.pathname === '/'             ? '/Qa_form.html'
-               : parsed.pathname === '/history'      ? '/history.html'
-               : parsed.pathname === '/jira-editor'  ? '/jira_editor.html'
+  let filePath = parsed.pathname === '/'                  ? '/Qa_form.html'
+               : parsed.pathname === '/history'           ? '/history.html'
+               : parsed.pathname === '/jira-editor'       ? '/jira_editor.html'
+               : parsed.pathname === '/bg-verificacion'   ? '/bg_verificacion.html'
                : parsed.pathname;
   filePath = path.join(__dirname, filePath);
 
@@ -231,4 +278,5 @@ server.listen(PORT, () => {
   console.log('  Ctrl+C para detener');
   console.log('');
   fetchMyself();
+  fetchFieldDefaults();
 });

@@ -37,6 +37,12 @@
       </svg>
       <span>Editar JSON</span>
     </a>
+    <a href="/bg-verificacion" class="btn-hdr-history" style="background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3);color:#fcd34d">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+      </svg>
+      <span>Verificar BG</span>
+    </a>
     <a href="/history" class="btn-hdr-history">
       <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
         <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
@@ -748,10 +754,11 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   if (editKey) {
     window.editMode = { key: editKey.toUpperCase() };
+    const forceRetest = params.get('forceRetest') === '1';
     fetchAssignees();
     initMemoryListeners();
     Promise.all([cargarEpicsDesdeJira(), inicializarSistemaVersiones()])
-      .finally(() => loadIssueForEdit(window.editMode.key));
+      .finally(() => loadIssueForEdit(window.editMode.key, forceRetest));
 
   } else if (paramModulo && paramTc) {
     // Llegamos desde history — pre-seleccionar módulo y TC
@@ -922,7 +929,7 @@ function parseADFForEdit(adf) {
   return { kv, sections };
 }
 
-async function loadIssueForEdit(key) {
+async function loadIssueForEdit(key, forceRetest = false) {
   // ── UI inicial ──
   const banner    = document.getElementById('edit-banner');
   const bannerKey = document.getElementById('edit-banner-key');
@@ -1040,7 +1047,7 @@ async function loadIssueForEdit(key) {
       const cb = document.getElementById('requiere-config');
       if (cb) { cb.checked = true; toggleConfigSection(cb); }
     }
-    if (labels.includes('retest')) {
+    if (labels.includes('retest') || forceRetest) {
       const cb = document.getElementById('es-retest');
       if (cb) {
         cb.checked = true;
@@ -1057,6 +1064,9 @@ async function loadIssueForEdit(key) {
             const tcField = document.getElementById('retest-tc');
             if (tcField) tcField.value = linkedKey;
           }
+        } else if (forceRetest) {
+          const tcField = document.getElementById('retest-tc');
+          if (tcField && !tcField.value) tcField.value = key;
         }
       }
     }
@@ -1148,6 +1158,7 @@ async function loadIssueForEdit(key) {
     const wrap        = document.getElementById('previews-wrap');
     const attachments = f.attachment || [];
     window.existingAttachmentIds = attachments.map(a => a.id);
+    window.existingAttachments   = attachments;
 
     const evidenceAtts = attachments.filter(a => !a.filename.startsWith('config.'));
     const configAtts   = attachments.filter(a =>  a.filename.startsWith('config.'));
@@ -2670,10 +2681,46 @@ async function submitForm() {
           });
         }
 
+        // Sync adjuntos QAA → BG: subir solo los que faltan en BG
+        if (window.existingAttachments?.length) {
+          try {
+            const bgAttR = await fetch(`/jira/rest/api/3/issue/${bgKey}?fields=attachment`, {
+              headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
+            });
+            const bgAttData = bgAttR.ok ? await bgAttR.json() : null;
+            const bgFilenames = new Set((bgAttData?.fields?.attachment || []).map(a => a.filename));
+            for (const att of window.existingAttachments) {
+              if (bgFilenames.has(att.filename)) continue;
+              try {
+                const blob = await fetch(`/jira/rest/api/3/attachment/content/${att.id}`, {
+                  headers: { 'Authorization': AUTH }
+                }).then(r => r.ok ? r.blob() : null);
+                if (!blob) continue;
+                const fd = new FormData();
+                fd.append('file', blob, att.filename);
+                await fetch(`/jira/rest/api/3/issue/${bgKey}/attachments`, {
+                  method: 'POST', headers: { 'Authorization': AUTH, 'X-Atlassian-Token': 'no-check' }, body: fd
+                });
+              } catch {}
+            }
+          } catch {}
+        }
+
       } else if (estado === 'fail' && reportarBug) {
         const bg = await crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, tipoPrueba, urlPantalla, steps, precon, esperado, obtenido, impacto, soluciones, sugerencias, linkIssueKey: editKey });
         editBugKey = bg.key;
         editBugUrl = bg.url;
+        for (const att of (window.existingAttachments || [])) {
+          try {
+            const blob = await fetch(`/jira/rest/api/3/attachment/content/${att.id}`).then(r => r.ok ? r.blob() : null);
+            if (!blob) continue;
+            const fd = new FormData();
+            fd.append('file', blob, att.filename);
+            await fetch(`/jira/rest/api/3/issue/${editBugKey}/attachments`, {
+              method: 'POST', headers: { 'X-Atlassian-Token': 'no-check' }, body: fd
+            });
+          } catch {}
+        }
       }
 
       showUpdateSuccess(editKey, issueUrl, moduloNombre, tipoLabel, entorno, sevLbl, editBugKey, editBugUrl);

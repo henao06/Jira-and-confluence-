@@ -1,0 +1,2115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verificación BG — Hybred QA</title>
+<link rel="stylesheet" href="/styles.css">
+<style>
+body { padding: 20px 16px 40px; }
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.col-panel {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--rl);
+  box-shadow: var(--s1);
+  display: flex;
+  flex-direction: column;
+  min-height: 500px;
+}
+
+.col-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: linear-gradient(90deg, var(--g0), var(--white));
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--rl) var(--rl) 0 0;
+}
+
+.col-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--g9);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  flex: 1;
+}
+
+.col-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--white);
+  background: var(--g7);
+  border-radius: 100px;
+  padding: 2px 9px;
+  min-width: 24px;
+  text-align: center;
+}
+
+.col-count.zero { background: var(--muted); }
+
+.btn-reload {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sub);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .15s;
+}
+
+.btn-reload:hover { border-color: var(--g4); color: var(--g7); }
+.btn-reload svg { width: 11px; height: 11px; stroke: currentColor; }
+
+.col-body {
+  flex: 1;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  max-height: calc(100vh - 260px);
+  min-height: 120px;
+}
+
+/* ── Cards BG ── */
+.bug-card {
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  cursor: grab;
+  transition: all .15s;
+  user-select: none;
+}
+
+.bug-card:hover { border-color: var(--g4); box-shadow: var(--s1); }
+.bug-card.dragging { opacity: .4; cursor: grabbing; }
+.bug-card.in-queue { border-color: var(--g4); background: var(--g0); }
+
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+  flex-wrap: wrap;
+}
+
+.badge-key {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--g7);
+  background: var(--g0);
+  border: 1px solid var(--g2);
+  border-radius: 4px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.badge-priority {
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.priority-highest { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+.priority-high    { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.priority-medium  { background: #fefce8; color: #a16207; border: 1px solid #fde047; }
+.priority-low     { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+.priority-lowest  { background: #f8fafc; color: var(--muted); border: 1px solid var(--border); }
+
+.badge-retest {
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  background: #ede9fe;
+  color: #5b21b6;
+  border: 1px solid #c4b5fd;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+}
+.badge-retest:hover { background: #c4b5fd; color: #3b0764; }
+
+.card-summary {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 7px;
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.card-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.card-meta-item svg { width: 10px; height: 10px; stroke: currentColor; flex-shrink: 0; }
+
+/* ── Queue card extra ── */
+.queue-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.queue-card-info { flex: 1; min-width: 0; }
+
+.btn-remove-queue {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--white);
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .15s;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.btn-remove-queue:hover { border-color: var(--red-b); color: var(--red); background: var(--red-bg); }
+
+/* ── Card status badge (post-submit) ── */
+.card-result-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 5px;
+  padding: 3px 8px;
+  margin-top: 6px;
+}
+
+.badge-ok    { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+.badge-fail  { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-b); }
+.badge-progress { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+
+/* ── Drop zone ── */
+.drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--r);
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .2s;
+  color: var(--muted);
+  font-size: 13px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px;
+}
+
+.drop-zone.has-items {
+  border-color: transparent;
+  min-height: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.drop-zone.drag-over {
+  border-color: var(--g6);
+  background: var(--g0);
+  color: var(--g7);
+}
+
+.drop-zone svg { width: 28px; height: 28px; stroke: currentColor; opacity: .4; }
+.drop-zone span { font-size: 12px; }
+
+/* ── Col footer ── */
+.col-footer {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.footer-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-submit-qaa {
+  flex: 1;
+  background: linear-gradient(135deg, var(--g8) 0%, var(--g6) 100%);
+  color: #fff;
+  border: none;
+  border-radius: var(--r);
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(15,110,86,.25);
+  transition: all .15s;
+}
+
+.btn-submit-qaa:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(15,110,86,.35); }
+.btn-submit-qaa:disabled { background: #6ee7b7; color: #065f46; box-shadow: none; cursor: not-allowed; transform: none; opacity: .6; }
+
+.btn-submit-secondary {
+  flex: 1;
+  background: var(--white);
+  color: var(--g7);
+  border: 1.5px solid var(--g4);
+  border-radius: var(--r);
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all .15s;
+}
+.btn-submit-secondary:hover:not(:disabled) { border-color: var(--g6); background: var(--g0); }
+.btn-submit-secondary:disabled { background: var(--g0); border-color: var(--g2); color: var(--g4); cursor: not-allowed; opacity: .7; }
+
+.progress-text { font-size: 12px; color: var(--sub); white-space: nowrap; }
+
+/* ── States ── */
+.state-loading, .state-empty, .state-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 16px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.state-loading .spin {
+  width: 20px; height: 20px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--g6);
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.state-error { color: var(--red); }
+.state-error svg { width: 24px; height: 24px; stroke: currentColor; }
+
+.state-empty svg { width: 28px; height: 28px; stroke: currentColor; opacity: .35; }
+
+/* ── Summary toast ── */
+.summary-banner {
+  padding: 10px 14px;
+  border-radius: var(--r);
+  font-size: 12px;
+  font-weight: 600;
+  display: none;
+  margin: 10px 14px 0;
+  line-height: 1.5;
+}
+
+.summary-banner.show { display: block; }
+.summary-banner.ok   { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+.summary-banner.warn { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-b); }
+
+@media (max-width: 720px) {
+  .two-col { grid-template-columns: 1fr; }
+  .col-body { max-height: 50vh; }
+}
+
+/* ── Queue card extra sections ── */
+.queue-sections {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.queue-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--sub);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 4px;
+}
+
+.results-textarea {
+  width: 100%;
+  min-height: 80px;
+  background: var(--g0);
+  border: 1px solid var(--g2);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 8px 10px;
+  resize: vertical;
+  box-sizing: border-box;
+  transition: border-color .15s;
+}
+
+.results-textarea:focus {
+  outline: none;
+  border-color: var(--g4);
+}
+
+.results-textarea::placeholder { color: var(--muted); }
+
+.adjuntos-section { display: flex; flex-direction: column; gap: 6px; }
+
+.adjuntos-input-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--g0);
+  border: 1px dashed var(--g3);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sub);
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.adjuntos-input-label:hover { border-color: var(--g5); color: var(--g7); background: var(--g1); }
+.adjuntos-input-label svg { width: 12px; height: 12px; stroke: currentColor; flex-shrink: 0; }
+
+.adjuntos-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.preview-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  overflow: visible;
+}
+
+.preview-item img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--g2);
+  display: block;
+}
+
+.preview-file {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 72px;
+  height: 72px;
+  background: var(--g0);
+  border: 1px solid var(--g2);
+  border-radius: 6px;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.preview-file svg { width: 20px; height: 20px; stroke: var(--sub); flex-shrink: 0; }
+
+.preview-file-name {
+  font-size: 9px;
+  color: var(--muted);
+  text-align: center;
+  word-break: break-all;
+  max-height: 28px;
+  overflow: hidden;
+  line-height: 1.3;
+}
+
+.btn-remove-preview {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--g7);
+  border: 1.5px solid var(--white);
+  color: #fff;
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  z-index: 1;
+  transition: background .12s;
+}
+
+.btn-remove-preview:hover { background: var(--red); }
+
+.btn-preview-card {
+  margin-top: 8px;
+  background: none;
+  border: 1px solid var(--g3);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sub);
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all .15s;
+}
+
+.btn-preview-card:hover { border-color: var(--g6); color: var(--g7); background: var(--g0); }
+.btn-preview-card svg { width: 11px; height: 11px; stroke: currentColor; }
+
+/* ── Estado al finalizar ── */
+.estado-section { display: flex; flex-direction: column; gap: 7px; }
+
+.estado-check-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--g2);
+  background: var(--g0);
+}
+
+.estado-check-row:hover { border-color: var(--g4); }
+
+.estado-check-row input[type="checkbox"] {
+  width: 13px; height: 13px; cursor: pointer;
+  accent-color: var(--g6); flex-shrink: 0;
+}
+
+.estado-check-label { font-size: 11px; color: var(--text); cursor: pointer; user-select: none; }
+
+.estado-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.estado-row-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sub);
+  min-width: 28px;
+  flex-shrink: 0;
+}
+
+.estado-select {
+  flex: 1;
+  background: var(--g0);
+  border: 1px solid var(--g2);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 5px 8px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.estado-select:focus { outline: none; border-color: var(--g4); }
+.estado-select:disabled { color: var(--muted); cursor: not-allowed; opacity: .7; }
+
+.resultado-toggle { display: flex; gap: 6px; }
+
+.btn-resultado {
+  flex: 1;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  border: 1.5px solid var(--g2);
+  background: var(--g0);
+  color: var(--sub);
+  transition: all .15s;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+}
+
+.btn-resultado:hover { border-color: var(--g4); color: var(--g7); }
+.btn-resultado.pasa.active    { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+.btn-resultado.falla.active   { background: var(--red-bg); border-color: var(--red-b); color: var(--red); }
+.btn-resultado.finalizar.active { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+
+/* ── Estado inline (pendientes) ── */
+.pending-status-section { margin-top: 8px; }
+
+.pending-status-btn {
+  background: none;
+  border: 1px solid var(--g2);
+  border-radius: 5px;
+  padding: 3px 9px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .12s;
+}
+.pending-status-btn:hover:not(:disabled) { border-color: var(--g4); color: var(--g7); }
+.pending-status-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.pending-status-row { display: flex; align-items: center; gap: 5px; }
+
+.pending-status-select {
+  flex: 1;
+  background: var(--g0);
+  border: 1px solid var(--g3);
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text);
+  padding: 4px 6px;
+  min-width: 0;
+}
+.pending-status-select:focus { outline: none; border-color: var(--g5); }
+
+.btn-apply-status {
+  background: var(--g7);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.btn-apply-status:disabled { opacity: .6; cursor: not-allowed; }
+
+.btn-cancel-status {
+  background: none;
+  border: 1px solid var(--g2);
+  border-radius: 5px;
+  padding: 3px 7px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.btn-cancel-status:hover { border-color: var(--red-b); color: var(--red); }
+
+.pending-status-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: #065f46;
+  background: #d1fae5;
+  border: 1px solid #6ee7b7;
+  border-radius: 5px;
+  padding: 2px 8px;
+}
+
+/* ── Preview modal ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.6);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modal-container {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--rl);
+  box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  max-width: 640px;
+  width: 100%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modal-header h2 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  flex: 1;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.btn-modal-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--white);
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all .12s;
+}
+
+.btn-modal-close:hover { border-color: var(--red-b); color: var(--red); background: var(--red-bg); }
+
+.modal-body {
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--sub);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 6px;
+}
+
+.modal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.modal-table th, .modal-table td {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.modal-table th {
+  background: var(--g0);
+  font-weight: 700;
+  color: var(--sub);
+  width: 38%;
+  white-space: nowrap;
+}
+
+.modal-table td { color: var(--text); }
+
+.modal-resultados {
+  background: var(--g0);
+  border: 1px solid var(--g2);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.modal-resultados.empty { color: var(--muted); font-style: italic; }
+
+.modal-adjuntos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modal-adjunto-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+  padding: 4px 0;
+}
+
+.modal-adjunto-item svg { width: 12px; height: 12px; stroke: var(--sub); flex-shrink: 0; }
+
+.modal-empty-list {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.modal-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-modal-cerrar {
+  background: var(--g7);
+  color: #fff;
+  border: none;
+  border-radius: var(--r);
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .12s;
+}
+
+.btn-modal-cerrar:hover { background: var(--g8); }
+</style>
+</head>
+<body>
+<div class="page" style="max-width:1100px">
+
+<!-- Header -->
+<div class="hdr">
+  <div class="hdr-icon">
+    <svg fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+      <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+    </svg>
+  </div>
+  <div class="hdr-text">
+    <h1>Verificación BG</h1>
+    <p>Hybred · Bugs Under Review → Cola QAA</p>
+  </div>
+  <div class="hdr-right">
+    <a href="/" class="btn-hdr-history">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+      </svg>
+      <span>Formulario</span>
+    </a>
+    <a href="/jira-editor" class="btn-hdr-history" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#a5b4fc">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+      </svg>
+      <span>Editar JSON</span>
+    </a>
+    <a href="/history" class="btn-hdr-history">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+      </svg>
+      <span>Historial</span>
+    </a>
+    <a id="version-badge" href="https://liceopinoverde.atlassian.net/jira/software/projects/QAA/releases" target="_blank" class="btn-hdr-history" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#a5b4fc" title="Versión activa">...</a>
+  </div>
+</div>
+
+<!-- Two columns -->
+<div class="two-col">
+
+  <!-- PENDIENTES -->
+  <div class="col-panel">
+    <div class="col-header">
+      <div class="col-title">Pendientes</div>
+      <span class="col-count zero" id="pending-count">0</span>
+      <button class="btn-reload" id="btn-reload" onclick="cargarPendientes()">
+        <svg fill="none" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+        Recargar
+      </button>
+    </div>
+    <div class="col-body" id="pending-body">
+      <div class="state-loading" id="pending-loading">
+        <div class="spin"></div>
+        <span>Cargando bugs...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- COLA QAA -->
+  <div class="col-panel">
+    <div class="col-header">
+      <div class="col-title">Cola QAA</div>
+      <span class="col-count zero" id="queue-count">0</span>
+    </div>
+    <div id="summary-banner" class="summary-banner"></div>
+    <div class="col-body" id="queue-body">
+      <div class="drop-zone" id="drop-zone"
+        ondragover="onDragOver(event)"
+        ondragleave="onDragLeave(event)"
+        ondrop="onDrop(event)">
+        <svg fill="none" stroke-width="1.5" viewBox="0 0 24 24">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <span>Arrastrá bugs aquí</span>
+      </div>
+    </div>
+    <div class="col-footer">
+      <span class="progress-text" id="progress-text"></span>
+      <button class="btn-submit-qaa" id="btn-subir" onclick="subirTodoAQAA()" disabled>
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        Enviar cola a QAA
+      </button>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+const JIRA_BASE  = window.location.origin + '/jira';
+const QAA_PARENT = 'QAA-172';
+
+let versionActual = null;
+
+async function cargarVersionActual() {
+  try {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/project/QAA/versions`, {
+      headers: { Accept: 'application/json' }
+    });
+    if (!r.ok) return;
+    const activas = (await r.json())
+      .filter(v => !v.released && v.name.startsWith('test-v'))
+      .sort((a, b) => b.name.localeCompare(a.name));
+    if (!activas.length) return;
+    versionActual = activas[0].name;
+    const badge = document.getElementById('version-badge');
+    if (badge) badge.textContent = versionActual;
+  } catch {}
+}
+
+// State
+const bugs       = {};   // key → issue data
+const queue      = [];   // keys in queue order
+const colaItems  = {};   // key → { resultadosObtenidos: string, adjuntosNuevos: File[] }
+let   dragKey    = null;
+let   submitting = false;
+let   jql        = 'project = BG AND status = "Under Review" ORDER BY priority DESC, created DESC';
+
+// ── Priority helpers ──────────────────────────────────────────────────────────
+
+function extraerKeyRetest(summary) {
+  const m = (summary || '').match(/^(QAA-\d+)\s*[—\-]/);
+  return m ? m[1] : null;
+}
+
+function priorityClass(name) {
+  const n = (name || '').toLowerCase();
+  if (n === 'highest') return 'priority-highest';
+  if (n === 'high')    return 'priority-high';
+  if (n === 'medium')  return 'priority-medium';
+  if (n === 'low')     return 'priority-low';
+  return 'priority-lowest';
+}
+
+function formatDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function extraerTextoADF(adf) {
+  if (typeof adf === 'string') return adf;
+  if (!adf || !adf.content) return '';
+  const parts = [];
+  function walk(node) {
+    if (node.type === 'text') { parts.push(node.text || ''); return; }
+    (node.content || []).forEach(walk);
+    if (['paragraph','heading','listItem'].includes(node.type)) parts.push(' ');
+  }
+  adf.content.forEach(walk);
+  return parts.join('').trim();
+}
+
+// ── JQL desde epic ────────────────────────────────────────────────────────────
+
+function extraerJqlDeADF(adf) {
+  if (!adf || !adf.content) return null;
+  function buscar(node) {
+    if (node.type === 'codeBlock') {
+      const text = (node.content || []).map(n => n.text || '').join('').trim();
+      if (text.toLowerCase().includes('project')) return text;
+    }
+    for (const child of (node.content || [])) {
+      const found = buscar(child);
+      if (found) return found;
+    }
+    return null;
+  }
+  return buscar(adf);
+}
+
+async function cargarJqlDesdeEpic() {
+  try {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${QAA_PARENT}?fields=description`, {
+      headers: { Accept: 'application/json' }
+    });
+    if (!r.ok) return;
+    const data = await r.json();
+    const extraido = extraerJqlDeADF(data.fields?.description);
+    if (extraido) jql = extraido;
+  } catch {}
+}
+
+// ── Load pending ─────────────────────────────────────────────────────────────
+
+async function cargarPendientes() {
+  const body    = document.getElementById('pending-body');
+  const loading = document.getElementById('pending-loading');
+
+  body.innerHTML = '';
+  body.appendChild(loading);
+  loading.style.display = 'flex';
+
+  try {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/search/jql`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        jql,
+        fields: ['summary', 'priority', 'assignee', 'reporter', 'created', 'description', 'labels', 'status'],
+        maxResults: 50
+      })
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    loading.style.display = 'none';
+
+    const issues = data.issues || [];
+    if (issues.length === 0) {
+      body.innerHTML = '';
+      body.appendChild(makeEmptyState('No hay bugs Under Review en BG'));
+      updatePendingCount();
+      return;
+    }
+
+    body.innerHTML = '';
+    for (const issue of issues) {
+      bugs[issue.key] = issue;
+      if (!queue.includes(issue.key)) {
+        body.appendChild(makePendingCard(issue));
+      }
+    }
+    updatePendingCount();
+  } catch (e) {
+    loading.style.display = 'none';
+    body.innerHTML = '';
+    body.appendChild(makeErrorState('Error al cargar: ' + e.message));
+  }
+}
+
+// ── Card builders ─────────────────────────────────────────────────────────────
+
+function makeRetestBadge(summary, bgKey) {
+  const keyFromSummary = extraerKeyRetest(summary);
+  if (!keyFromSummary) return null;
+  const btn = document.createElement('button');
+  btn.className = 'badge-retest';
+  btn.textContent = `↩ Retest ${keyFromSummary}`;
+  btn.title = `Cargar ${keyFromSummary} para retest`;
+  btn.addEventListener('click', async e => {
+    e.stopPropagation();
+    btn.textContent = '↩ Cargando...';
+    btn.disabled = true;
+    let qaaKey = keyFromSummary;
+    try {
+      const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${bgKey}?fields=issuelinks`, {
+        headers: { Accept: 'application/json' }
+      });
+      if (r.ok) {
+        const data  = await r.json();
+        const links = data.fields?.issuelinks || [];
+        const found = links.find(l =>
+          (l.inwardIssue?.key  || '').startsWith('QAA-') ||
+          (l.outwardIssue?.key || '').startsWith('QAA-')
+        );
+        if (found) {
+          qaaKey = (found.inwardIssue?.key || '').startsWith('QAA-')
+            ? found.inwardIssue.key
+            : found.outwardIssue.key;
+        }
+      }
+    } catch {}
+    btn.textContent = `↩ Retest ${qaaKey}`;
+    btn.disabled = false;
+    abrirRetest(qaaKey);
+  });
+  return btn;
+}
+
+function makePendingCard(issue) {
+  const f        = issue.fields;
+  const priority = f.priority?.name || 'Medium';
+  const assignee = f.assignee?.displayName || 'Sin asignar';
+  const created  = formatDate(f.created);
+
+  const card = document.createElement('div');
+  card.className   = 'bug-card';
+  card.draggable   = true;
+  card.dataset.key = issue.key;
+
+  card.innerHTML = `
+    <div class="card-top">
+      <span class="badge-key">${issue.key}</span>
+      <span class="badge-priority ${priorityClass(priority)}">${priority}</span>
+    </div>
+    <div class="card-summary">${esc(f.summary || '—')}</div>
+    <div class="card-meta">
+      <span class="card-meta-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        ${esc(assignee)}
+      </span>
+      <span class="card-meta-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        ${esc(created)}
+      </span>
+    </div>`;
+
+  const retestBtn = makeRetestBadge(f.summary, issue.key);
+  if (retestBtn) card.querySelector('.card-top').appendChild(retestBtn);
+
+  // ── Cambiar estado inline ──
+  const statusSection = document.createElement('div');
+  statusSection.className = 'pending-status-section';
+
+  const btnEstado = document.createElement('button');
+  btnEstado.className   = 'pending-status-btn';
+  btnEstado.textContent = 'Cambiar estado';
+  btnEstado.type        = 'button';
+
+  btnEstado.addEventListener('click', async e => {
+    e.stopPropagation();
+    btnEstado.textContent = 'Cargando...';
+    btnEstado.disabled    = true;
+    try {
+      const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${issue.key}/transitions`, {
+        headers: { Accept: 'application/json' }
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data        = await r.json();
+      const transitions = data.transitions || [];
+      if (!transitions.length) { btnEstado.textContent = 'Sin estados'; return; }
+
+      statusSection.innerHTML = '';
+      const row = document.createElement('div');
+      row.className = 'pending-status-row';
+
+      const sel = document.createElement('select');
+      sel.className = 'pending-status-select';
+      sel.innerHTML = transitions.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
+
+      const btnApply = document.createElement('button');
+      btnApply.className   = 'btn-apply-status';
+      btnApply.textContent = 'Aplicar';
+      btnApply.type        = 'button';
+      btnApply.addEventListener('click', async () => {
+        btnApply.textContent = '...';
+        btnApply.disabled    = true;
+        sel.disabled         = true;
+        try {
+          const res = await fetch(`${JIRA_BASE}/rest/api/3/issue/${issue.key}/transitions`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body:    JSON.stringify({ transition: { id: sel.value } })
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const nombre = sel.options[sel.selectedIndex].text;
+          statusSection.innerHTML = '';
+          const badge = document.createElement('span');
+          badge.className   = 'pending-status-badge';
+          badge.textContent = `${nombre} ✓`;
+          statusSection.appendChild(badge);
+        } catch {
+          btnApply.textContent = 'Error';
+          setTimeout(() => {
+            btnApply.textContent = 'Aplicar';
+            btnApply.disabled    = false;
+            sel.disabled         = false;
+          }, 2000);
+        }
+      });
+
+      const btnCancel = document.createElement('button');
+      btnCancel.className   = 'btn-cancel-status';
+      btnCancel.textContent = '×';
+      btnCancel.type        = 'button';
+      btnCancel.addEventListener('click', () => {
+        statusSection.innerHTML = '';
+        statusSection.appendChild(btnEstado);
+        btnEstado.textContent = 'Cambiar estado';
+        btnEstado.disabled    = false;
+      });
+
+      row.appendChild(sel);
+      row.appendChild(btnApply);
+      row.appendChild(btnCancel);
+      statusSection.appendChild(row);
+    } catch {
+      btnEstado.textContent = 'Error al cargar';
+      btnEstado.disabled    = false;
+    }
+  });
+
+  statusSection.appendChild(btnEstado);
+  card.appendChild(statusSection);
+
+  card.addEventListener('dragstart', e => {
+    dragKey = issue.key;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  card.addEventListener('dragend', () => card.classList.remove('dragging'));
+
+  return card;
+}
+
+function makeQueueCard(issue) {
+  const key      = issue.key;
+  const f        = issue.fields;
+  const priority = f.priority?.name || 'Medium';
+  const assignee = f.assignee?.displayName || 'Sin asignar';
+  const item     = colaItems[key];
+
+  const wrap = document.createElement('div');
+  wrap.className   = 'bug-card in-queue';
+  wrap.dataset.key = key;
+
+  const topHtml = `
+    <div class="queue-card">
+      <div class="queue-card-info">
+        <div class="card-top" id="card-top-${key}">
+          <span class="badge-key">${key}</span>
+          <span class="badge-priority ${priorityClass(priority)}">${priority}</span>
+        </div>
+        <div class="card-summary">${esc(f.summary || '—')}</div>
+        <div class="card-meta">
+          <span class="card-meta-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            ${esc(assignee)}
+          </span>
+        </div>
+        <div class="result-area" id="result-${key}"></div>
+      </div>
+      <button class="btn-remove-queue" title="Quitar de la cola">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>`;
+
+  wrap.innerHTML = topHtml;
+
+  wrap.querySelector('.btn-remove-queue').addEventListener('click', () => removeFromQueue(key));
+
+  const retestBtn = makeRetestBadge(f.summary, key);
+  if (retestBtn) wrap.querySelector(`#card-top-${key}`).appendChild(retestBtn);
+
+  const info = wrap.querySelector('.queue-card-info');
+
+  // Secciones extra
+  const sections = document.createElement('div');
+  sections.className = 'queue-sections';
+
+  // 1. Resultados obtenidos
+  const secResultados = document.createElement('div');
+  secResultados.innerHTML = '<div class="queue-section-label">Resultados obtenidos</div>';
+  const textarea = document.createElement('textarea');
+  textarea.className   = 'results-textarea';
+  textarea.placeholder = 'Describí los resultados obtenidos al verificar este bug...';
+  textarea.value       = item.resultadosObtenidos;
+  textarea.addEventListener('input', () => { item.resultadosObtenidos = textarea.value; });
+  secResultados.appendChild(textarea);
+  sections.appendChild(secResultados);
+
+  // 2. Adjuntos
+  const secAdjuntos = document.createElement('div');
+  secAdjuntos.className = 'adjuntos-section';
+  secAdjuntos.innerHTML = '<div class="queue-section-label">Adjuntos</div>';
+
+  const fileInputId = `file-input-${key}`;
+  const inputLabel  = document.createElement('label');
+  inputLabel.className  = 'adjuntos-input-label';
+  inputLabel.htmlFor    = fileInputId;
+  inputLabel.innerHTML  = `<svg fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Adjuntar archivos`;
+
+  const fileInput = document.createElement('input');
+  fileInput.type     = 'file';
+  fileInput.id       = fileInputId;
+  fileInput.multiple = true;
+  fileInput.accept   = 'image/*,.pdf';
+  fileInput.style.display = 'none';
+
+  const previewsContainer = document.createElement('div');
+  previewsContainer.className = 'adjuntos-previews';
+  previewsContainer.id        = `previews-${key}`;
+
+  fileInput.addEventListener('change', () => {
+    Array.from(fileInput.files).forEach(file => {
+      item.adjuntosNuevos.push(file);
+      previewsContainer.appendChild(makeFilePreview(file, item, previewsContainer));
+    });
+    fileInput.value = '';
+  });
+
+  secAdjuntos.appendChild(inputLabel);
+  secAdjuntos.appendChild(fileInput);
+  secAdjuntos.appendChild(previewsContainer);
+  sections.appendChild(secAdjuntos);
+
+  // 3. Estado QAA + Estado BG
+  const secEstado = document.createElement('div');
+  secEstado.className = 'estado-section';
+
+  // Checkbox FN QAA
+  const chkId  = `fn-qaa-${key}`;
+  const chkRow = document.createElement('label');
+  chkRow.className  = 'estado-check-row';
+  chkRow.htmlFor    = chkId;
+  const chk = document.createElement('input');
+  chk.type    = 'checkbox';
+  chk.id      = chkId;
+  chk.checked = item.marcarFinalizada;
+  chk.addEventListener('change', () => { item.marcarFinalizada = chk.checked; });
+  const chkLbl = document.createElement('span');
+  chkLbl.className   = 'estado-check-label';
+  chkLbl.textContent = 'FN QAA';
+  chkRow.appendChild(chk);
+  chkRow.appendChild(chkLbl);
+  secEstado.appendChild(chkRow);
+
+  // Checkbox Falla
+  const failId  = `falla-${key}`;
+  const failRow = document.createElement('label');
+  failRow.className  = 'estado-check-row';
+  failRow.htmlFor    = failId;
+  failRow.style.cssText = 'border-color:var(--red-b);background:var(--red-bg);';
+  const failChk = document.createElement('input');
+  failChk.type    = 'checkbox';
+  failChk.id      = failId;
+  failChk.checked = item.resultadoVerificacion === 'falla';
+  failChk.addEventListener('change', () => {
+    item.resultadoVerificacion = failChk.checked ? 'falla' : '';
+    failRow.style.cssText = failChk.checked
+      ? 'border-color:var(--red-b);background:var(--red-bg);'
+      : 'border-color:var(--red-b);background:var(--red-bg);';
+  });
+  const failLbl = document.createElement('span');
+  failLbl.className   = 'estado-check-label';
+  failLbl.style.color = 'var(--red)';
+  failLbl.textContent = 'Falla — retest';
+  failRow.appendChild(failChk);
+  failRow.appendChild(failLbl);
+  secEstado.appendChild(failRow);
+
+  // Estado BG: select con transiciones (se populan async en addToQueue)
+  const rowBG = document.createElement('div');
+  rowBG.className = 'estado-row';
+  rowBG.style.marginTop = '4px';
+  const lblBG = document.createElement('span');
+  lblBG.className   = 'estado-row-label';
+  lblBG.textContent = 'BG:';
+  const selBG = document.createElement('select');
+  selBG.className = 'estado-select';
+  selBG.id        = `bg-transition-${key}`;
+  selBG.disabled  = true;
+  selBG.innerHTML = '<option value="">Cargando estados...</option>';
+  selBG.addEventListener('change', () => { item.selectedBgTransition = selBG.value; });
+  rowBG.appendChild(lblBG);
+  rowBG.appendChild(selBG);
+  secEstado.appendChild(rowBG);
+
+  sections.appendChild(secEstado);
+
+  // 4. Botón Previsualizar
+  const btnPreview = document.createElement('button');
+  btnPreview.className = 'btn-preview-card';
+  btnPreview.innerHTML = `<svg fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>Previsualizar`;
+  btnPreview.addEventListener('click', () => abrirModalPreview(key));
+  sections.appendChild(btnPreview);
+
+  info.appendChild(sections);
+
+  return wrap;
+}
+
+function makeFilePreview(file, item, container) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'preview-item';
+
+  const isImage = file.type.startsWith('image/');
+
+  if (isImage) {
+    const img = document.createElement('img');
+    img.alt = file.name;
+    const url = URL.createObjectURL(file);
+    img.src = url;
+    img.onload = () => URL.revokeObjectURL(url);
+    wrapper.appendChild(img);
+  } else {
+    const fileDiv = document.createElement('div');
+    fileDiv.className = 'preview-file';
+    fileDiv.innerHTML = `<svg fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+    const nameEl = document.createElement('div');
+    nameEl.className   = 'preview-file-name';
+    nameEl.textContent = file.name;
+    fileDiv.appendChild(nameEl);
+    wrapper.appendChild(fileDiv);
+  }
+
+  const btnRemove = document.createElement('button');
+  btnRemove.className = 'btn-remove-preview';
+  btnRemove.textContent = '✕';
+  btnRemove.title = 'Quitar archivo';
+  btnRemove.addEventListener('click', () => {
+    const idx = item.adjuntosNuevos.indexOf(file);
+    if (idx !== -1) item.adjuntosNuevos.splice(idx, 1);
+    wrapper.remove();
+  });
+
+  wrapper.appendChild(btnRemove);
+  return wrapper;
+}
+
+function makeEmptyState(msg) {
+  const d = document.createElement('div');
+  d.className = 'state-empty';
+  d.innerHTML = `<svg fill="none" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg><span>${esc(msg)}</span>`;
+  return d;
+}
+
+function makeErrorState(msg) {
+  const d = document.createElement('div');
+  d.className = 'state-error';
+  d.innerHTML = `<svg fill="none" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span>${esc(msg)}</span>`;
+  return d;
+}
+
+// ── Modal de previsualización ─────────────────────────────────────────────────
+
+function abrirModalPreview(key) {
+  const issue = bugs[key];
+  const item  = colaItems[key];
+  const f     = issue.fields;
+
+  const priority = f.priority?.name || 'Medium';
+  const reporter = f.reporter?.displayName || '—';
+  const assignee = f.assignee?.displayName || 'Sin asignar';
+  const created  = formatDate(f.created);
+  const labels   = (f.labels || []).join(', ') || '—';
+  const resultados = item.resultadosObtenidos.trim();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  const container = document.createElement('div');
+  container.className = 'modal-container';
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'modal-header';
+  const h2 = document.createElement('h2');
+  h2.textContent = f.summary || key;
+  const btnClose = document.createElement('button');
+  btnClose.className   = 'btn-modal-close';
+  btnClose.textContent = '✕';
+  btnClose.addEventListener('click', () => overlay.remove());
+  header.appendChild(h2);
+  header.appendChild(btnClose);
+
+  // Body
+  const body = document.createElement('div');
+  body.className = 'modal-body';
+
+  // Detalles
+  const secDetalles = document.createElement('div');
+  secDetalles.innerHTML = `<div class="modal-section-title">Detalles clave</div>`;
+  const table = document.createElement('table');
+  table.className = 'modal-table';
+  [
+    ['Bug original',  key],
+    ['Prioridad',     priority],
+    ['Reportado por', reporter],
+    ['Asignado a',    assignee],
+    ['Estado BG',     'Under Review'],
+    ['Creado',        created],
+    ['Labels',        labels],
+  ].forEach(([label, value]) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<th>${esc(label)}</th><td>${esc(value)}</td>`;
+    table.appendChild(tr);
+  });
+  secDetalles.appendChild(table);
+  body.appendChild(secDetalles);
+
+  // Descripción original
+  const secDesc = document.createElement('div');
+  secDesc.innerHTML = `<div class="modal-section-title">Descripción</div>`;
+  const descText = extraerTextoADF(f.description);
+  const descDiv = document.createElement('div');
+  descDiv.className = 'modal-resultados' + (descText ? '' : ' empty');
+  descDiv.textContent = descText || 'Sin descripción.';
+  secDesc.appendChild(descDiv);
+  body.appendChild(secDesc);
+
+  // Resultados obtenidos
+  const secResultados = document.createElement('div');
+  secResultados.innerHTML = `<div class="modal-section-title">Resultados obtenidos</div>`;
+  const resultDiv = document.createElement('div');
+  resultDiv.className = 'modal-resultados' + (resultados ? '' : ' empty');
+  resultDiv.textContent = resultados || 'Sin resultados registrados.';
+  secResultados.appendChild(resultDiv);
+  body.appendChild(secResultados);
+
+  // Adjuntos nuevos
+  const secAdjNuevos = document.createElement('div');
+  secAdjNuevos.innerHTML = `<div class="modal-section-title">Adjuntos nuevos</div>`;
+  const listNuevos = document.createElement('div');
+  listNuevos.className = 'modal-adjuntos-list';
+  if (item.adjuntosNuevos.length === 0) {
+    listNuevos.innerHTML = '<span class="modal-empty-list">Sin adjuntos nuevos.</span>';
+  } else {
+    item.adjuntosNuevos.forEach(file => {
+      const el = document.createElement('div');
+      el.className = 'modal-adjunto-item';
+      el.innerHTML = `<svg fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>${esc(file.name)}`;
+      listNuevos.appendChild(el);
+    });
+  }
+  secAdjNuevos.appendChild(listNuevos);
+  body.appendChild(secAdjNuevos);
+
+  // Adjuntos originales del bug en BG (se copian automáticamente)
+  const secAdjOriginales = document.createElement('div');
+  secAdjOriginales.innerHTML = `<div class="modal-section-title">Adjuntos originales BG (se copian automáticamente)</div>`;
+  const listOriginales = document.createElement('div');
+  listOriginales.className = 'modal-adjuntos-list';
+  listOriginales.innerHTML = '<span class="modal-empty-list">Cargando adjuntos...</span>';
+  secAdjOriginales.appendChild(listOriginales);
+  body.appendChild(secAdjOriginales);
+
+  (async () => {
+    try {
+      const attRes = await fetch(`${JIRA_BASE}/rest/api/3/issue/${key}?fields=attachment`, {
+        headers: { Accept: 'application/json' }
+      });
+      if (!attRes.ok) throw new Error();
+      const attData  = await attRes.json();
+      const atts     = attData.fields?.attachment || [];
+      listOriginales.innerHTML = '';
+      if (atts.length === 0) {
+        listOriginales.innerHTML = '<span class="modal-empty-list">Sin adjuntos originales.</span>';
+        return;
+      }
+      const grid = document.createElement('div');
+      grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;';
+      for (const att of atts) {
+        const isImg = att.mimeType && att.mimeType.startsWith('image/');
+        const cell  = document.createElement('div');
+        cell.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;max-width:80px;';
+        if (isImg) {
+          const img = document.createElement('img');
+          img.style.cssText = 'width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--g2);background:var(--g0);cursor:pointer;transition:opacity .15s;';
+          img.alt = att.filename;
+          img.title = att.filename;
+          img.addEventListener('mouseenter', () => { img.style.opacity = '.8'; });
+          img.addEventListener('mouseleave', () => { img.style.opacity = '1'; });
+          fetch(`${JIRA_BASE}/rest/api/3/attachment/content/${att.id}`)
+            .then(r => r.ok ? r.blob() : null)
+            .then(blob => {
+              if (blob) {
+                const blobUrl = URL.createObjectURL(blob);
+                img.src = blobUrl;
+                img.addEventListener('click', () => abrirLightbox(blobUrl, att.filename));
+              }
+            })
+            .catch(() => {});
+          cell.appendChild(img);
+        } else {
+          const icon = document.createElement('div');
+          icon.className = 'preview-file';
+          icon.innerHTML = `<svg fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+          cell.appendChild(icon);
+        }
+        const name = document.createElement('div');
+        name.style.cssText = 'font-size:10px;color:var(--muted);text-align:center;word-break:break-all;max-width:80px;line-height:1.3;';
+        name.textContent = att.filename;
+        cell.appendChild(name);
+        grid.appendChild(cell);
+      }
+      listOriginales.appendChild(grid);
+    } catch {
+      listOriginales.innerHTML = '<span class="modal-empty-list">Error al cargar adjuntos.</span>';
+    }
+  })();
+
+  // Footer
+  const footer = document.createElement('div');
+  footer.className = 'modal-footer';
+  const btnCerrar = document.createElement('button');
+  btnCerrar.className   = 'btn-modal-cerrar';
+  btnCerrar.textContent = 'Cerrar';
+  btnCerrar.addEventListener('click', () => overlay.remove());
+  footer.appendChild(btnCerrar);
+
+  container.appendChild(header);
+  container.appendChild(body);
+  container.appendChild(footer);
+  overlay.appendChild(container);
+  document.body.appendChild(overlay);
+}
+
+// ── Drag & Drop ───────────────────────────────────────────────────────────────
+
+function onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  document.getElementById('drop-zone').classList.add('drag-over');
+}
+
+function onDragLeave(e) {
+  if (!document.getElementById('drop-zone').contains(e.relatedTarget)) {
+    document.getElementById('drop-zone').classList.remove('drag-over');
+  }
+}
+
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag-over');
+  if (!dragKey || queue.includes(dragKey)) return;
+  addToQueue(dragKey);
+  dragKey = null;
+}
+
+function addToQueue(key) {
+  if (queue.includes(key)) return;
+  queue.push(key);
+
+  colaItems[key] = {
+    resultadosObtenidos:   '',
+    adjuntosNuevos:        [],
+    bgTransitions:         [],
+    selectedBgTransition:  '',
+    resultadoVerificacion: '',
+    marcarFinalizada:      false
+  };
+
+  const pendingCard = document.querySelector(`#pending-body .bug-card[data-key="${key}"]`);
+  if (pendingCard) pendingCard.remove();
+
+  const dz = document.getElementById('drop-zone');
+  dz.classList.add('has-items');
+
+  const issue = bugs[key];
+  dz.appendChild(makeQueueCard(issue));
+
+  // Fetch transiciones BG async y populamos el select
+  fetch(`${JIRA_BASE}/rest/api/3/issue/${key}/transitions`, {
+    headers: { Accept: 'application/json' }
+  }).then(r => r.ok ? r.json() : null).then(data => {
+    if (!data?.transitions?.length) return;
+    colaItems[key].bgTransitions = data.transitions;
+    const sel = document.getElementById(`bg-transition-${key}`);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— No cambiar —</option>' +
+      data.transitions.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
+    sel.disabled = false;
+  }).catch(() => {
+    const sel = document.getElementById(`bg-transition-${key}`);
+    if (sel) { sel.innerHTML = '<option value="">— No disponible —</option>'; }
+  });
+
+  updatePendingCount();
+  updateQueueCount();
+  updateSubmitBtn();
+}
+
+function removeFromQueue(key) {
+  const idx = queue.indexOf(key);
+  if (idx === -1) return;
+  queue.splice(idx, 1);
+  delete colaItems[key];
+
+  const queueCard = document.querySelector(`#drop-zone .bug-card[data-key="${key}"]`);
+  if (queueCard) queueCard.remove();
+
+  if (queue.length === 0) {
+    const dz = document.getElementById('drop-zone');
+    dz.classList.remove('has-items');
+    dz.innerHTML = `
+      <svg fill="none" stroke-width="1.5" viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <span>Arrastrá bugs aquí</span>`;
+    dz.setAttribute('ondragover', 'onDragOver(event)');
+    dz.setAttribute('ondragleave', 'onDragLeave(event)');
+    dz.setAttribute('ondrop', 'onDrop(event)');
+  }
+
+  const issue = bugs[key];
+  if (issue) {
+    const body = document.getElementById('pending-body');
+    const emptyState = body.querySelector('.state-empty, .state-error');
+    if (emptyState) emptyState.remove();
+    body.appendChild(makePendingCard(issue));
+  }
+
+  updatePendingCount();
+  updateQueueCount();
+  updateSubmitBtn();
+}
+
+// ── Counters & buttons ────────────────────────────────────────────────────────
+
+function updatePendingCount() {
+  const count = document.querySelectorAll('#pending-body .bug-card').length;
+  const el    = document.getElementById('pending-count');
+  el.textContent = count;
+  el.className = 'col-count' + (count === 0 ? ' zero' : '');
+}
+
+function updateQueueCount() {
+  const el = document.getElementById('queue-count');
+  el.textContent = queue.length;
+  el.className = 'col-count' + (queue.length === 0 ? ' zero' : '');
+}
+
+function updateSubmitBtn() {
+  document.getElementById('btn-subir').disabled = queue.length === 0 || submitting;
+}
+
+// ── ADF builders ──────────────────────────────────────────────────────────────
+
+function mkH(text, level = 2) {
+  return { type: 'heading', attrs: { level }, content: [{ type: 'text', text }] };
+}
+
+function mkP(text) {
+  return { type: 'paragraph', content: [{ type: 'text', text: text || '—' }] };
+}
+
+function mkRule() { return { type: 'rule' }; }
+
+function mkTableCell(text, isHeader = false) {
+  return {
+    type: isHeader ? 'tableHeader' : 'tableCell',
+    attrs: {},
+    content: [{ type: 'paragraph', content: [{ type: 'text', text: text || '—' }] }]
+  };
+}
+
+function mkTableRow(label, value) {
+  return {
+    type: 'tableRow',
+    content: [mkTableCell(label, true), mkTableCell(String(value || '—'))]
+  };
+}
+
+function buildDescription(issue) {
+  const f        = issue.fields;
+  const priority = f.priority?.name || 'Medium';
+  const reporter = f.reporter?.displayName || '—';
+  const assignee = f.assignee?.displayName || 'Sin asignar';
+  const created  = formatDate(f.created);
+  const labels   = (f.labels || []).join(', ') || '—';
+  const descText = extraerTextoADF(f.description) || 'Sin descripción';
+  const item     = colaItems[issue.key];
+  const resultados = item?.resultadosObtenidos?.trim() || 'Sin resultados registrados.';
+
+  return {
+    type: 'doc',
+    version: 1,
+    content: [
+      mkH('Detalles clave'),
+      {
+        type: 'table',
+        attrs: { isNumberColumnEnabled: false, layout: 'default' },
+        content: [
+          mkTableRow('Bug original',  issue.key),
+          mkTableRow('Prioridad',     priority),
+          mkTableRow('Reportado por', reporter),
+          mkTableRow('Asignado a',    assignee),
+          mkTableRow('Estado BG',     'Under Review'),
+          mkTableRow('Creado',        created),
+          mkTableRow('Labels',        labels),
+        ]
+      },
+      mkRule(),
+      mkH('Resultados obtenidos'),
+      mkP(resultados),
+      mkRule(),
+      mkH('Descripción original'),
+      mkP(descText)
+    ]
+  };
+}
+
+// ── Submit ────────────────────────────────────────────────────────────────────
+
+async function subirTodoAQAA() {
+  if (queue.length === 0 || submitting) return;
+  submitting = true;
+  updateSubmitBtn();
+
+  const progEl = document.getElementById('progress-text');
+  const banner = document.getElementById('summary-banner');
+  banner.className = 'summary-banner';
+
+  let ok   = 0;
+  let fail = 0;
+  const total = queue.length;
+
+  for (let i = 0; i < queue.length; i++) {
+    const key   = queue[i];
+    const issue = bugs[key];
+    const finalizar = colaItems[key]?.marcarFinalizada === true;
+    progEl.textContent = `${i + 1}/${total} ${finalizar ? 'creando y finalizando' : 'creando'}...`;
+
+    const resultArea = document.getElementById(`result-${key}`);
+    if (resultArea) {
+      resultArea.innerHTML = '<span class="card-result-badge badge-progress">Procesando...</span>';
+    }
+
+    try {
+      const createdKey = await crearSubtareaEnQAA(issue, finalizar);
+      const esFalla    = colaItems[key]?.resultadoVerificacion === 'falla';
+
+      ok++;
+      if (resultArea) {
+        const retestLink = esFalla
+          ? ` <button onclick="abrirRetest('${esc(createdKey)}')"
+                style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:2px 8px;border-radius:5px;background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">↩ Retest</button>`
+          : '';
+        resultArea.innerHTML = `<span class="card-result-badge badge-ok"><a href="https://liceopinoverde.atlassian.net/browse/${esc(createdKey)}" target="_blank" style="color:inherit;text-decoration:underline;">${esc(createdKey)}</a> ✓${retestLink}</span>`;
+      }
+      const removeBtn = document.querySelector(`#drop-zone .bug-card[data-key="${key}"] .btn-remove-queue`);
+      if (removeBtn) removeBtn.disabled = true;
+    } catch (e) {
+      fail++;
+      if (resultArea) {
+        resultArea.innerHTML = `<span class="card-result-badge badge-fail">Error: ${esc(e.message)}</span>`;
+      }
+    }
+  }
+
+  progEl.textContent = '';
+  submitting = false;
+
+  if (fail === 0) {
+    banner.className   = 'summary-banner show ok';
+    banner.textContent = `${ok} subtarea${ok !== 1 ? 's' : ''} creada${ok !== 1 ? 's' : ''} correctamente en QAA.`;
+    const failKeys = queue.filter(k => {
+      const ra = document.getElementById(`result-${k}`);
+      return ra && ra.querySelector('.badge-fail');
+    });
+    queue.length = 0;
+    failKeys.forEach(k => queue.push(k));
+  } else {
+    banner.className   = 'summary-banner show warn';
+    banner.textContent = `${ok} OK · ${fail} fallido${fail !== 1 ? 's' : ''}. Las cards con error quedan en la cola.`;
+  }
+
+  updateQueueCount();
+  updateSubmitBtn();
+}
+
+async function crearSubtareaEnQAA(issue, finalizar = false) {
+  const f      = issue.fields;
+  const bgKey  = issue.key.toLowerCase();
+  const item   = colaItems[issue.key];
+
+  const resultado = item?.resultadoVerificacion || '';
+  const baseLabels = ['verificacion-bg', 'bg-' + bgKey];
+  if (resultado === 'falla') baseLabels.push('retest');
+
+  const payload = {
+    fields: {
+      project:           { key: 'QAA' },
+      parent:            { key: QAA_PARENT },
+      customfield_10014: QAA_PARENT,
+      summary:           f.summary || issue.key,
+      issuetype:         { name: 'Tarea' },
+      priority:          { name: f.priority?.name || 'Medium' },
+      labels:            baseLabels,
+      description:       buildDescription(issue),
+      ...(versionActual ? { fixVersions: [{ name: versionActual }] } : {})
+    }
+  };
+
+  const r = await fetch(`${JIRA_BASE}/rest/api/3/issue`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body:    JSON.stringify(payload)
+  });
+
+  if (!r.ok) {
+    const errBody = await r.text();
+    let errMsg = `HTTP ${r.status}`;
+    try { errMsg = JSON.parse(errBody).errorMessages?.[0] || errMsg; } catch {}
+    throw new Error(errMsg);
+  }
+
+  const created = await r.json();
+  const newKey  = created.key;
+
+  // Copiar adjuntos originales del bug BG + traer descripción actual
+  let attachments  = [];
+  let bgCurrentDesc = null;
+  try {
+    const attRes = await fetch(`${JIRA_BASE}/rest/api/3/issue/${issue.key}?fields=attachment,description`, {
+      headers: { Accept: 'application/json' }
+    });
+    if (attRes.ok) {
+      const attData  = await attRes.json();
+      attachments    = attData.fields?.attachment  || [];
+      bgCurrentDesc  = attData.fields?.description || null;
+    }
+  } catch {}
+
+  for (const att of attachments) {
+    try {
+      const blob = await fetch(`${JIRA_BASE}/rest/api/3/attachment/content/${att.id}`)
+        .then(res => { if (!res.ok) throw new Error(); return res.blob(); });
+      const fd = new FormData();
+      fd.append('file', blob, att.filename);
+      await fetch(`${JIRA_BASE}/rest/api/3/issue/${newKey}/attachments`, {
+        method:  'POST',
+        headers: { 'X-Atlassian-Token': 'no-check' },
+        body:    fd
+      });
+    } catch {
+      // adjunto fallido no interrumpe el flujo
+    }
+  }
+
+  // Subir adjuntos nuevos del usuario → QAA y BG
+  if (item?.adjuntosNuevos?.length) {
+    for (const file of item.adjuntosNuevos) {
+      try {
+        const fd = new FormData();
+        fd.append('file', file, file.name);
+        await fetch(`${JIRA_BASE}/rest/api/3/issue/${newKey}/attachments`, {
+          method:  'POST',
+          headers: { 'X-Atlassian-Token': 'no-check' },
+          body:    fd
+        });
+      } catch {}
+      try {
+        const fd2 = new FormData();
+        fd2.append('file', file, file.name);
+        await fetch(`${JIRA_BASE}/rest/api/3/issue/${issue.key}/attachments`, {
+          method:  'POST',
+          headers: { 'X-Atlassian-Token': 'no-check' },
+          body:    fd2
+        });
+      } catch {}
+    }
+  }
+
+  // Actualizar descripción BG directamente (sin comentario)
+  const resultados = item?.resultadosObtenidos?.trim();
+  const resultLabel = resultado === 'pasa'
+    ? '✓ Verificación QA: PASA'
+    : resultado === 'falla'
+      ? '✗ Verificación QA: FALLA — requiere retest'
+      : 'Verificación QA';
+  try {
+    const appendNodes = [
+      mkRule(),
+      mkH(resultLabel),
+      ...(resultados ? [mkH('Resultado obtenido'), mkP(resultados)] : []),
+      mkH('Subtarea QAA vinculada'),
+      mkP(newKey)
+    ];
+    const newDesc = bgCurrentDesc
+      ? { ...bgCurrentDesc, content: [...(bgCurrentDesc.content || []), ...appendNodes] }
+      : { type: 'doc', version: 1, content: appendNodes };
+    await fetch(`${JIRA_BASE}/rest/api/3/issue/${issue.key}`, {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body:    JSON.stringify({ fields: { description: newDesc } })
+    });
+  } catch {}
+
+  // Crear issueLink QAA ↔ BG
+  try {
+    await fetch(`${JIRA_BASE}/rest/api/3/issueLink`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body:    JSON.stringify({
+        type:         { name: 'Relates' },
+        inwardIssue:  { key: newKey },
+        outwardIssue: { key: issue.key }
+      })
+    });
+  } catch {}
+
+  // Transicionar subtarea QAA si se pidió finalizar
+  if (finalizar) {
+    try {
+      const tRes = await fetch(`${JIRA_BASE}/rest/api/3/issue/${newKey}/transitions`, {
+        headers: { Accept: 'application/json' }
+      });
+      if (tRes.ok) {
+        const transitions = (await tRes.json()).transitions || [];
+        const target = transitions.find(t => /done|terminad|listo|cerrad|resuelto|complete|finish/i.test(t.name))
+                    || transitions.find(t => t.to?.statusCategory?.key === 'done');
+        if (target) {
+          await fetch(`${JIRA_BASE}/rest/api/3/issue/${newKey}/transitions`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body:    JSON.stringify({ transition: { id: target.id } })
+          });
+        }
+      }
+    } catch {}
+  }
+
+  // Transicionar BG al estado elegido
+  if (item?.selectedBgTransition) {
+    try {
+      await fetch(`${JIRA_BASE}/rest/api/3/issue/${issue.key}/transitions`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body:    JSON.stringify({ transition: { id: item.selectedBgTransition } })
+      });
+    } catch {}
+  }
+
+  return newKey;
+}
+
+// ── Lightbox ──────────────────────────────────────────────────────────────────
+
+function abrirLightbox(src, filename) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:2000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;';
+
+  const img = document.createElement('img');
+  img.src = src;
+  img.alt = filename;
+  img.style.cssText = 'max-width:90vw;max-height:82vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.6);object-fit:contain;';
+
+  const footer = document.createElement('div');
+  footer.style.cssText = 'margin-top:12px;display:flex;align-items:center;gap:14px;';
+
+  const nameEl = document.createElement('span');
+  nameEl.textContent = filename;
+  nameEl.style.cssText = 'font-size:12px;color:rgba(255,255,255,.7);max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+
+  const btnCerrar = document.createElement('button');
+  btnCerrar.textContent = 'Cerrar';
+  btnCerrar.style.cssText = 'background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:6px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .12s;';
+  btnCerrar.addEventListener('mouseenter', () => { btnCerrar.style.background = 'rgba(255,255,255,.25)'; });
+  btnCerrar.addEventListener('mouseleave', () => { btnCerrar.style.background = 'rgba(255,255,255,.15)'; });
+  btnCerrar.addEventListener('click', () => overlay.remove());
+
+  footer.appendChild(nameEl);
+  footer.appendChild(btnCerrar);
+
+  overlay.appendChild(img);
+  overlay.appendChild(footer);
+
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.addEventListener('keydown', function onKey(e) {
+    if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', onKey); }
+  });
+
+  document.body.appendChild(overlay);
+}
+
+// ── Retest routing ───────────────────────────────────────────────────────────
+
+async function abrirRetest(qaaKey) {
+  try {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${qaaKey}?fields=labels`, {
+      headers: { Accept: 'application/json' }
+    });
+    if (r.ok) {
+      const data   = await r.json();
+      const labels = data.fields?.labels || [];
+      if (labels.includes('verificacion-bg')) {
+        window.open('/bg-verificacion', '_blank');
+        return;
+      }
+    }
+  } catch {}
+  window.open(`/?edit=${qaaKey}&forceRetest=1`, '_blank');
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+
+function esc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+cargarVersionActual();
+cargarJqlDesdeEpic().then(cargarPendientes);
+</script>
+</body>
+</html>
