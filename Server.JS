@@ -12,7 +12,6 @@ const fs    = require('fs');
 const path  = require('path');
 const url   = require('url');
 
-
 // Cargar .env sin dependencias externas
 const envPath = path.join(__dirname, '.env');
 if (fs.existsSync(envPath)) {
@@ -41,44 +40,25 @@ const AUTH = ENV_ERROR ? '' : 'Basic ' + Buffer.from(JIRA_EMAIL + ':' + JIRA_TOK
 
 let myAccountId        = null;
 let myDisplayName      = null;
-let dependenciaDefault = null; // primer id válido de customfield_10370
+let dependenciaDefault = null;
 
-function fetchMyself() {
-  if (ENV_ERROR) return Promise.resolve();
-  return new Promise(resolve => {
-    const req = https.request(
-      { hostname: JIRA_HOST, port: 443, path: '/rest/api/3/myself', method: 'GET',
-        headers: { 'Authorization': AUTH, 'Accept': 'application/json' } },
-      res => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try {
-            const me = JSON.parse(data);
-            if (me.accountId) {
-              myAccountId   = me.accountId;
-              myDisplayName = me.displayName || JIRA_EMAIL;
-              console.log(`  accountId resuelto: ${myAccountId}`);
-            } else console.warn('[MYSELF] respuesta sin accountId:', data.slice(0, 200));
-          } catch(e) { console.warn('[MYSELF] error parseando respuesta:', e.message); }
-          resolve();
-        });
-      }
-    );
-    req.on('error', e => { console.warn('[MYSELF] error de red:', e.message); resolve(); });
-    req.end();
-  });
-}
+// ── Helpers Jira ──────────────────────────────────────────────────────────────
 
-function jiraGet(path) {
+function jiraGet(apiPath) {
   return new Promise((resolve, reject) => {
     const req = https.request(
-      { hostname: JIRA_HOST, port: 443, path, method: 'GET',
+      { hostname: JIRA_HOST, port: 443, path: apiPath, method: 'GET',
         headers: { 'Authorization': AUTH, 'Accept': 'application/json' } },
       res => {
         let data = '';
         res.on('data', c => data += c);
-        res.on('end', () => { try { resolve(JSON.parse(data)); } catch(e) { reject(e); } });
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data);
+            if (res.statusCode >= 400) reject(Object.assign(new Error(`HTTP ${res.statusCode}`), { status: res.statusCode, body: parsed }));
+            else resolve(parsed);
+          } catch(e) { reject(e); }
+        });
       }
     );
     req.on('error', reject);
@@ -86,29 +66,134 @@ function jiraGet(path) {
   });
 }
 
-async function fetchFieldDefaults() {
-  if (ENV_ERROR) return;
-  try {
-    // Buscar una issue QAA existente que tenga el campo seteado
-    const search = await jiraGet(
-      '/rest/api/3/search?jql=project%3DQAA%20ORDER%20BY%20created%20DESC&maxResults=3&fields=customfield_10370,issuetype,summary'
+function jiraPost(apiPath, body) {
+  return new Promise((resolve, reject) => {
+    const bodyStr = JSON.stringify(body);
+    const req = https.request(
+      { hostname: JIRA_HOST, port: 443, path: apiPath, method: 'POST',
+        headers: { 'Authorization': AUTH, 'Accept': 'application/json',
+                   'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(bodyStr) } },
+      res => {
+        let data = '';
+        res.on('data', c => data += c);
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data);
+            if (res.statusCode >= 400) reject(Object.assign(new Error(`HTTP ${res.statusCode}`), { status: res.statusCode, body: parsed }));
+            else resolve(parsed);
+          } catch(e) { reject(e); }
+        });
+      }
     );
-    const issues = search?.issues || [];
-    console.log(`[FIELDS] issues encontradas: ${issues.length}`);
-    for (const issue of issues) {
-      const val = issue.fields?.customfield_10370;
-      console.log(`  ${issue.key} (${issue.fields?.issuetype?.name}): customfield_10370 =`, JSON.stringify(val));
-      if (val && val.id) {
-        dependenciaDefault = { id: val.id };
-        console.log(`  → usando: "${val.value}" (id ${val.id})`);
+    req.on('error', reject);
+    req.write(bodyStr);
+    req.end();
+  });
+}
+
+// ── Startup: resolver accountId y dependenciaDefault ─────────────────────────
+
+function fetchMyself() {
+  if (ENV_ERROR) return Promise.resolve();
+  return jiraGet('/rest/api/3/myself')
+    .then(me => {
+      if (me.accountId) {
+        myAccountId   = me.accountId;
+        myDisplayName = me.displayName || JIRA_EMAIL;
+        console.log(`  accountId    : ${myAccountId} (${myDisplayName})`);
+      } else {
+        console.warn('[MYSELF] respuesta sin accountId');
+      }
+    })
+    .catch(e => console.warn('[MYSELF] error:', e.message));
+}
+
+async function fetchDependenciaDefault() {
+  if (ENV_ERROR) return;
+
+  // Override manual desde .env — tiene prioridad sobre todo
+  if (process.env.DEPENDENCIA_JSON) {
+    try {
+      dependenciaDefault = JSON.parse(process.env.DEPENDENCIA_JSON);
+      console.log(`  dependenciaDefault (desde .env): ${JSON.stringify(dependenciaDefault)}`);
+      return;
+    } catch(e) { console.warn('[DEPENDENCIA] DEPENDENCIA_JSON inválido en .env:', e.message); }
+  }
+
+  // Diagnóstico: tipo del campo (para saber qué formato de valor poner)
+  try {
+    const allFields = await jiraGet('/rest/api/3/field');
+    const def = allFields.find(f => f.id === 'customfield_10370');
+    if (def) {
+      console.log(`[DEPENDENCIA] tipo del campo "${def.name}":`, JSON.stringify({
+        type:   def.schema?.type,
+        items:  def.schema?.items,
+        custom: def.schema?.custom,
+      }));
+    } else {
+      console.warn('[DEPENDENCIA] customfield_10370 no encontrado en /rest/api/3/field');
+    }
+  } catch(e) { console.warn('[DEPENDENCIA] no se pudo obtener definición del campo:', e.message); }
+
+  // 1. Buscar en issues reales del proyecto BG (con el campo seteado)
+  try {
+    const res = await jiraPost('/rest/api/3/search/jql', {
+      jql: 'project = BG AND cf[10370] is not EMPTY ORDER BY created DESC',
+      maxResults: 1,
+      fields: ['customfield_10370'],
+    });
+    console.log('[DEPENDENCIA] issues BG con campo seteado:', res.total);
+    if (res.issues?.[0]?.fields?.customfield_10370) {
+      dependenciaDefault = res.issues[0].fields.customfield_10370;
+      console.log(`  dependenciaDefault: ${JSON.stringify(dependenciaDefault)}`);
+      return;
+    }
+  } catch(e) { console.warn('[DEPENDENCIA] búsqueda BG falló:', e.message); }
+
+  // 2. Buscar en issues reales del proyecto QAA
+  try {
+    const res = await jiraPost('/rest/api/3/search/jql', {
+      jql: 'project = QAA AND cf[10370] is not EMPTY ORDER BY created DESC',
+      maxResults: 1,
+      fields: ['customfield_10370'],
+    });
+    console.log('[DEPENDENCIA] issues QAA con campo seteado:', res.total);
+    if (res.issues?.[0]?.fields?.customfield_10370) {
+      dependenciaDefault = res.issues[0].fields.customfield_10370;
+      console.log(`  dependenciaDefault: ${JSON.stringify(dependenciaDefault)}`);
+      return;
+    }
+  } catch(e) { console.warn('[DEPENDENCIA] búsqueda QAA falló:', e.message); }
+
+  // 3. allowedValues desde createmeta
+  try {
+    const types = await jiraGet('/rest/api/3/issue/createmeta/BG/issuetypes');
+    const list  = types.issueTypes || types.values || [];
+    const bug   = list.find(t => t.name === 'Bug');
+    if (bug) {
+      const meta   = await jiraGet(`/rest/api/3/issue/createmeta/BG/issuetypes/${bug.id}`);
+      const values = meta.values || [];
+      const field  = values.find(v => v.fieldId === 'customfield_10370');
+      console.log('[DEPENDENCIA] createmeta field:', JSON.stringify(field));
+      if (field?.allowedValues?.length) {
+        dependenciaDefault = field.allowedValues[0];
+        console.log(`  dependenciaDefault: ${JSON.stringify(dependenciaDefault)}`);
         return;
       }
     }
-    console.warn('[FIELDS] ninguna issue con customfield_10370 seteado');
-  } catch(e) {
-    console.warn('[FIELDS] error resolviendo customfield_10370:', e.message);
-  }
+  } catch(e) { console.warn('[DEPENDENCIA] createmeta falló:', e.message); }
+
+  console.warn(`
+  [DEPENDENCIA] ❌ no se pudo resolver customfield_10370 automáticamente.
+  Solución: agregá en tu .env:
+    DEPENDENCIA_JSON=<valor>
+  El tipo del campo está en el log "[DEPENDENCIA] tipo del campo" arriba.
+  Ejemplo para campo tipo "option":  DEPENDENCIA_JSON={"id":"10001"}
+  Ejemplo para campo tipo "string":  DEPENDENCIA_JSON="Mi valor"
+  `);
 }
+
+// ── MIME types ────────────────────────────────────────────────────────────────
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -140,17 +225,16 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ── PROXY: /jira/* → Jira API (sigue redirects server-side) ──
+  // ── PROXY: /jira/* → Jira API ─────────────────────────────────────────────
   if (parsed.pathname.startsWith('/jira/')) {
     const jiraPath = parsed.pathname.replace('/jira', '') + (parsed.search || '');
-    console.log(`[PROXY] ${req.method} ${jiraPath}`);
 
     let body = [];
     req.on('data', chunk => body.push(chunk));
     req.on('end', () => {
       let bodyData = Buffer.concat(body);
 
-      // Inyectar campos requeridos en creación de issues (solo cuando viene del formulario principal)
+      // Inyectar campos requeridos en creación de issues
       if (req.method === 'POST' && jiraPath === '/rest/api/3/issue' && bodyData.length > 0) {
         try {
           const payload = JSON.parse(bodyData.toString());
@@ -158,9 +242,12 @@ const server = http.createServer((req, res) => {
             if (!payload.fields.customfield_10271) payload.fields.customfield_10271 = JIRA_EMAIL;
             if (!payload.fields.customfield_10337) payload.fields.customfield_10337 = myDisplayName || JIRA_EMAIL;
             if (!payload.fields.customfield_10370 && dependenciaDefault) payload.fields.customfield_10370 = dependenciaDefault;
-            console.log('[INJECT] customfield_10370 enviado:', JSON.stringify(payload.fields.customfield_10370));
-            console.log('[INJECT] dependenciaDefault al momento de inyectar:', JSON.stringify(dependenciaDefault));
             bodyData = Buffer.from(JSON.stringify(payload));
+
+            const proj = payload.fields.project?.key || '?';
+            const type = payload.fields.issuetype?.name || '?';
+            console.log(`\n→ CREATE ${proj}/${type}`);
+            console.log('  payload:', JSON.stringify(payload, null, 2));
           }
         } catch(e) { console.warn('[INJECT] error parseando body:', e.message); }
       }
@@ -175,11 +262,10 @@ const server = http.createServer((req, res) => {
         baseHeaders['Content-Length'] = bodyData.length;
       }
 
-      function doRequest(hostname, path, method, headers, body, depth) {
+      function doRequest(hostname, apiPath, method, headers, bodyBuf, depth) {
         if (depth > 5) { res.writeHead(508); res.end('Too many redirects'); return; }
 
-        const options = { hostname, port: 443, path, method, headers };
-        const proxyReq = https.request(options, proxyRes => {
+        const proxyReq = https.request({ hostname, port: 443, path: apiPath, method, headers }, proxyRes => {
           const status = proxyRes.statusCode;
 
           if ([301, 302, 303, 307, 308].includes(status)) {
@@ -188,25 +274,39 @@ const server = http.createServer((req, res) => {
             if (!location) { res.writeHead(502); res.end('Redirect sin Location'); return; }
             try {
               const u = new URL(location);
-              const redirectHeaders = u.hostname === JIRA_HOST
+              const rHeaders = u.hostname === JIRA_HOST
                 ? { 'Authorization': AUTH, 'Accept': '*/*' }
                 : { 'Accept': '*/*' };
-              doRequest(u.hostname, u.pathname + (u.search || ''), 'GET',
-                redirectHeaders, null, depth + 1);
-            } catch {
-              res.writeHead(502); res.end('Location inválida');
-            }
+              doRequest(u.hostname, u.pathname + (u.search || ''), 'GET', rHeaders, null, depth + 1);
+            } catch { res.writeHead(502); res.end('Location inválida'); }
             return;
           }
 
           const ct = proxyRes.headers['content-type'] || 'application/octet-stream';
           res.writeHead(status, { 'Content-Type': ct, 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
 
-          // Log completo de errores Jira para debugging
-          if (status >= 400 && method === 'POST' && path.includes('/issue')) {
+          // Capturar y loggear respuesta para métodos de escritura o errores
+          const capture = status >= 400 || (method !== 'GET' && method !== 'OPTIONS');
+          if (capture) {
             let raw = '';
             proxyRes.on('data', c => { raw += c; res.write(c); });
-            proxyRes.on('end', () => { console.log(`[JIRA ERROR ${status}]`, raw); res.end(); });
+            proxyRes.on('end', () => {
+              if (status >= 400) {
+                try {
+                  const parsed = JSON.parse(raw);
+                  const msgs   = [...(parsed.errorMessages || [])];
+                  Object.values(parsed.errors || {}).forEach(v => { if (!msgs.includes(v)) msgs.push(v); });
+                  console.error(`\n  ╔══ ERROR ${status} ══ ${method} ${apiPath}`);
+                  msgs.forEach(m => console.error(`  ║  ✗ ${m}`));
+                  console.error(`  ║  raw: ${raw}`);
+                  console.error(`  ╚${'═'.repeat(60)}\n`);
+                } catch { console.error(`[ERROR ${status}]`, raw); }
+              } else {
+                console.log(`← ${status} ${method} ${apiPath}`);
+                console.log('  response:', raw.slice(0, 500));
+              }
+              res.end();
+            });
           } else {
             proxyRes.pipe(res);
           }
@@ -217,7 +317,7 @@ const server = http.createServer((req, res) => {
           if (!res.headersSent) { res.writeHead(502); res.end(JSON.stringify({ error: err.message })); }
         });
 
-        if (body && body.length > 0) proxyReq.write(body);
+        if (bodyBuf && bodyBuf.length > 0) proxyReq.write(bodyBuf);
         proxyReq.end();
       }
 
@@ -226,19 +326,14 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ── PROXY: /wiki/* → Confluence API ──
+  // ── PROXY: /wiki/* → Confluence API ──────────────────────────────────────
   if (req.url.startsWith('/wiki/')) {
     const wikiPath = req.url;
-    console.log(`[WIKI] ${req.method} ${wikiPath}`);
-
     let body = [];
     req.on('data', chunk => body.push(chunk));
     req.on('end', () => {
       const bodyData = Buffer.concat(body);
-      const headers = {
-        'Authorization': AUTH,
-        'Accept':        'application/json',
-      };
+      const headers = { 'Authorization': AUTH, 'Accept': 'application/json' };
       if (bodyData.length > 0) {
         headers['Content-Type']   = req.headers['content-type'] || 'application/json';
         headers['Content-Length'] = bodyData.length;
@@ -254,7 +349,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ── Archivos estáticos ──
+  // ── Archivos estáticos ────────────────────────────────────────────────────
   let filePath = parsed.pathname === '/'                  ? '/Qa_form.html'
                : parsed.pathname === '/history'           ? '/history.html'
                : parsed.pathname === '/jira-editor'       ? '/jira_editor.html'
@@ -264,8 +359,7 @@ const server = http.createServer((req, res) => {
 
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('Not found'); return; }
-    const ext  = path.extname(filePath);
-    const mime = MIME[ext] || 'application/octet-stream';
+    const mime = MIME[path.extname(filePath)] || 'application/octet-stream';
     res.writeHead(200, { 'Content-Type': mime });
     res.end(data);
   });
@@ -274,9 +368,7 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log('');
   console.log('  Servidor QA corriendo');
-  console.log(`  Abrir en el navegador: http://localhost:${PORT}`);
-  console.log('  Ctrl+C para detener');
+  console.log(`  http://localhost:${PORT}`);
   console.log('');
-  fetchMyself();
-  fetchFieldDefaults();
+  fetchMyself().then(() => fetchDependenciaDefault());
 });

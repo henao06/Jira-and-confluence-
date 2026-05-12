@@ -433,6 +433,56 @@ body { padding: 20px 16px 40px; }
   margin-top: 2px;
 }
 
+.preview-file-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.preview-file-box {
+  position: relative;
+  background: var(--g1);
+  border-radius: 10px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.preview-file-full-img {
+  max-width: 88vw;
+  max-height: 88vh;
+  object-fit: contain;
+  display: block;
+  border-radius: 8px;
+}
+.preview-file-embed {
+  width: 80vw;
+  height: 85vh;
+  border: none;
+}
+.preview-file-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0,0,0,.5);
+  border: none;
+  color: #fff;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
 .preview-item {
   position: relative;
   display: inline-flex;
@@ -519,6 +569,78 @@ body { padding: 20px 16px 40px; }
 
 .btn-preview-card:hover { border-color: var(--g6); color: var(--g7); background: var(--g0); }
 .btn-preview-card svg { width: 11px; height: 11px; stroke: currentColor; }
+
+/* ── Agregar tarea en BG ── */
+.btn-agregar-bg {
+  margin-top: 2px;
+  background: none;
+  border: 1px dashed var(--g3);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sub);
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all .15s;
+  width: 100%;
+  justify-content: center;
+}
+.btn-agregar-bg:hover { border-color: var(--g5); color: var(--g7); background: var(--g0); border-style: solid; }
+
+.tarea-bg-section { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+
+.tarea-bg-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--g0);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  position: relative;
+}
+.tarea-bg-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--sub);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.tarea-bg-item input,
+.tarea-bg-item textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 8px;
+  background: var(--white);
+  color: var(--text);
+  resize: vertical;
+  transition: border-color .12s;
+}
+.tarea-bg-item input:focus,
+.tarea-bg-item textarea:focus { outline: none; border-color: var(--g4); }
+.tarea-bg-item textarea { min-height: 50px; }
+.btn-remove-tarea-bg {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color .12s;
+}
+.btn-remove-tarea-bg:hover { color: var(--red); }
 
 /* ── Estado al finalizar ── */
 .estado-section { display: flex; flex-direction: column; gap: 7px; }
@@ -982,6 +1104,9 @@ function extraerTextoADF(adf) {
   return parts.join('').trim();
 }
 
+// ── Dependencia BG (customfield_10370) ───────────────────────────────────────
+
+
 // ── JQL desde epic ────────────────────────────────────────────────────────────
 
 function extraerJqlDeADF(adf) {
@@ -1002,7 +1127,7 @@ function extraerJqlDeADF(adf) {
 
 async function cargarJqlDesdeEpic() {
   try {
-    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${QAA_PARENT}?fields=description`, {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${QAA_PARENT}?fields=description,customfield_10370`, {
       headers: { Accept: 'application/json' }
     });
     if (!r.ok) return;
@@ -1028,7 +1153,7 @@ async function cargarPendientes() {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
         jql,
-        fields: ['summary', 'priority', 'assignee', 'reporter', 'created', 'description', 'labels', 'status'],
+        fields: ['summary', 'priority', 'assignee', 'reporter', 'created', 'description', 'labels', 'status', 'customfield_10370'],
         maxResults: 50
       })
     });
@@ -1360,6 +1485,48 @@ function makeQueueCard(issue) {
   failRow.appendChild(failLbl);
   secEstado.appendChild(failRow);
 
+  // Checkbox Agregar al Epic
+  const epicId  = `epic-link-${key}`;
+  const epicRow = document.createElement('label');
+  epicRow.className = 'estado-check-row';
+  epicRow.htmlFor   = epicId;
+  epicRow.style.cssText = 'border-color:#a78bfa;background:#f5f3ff;';
+  const epicChk = document.createElement('input');
+  epicChk.type    = 'checkbox';
+  epicChk.id      = epicId;
+  epicChk.checked = item.agregarAlEpic;
+  epicChk.addEventListener('change', async () => {
+    if (!epicChk.checked) { item.agregarAlEpic = false; return; }
+    epicChk.checked  = false;
+    epicChk.disabled = true;
+    epicLbl.textContent = 'Enlazando...';
+    try {
+      const r = await fetch(`${JIRA_BASE}/rest/api/3/issueLink`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body:    JSON.stringify({ type: { name: 'Relates' }, inwardIssue: { key: issue.key }, outwardIssue: { key: QAA_PARENT } })
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      item.agregarAlEpic  = true;
+      epicChk.checked     = true;
+      epicLbl.textContent = 'Agregado al Epic ✓';
+      epicLbl.style.color = '#059669';
+    } catch(e) {
+      item.agregarAlEpic  = false;
+      epicLbl.textContent = `Error al enlazar: ${e.message}`;
+      epicLbl.style.color = 'var(--red)';
+    } finally {
+      epicChk.disabled = false;
+    }
+  });
+  const epicLbl = document.createElement('span');
+  epicLbl.className   = 'estado-check-label';
+  epicLbl.style.color = '#6d28d9';
+  epicLbl.textContent = 'Agregar al Epic';
+  epicRow.appendChild(epicChk);
+  epicRow.appendChild(epicLbl);
+  secEstado.appendChild(epicRow);
+
   // Estado BG: select con transiciones (se populan async en addToQueue)
   const rowBG = document.createElement('div');
   rowBG.className = 'estado-row';
@@ -1386,9 +1553,71 @@ function makeQueueCard(issue) {
   btnPreview.addEventListener('click', () => abrirModalPreview(key));
   sections.appendChild(btnPreview);
 
+  // 5. Agregar tarea en BG
+  const secTareasBG = document.createElement('div');
+  secTareasBG.className = 'tarea-bg-section';
+  const btnAgregarBG = document.createElement('button');
+  btnAgregarBG.className = 'btn-agregar-bg';
+  btnAgregarBG.type      = 'button';
+  btnAgregarBG.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Agregar tarea en BG`;
+  btnAgregarBG.addEventListener('click', e => {
+    e.stopPropagation();
+    agregarTareaBGPendiente(issue, secTareasBG);
+  });
+  sections.appendChild(btnAgregarBG);
+  sections.appendChild(secTareasBG);
+
   info.appendChild(sections);
 
   return wrap;
+}
+
+function abrirPreviewArchivo(file) {
+  const blobUrl = URL.createObjectURL(file);
+  const overlay = document.createElement('div');
+  overlay.className = 'preview-file-overlay';
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) { overlay.remove(); URL.revokeObjectURL(blobUrl); }
+  });
+
+  const box = document.createElement('div');
+  box.className = 'preview-file-box';
+
+  const btnClose = document.createElement('button');
+  btnClose.className   = 'preview-file-close';
+  btnClose.textContent = '✕';
+  btnClose.addEventListener('click', () => { overlay.remove(); URL.revokeObjectURL(blobUrl); });
+
+  const isImage = file.type.startsWith('image/');
+  const isPdf   = file.type === 'application/pdf';
+
+  if (isImage) {
+    const img = document.createElement('img');
+    img.src       = blobUrl;
+    img.className = 'preview-file-full-img';
+    box.appendChild(img);
+  } else if (isPdf) {
+    const embed = document.createElement('embed');
+    embed.src    = blobUrl;
+    embed.type   = 'application/pdf';
+    embed.className = 'preview-file-embed';
+    box.appendChild(embed);
+  } else {
+    const p = document.createElement('p');
+    p.style.cssText = 'color:var(--text);padding:24px;text-align:center;';
+    p.textContent = file.name;
+    const a = document.createElement('a');
+    a.href      = blobUrl;
+    a.download  = file.name;
+    a.textContent = 'Descargar';
+    a.style.cssText = 'display:block;margin-top:12px;color:var(--accent);';
+    box.appendChild(p);
+    box.appendChild(a);
+  }
+
+  box.appendChild(btnClose);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
 }
 
 function makeFilePreview(file, item, container) {
@@ -1399,19 +1628,25 @@ function makeFilePreview(file, item, container) {
 
   if (isImage) {
     const img = document.createElement('img');
-    img.alt = file.name;
+    img.alt   = file.name;
+    img.title = file.name;
+    img.style.cursor = 'zoom-in';
     const url = URL.createObjectURL(file);
     img.src = url;
     img.onload = () => URL.revokeObjectURL(url);
+    img.addEventListener('click', () => abrirPreviewArchivo(file));
     wrapper.appendChild(img);
   } else {
     const fileDiv = document.createElement('div');
-    fileDiv.className = 'preview-file';
+    fileDiv.className    = 'preview-file';
+    fileDiv.style.cursor = 'pointer';
+    fileDiv.title        = file.name;
     fileDiv.innerHTML = `<svg fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
     const nameEl = document.createElement('div');
     nameEl.className   = 'preview-file-name';
     nameEl.textContent = file.name;
     fileDiv.appendChild(nameEl);
+    fileDiv.addEventListener('click', () => abrirPreviewArchivo(file));
     wrapper.appendChild(fileDiv);
   }
 
@@ -1650,7 +1885,8 @@ function addToQueue(key) {
     bgTransitions:         [],
     selectedBgTransition:  '',
     resultadoVerificacion: '',
-    marcarFinalizada:      false
+    marcarFinalizada:      false,
+    agregarAlEpic:         false
   };
 
   const pendingCard = document.querySelector(`#pending-body .bug-card[data-key="${key}"]`);
@@ -1716,6 +1952,165 @@ function removeFromQueue(key) {
   updatePendingCount();
   updateQueueCount();
   updateSubmitBtn();
+}
+
+// ── Tarea BG extra ────────────────────────────────────────────────────────────
+
+function agregarTareaBGPendiente(issue, container) {
+  const f    = issue.fields;
+  const tarea = { titulo: '', notas: '', adjuntos: [] };
+  const uid   = `tarea-bg-p-${issue.key}-${Date.now()}`;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'tarea-bg-item';
+
+  const header = document.createElement('div');
+  header.className = 'tarea-bg-item-header';
+  const lbl = document.createElement('span');
+  lbl.textContent = 'Nueva tarea BG';
+  const btnRm = document.createElement('button');
+  btnRm.className   = 'btn-remove-tarea-bg';
+  btnRm.type        = 'button';
+  btnRm.textContent = '✕';
+  btnRm.addEventListener('click', e => { e.stopPropagation(); wrap.remove(); });
+  header.appendChild(lbl);
+  header.appendChild(btnRm);
+
+  const inputTitulo = document.createElement('input');
+  inputTitulo.type        = 'text';
+  inputTitulo.placeholder = 'Título de la tarea';
+  inputTitulo.addEventListener('input', () => { tarea.titulo = inputTitulo.value; });
+
+  const inputNotas = document.createElement('textarea');
+  inputNotas.placeholder = 'Notas / descripción (opcional)';
+  inputNotas.rows = 2;
+  inputNotas.addEventListener('input', () => { tarea.notas = inputNotas.value; });
+
+  const adjLabel = document.createElement('label');
+  adjLabel.className = 'adjuntos-input-label';
+  adjLabel.htmlFor   = uid;
+  adjLabel.style.marginTop = '2px';
+  adjLabel.innerHTML = `<svg fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Adjuntar archivos`;
+
+  const adjInput = document.createElement('input');
+  adjInput.type     = 'file';
+  adjInput.id       = uid;
+  adjInput.multiple = true;
+  adjInput.accept   = 'image/*,.pdf';
+  adjInput.style.display = 'none';
+
+  const adjPreviews = document.createElement('div');
+  adjPreviews.className = 'adjuntos-previews';
+
+  adjInput.addEventListener('change', () => {
+    Array.from(adjInput.files).forEach(file => {
+      tarea.adjuntos.push(file);
+      adjPreviews.appendChild(makeFilePreview(file, { adjuntosNuevos: tarea.adjuntos }, adjPreviews));
+    });
+    adjInput.value = '';
+  });
+
+  const btnCrear = document.createElement('button');
+  btnCrear.className   = 'btn-agregar-bg';
+  btnCrear.type        = 'button';
+  btnCrear.style.cssText = 'border-style:solid;background:var(--g1);color:var(--g8);border-color:var(--g4);margin-top:4px;';
+  btnCrear.textContent = 'Crear en BG';
+  btnCrear.addEventListener('click', async e => {
+    e.stopPropagation();
+    if (!tarea.titulo.trim()) { inputTitulo.focus(); return; }
+
+    btnCrear.textContent = 'Creando...';
+    btnCrear.disabled    = true;
+    try {
+      const bgPayload = {
+        fields: {
+          project:   { key: 'BG' },
+          summary:   tarea.titulo.trim(),
+          issuetype:   { name: 'Bug' },
+          labels:      ['qa-reported'],
+          ...(f.priority?.name      ? { priority: { name: f.priority.name } }             : {}),
+          ...(f.assignee?.accountId ? { assignee: { accountId: f.assignee.accountId } }   : {}),
+          ...(tarea.notas.trim()    ? { description: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: tarea.notas.trim() }] }] } } : {})
+        }
+      };
+      console.log(`[BG] Payload → tarea de ${issue.key}:`, JSON.stringify(bgPayload, null, 2));
+
+      const bgR = await fetch(`${JIRA_BASE}/rest/api/3/issue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(bgPayload)
+      });
+      if (!bgR.ok) {
+        const errBody = await bgR.text();
+        console.error(`[BG ERROR ${bgR.status}]:`, errBody);
+        let errMsg = `HTTP ${bgR.status}`;
+        try {
+          const errData = JSON.parse(errBody);
+          const msgs = [...(errData.errorMessages || [])];
+          Object.values(errData.errors || {}).forEach(v => { if (!msgs.includes(v)) msgs.push(v); });
+          if (msgs.length) errMsg = msgs.join(' · ');
+        } catch {}
+        throw new Error(errMsg);
+      }
+      const bgCreated = await bgR.json();
+      const bgNewKey  = bgCreated.key;
+      console.log(`[BG] Tarea creada: ${bgNewKey}`);
+
+      // Link: nuevo BG Bug ↔ BG bug origen (el que está en la cola)
+      await fetch(`${JIRA_BASE}/rest/api/3/issueLink`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ type: { name: 'Relates' }, inwardIssue: { key: bgNewKey }, outwardIssue: { key: issue.key } })
+      }).catch(e => console.error('[LINK BG↔BG ERROR]', e));
+
+      // Link: nuevo BG Bug ↔ QAA-172 (epic padre en QAA)
+      await fetch(`${JIRA_BASE}/rest/api/3/issueLink`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ type: { name: 'Relates' }, inwardIssue: { key: bgNewKey }, outwardIssue: { key: QAA_PARENT } })
+      }).catch(e => console.error('[LINK BG↔QAA ERROR]', e));
+
+      for (const file of tarea.adjuntos) {
+        try {
+          const fd = new FormData();
+          fd.append('file', file, file.name);
+          await fetch(`${JIRA_BASE}/rest/api/3/issue/${bgNewKey}/attachments`, {
+            method: 'POST', headers: { 'X-Atlassian-Token': 'no-check' }, body: fd
+          });
+        } catch {}
+      }
+
+      wrap.innerHTML = '';
+      const badge = document.createElement('a');
+      badge.href        = `https://liceopinoverde.atlassian.net/browse/${esc(bgNewKey)}`;
+      badge.target      = '_blank';
+      badge.className   = 'card-result-badge badge-ok';
+      badge.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:5px;background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;text-decoration:none;';
+      badge.textContent = `${bgNewKey} ✓`;
+      wrap.appendChild(badge);
+    } catch(err) {
+      const errMsg = err.message || 'Error desconocido';
+      btnCrear.textContent = 'Reintentar';
+      btnCrear.disabled    = false;
+      let errEl = wrap.querySelector('.tarea-bg-error');
+      if (!errEl) {
+        errEl = document.createElement('div');
+        errEl.className = 'tarea-bg-error';
+        errEl.style.cssText = 'font-size:10px;color:var(--red);padding:4px 8px;background:var(--red-bg);border:1px solid var(--red-b);border-radius:5px;word-break:break-word;margin-top:4px;';
+        wrap.appendChild(errEl);
+      }
+      errEl.textContent = errMsg;
+    }
+  });
+
+  wrap.appendChild(header);
+  wrap.appendChild(inputTitulo);
+  wrap.appendChild(inputNotas);
+  wrap.appendChild(adjLabel);
+  wrap.appendChild(adjInput);
+  wrap.appendChild(adjPreviews);
+  wrap.appendChild(btnCrear);
+  container.appendChild(wrap);
 }
 
 // ── Counters & buttons ────────────────────────────────────────────────────────
@@ -1895,6 +2290,8 @@ async function crearSubtareaEnQAA(issue, finalizar = false) {
     }
   };
 
+  console.log(`[QAA] Payload → ${issue.key}:`, JSON.stringify(payload, null, 2));
+
   const r = await fetch(`${JIRA_BASE}/rest/api/3/issue`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -1903,13 +2300,20 @@ async function crearSubtareaEnQAA(issue, finalizar = false) {
 
   if (!r.ok) {
     const errBody = await r.text();
+    console.error(`[QAA ERROR ${r.status}] ${issue.key}:`, errBody);
     let errMsg = `HTTP ${r.status}`;
-    try { errMsg = JSON.parse(errBody).errorMessages?.[0] || errMsg; } catch {}
+    try {
+      const errData = JSON.parse(errBody);
+      const msgs = [...(errData.errorMessages || [])];
+      Object.values(errData.errors || {}).forEach(v => { if (!msgs.includes(v)) msgs.push(v); });
+      if (msgs.length) errMsg = msgs.join(' · ');
+    } catch {}
     throw new Error(errMsg);
   }
 
   const created = await r.json();
   const newKey  = created.key;
+  console.log(`[QAA] Issue creado: ${newKey}`);
 
   // Copiar adjuntos originales del bug BG + traer descripción actual
   let attachments  = [];
@@ -1992,16 +2396,29 @@ async function crearSubtareaEnQAA(issue, finalizar = false) {
 
   // Crear issueLink QAA ↔ BG
   try {
-    await fetch(`${JIRA_BASE}/rest/api/3/issueLink`, {
+    const lp1 = { type: { name: 'Relates' }, inwardIssue: { key: newKey }, outwardIssue: { key: issue.key } };
+    console.log(`[LINK] ${newKey} ↔ ${issue.key}:`, JSON.stringify(lp1));
+    const lr1 = await fetch(`${JIRA_BASE}/rest/api/3/issueLink`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body:    JSON.stringify({
-        type:         { name: 'Relates' },
-        inwardIssue:  { key: newKey },
-        outwardIssue: { key: issue.key }
-      })
+      body:    JSON.stringify(lp1)
     });
-  } catch {}
+    console.log(`[LINK] ${newKey} ↔ ${issue.key} → ${lr1.status}`);
+  } catch (e) { console.error('[LINK ERROR]', e); }
+
+  // Link directo Epic QAA-172 ↔ BG bug (si el checkbox "Agregar al Epic" está activo)
+  if (item?.agregarAlEpic) {
+    try {
+      const lp2 = { type: { name: 'Relates' }, inwardIssue: { key: QAA_PARENT }, outwardIssue: { key: issue.key } };
+      console.log(`[LINK] ${QAA_PARENT} ↔ ${issue.key}:`, JSON.stringify(lp2));
+      const lr2 = await fetch(`${JIRA_BASE}/rest/api/3/issueLink`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body:    JSON.stringify(lp2)
+      });
+      console.log(`[LINK] ${QAA_PARENT} ↔ ${issue.key} → ${lr2.status}`);
+    } catch (e) { console.error('[LINK ERROR]', e); }
+  }
 
   // Transicionar subtarea QAA si se pidió finalizar
   if (finalizar) {
