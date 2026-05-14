@@ -55,6 +55,24 @@ async function inicializarSistemaVersiones() {
   }
 }
 
+async function calcularSiguienteVersion() {
+  const r    = await fetch(`/jira/rest/api/3/project/QAA/versions`, {
+    headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
+  });
+  const todas = r.ok ? await r.json() : [];
+  const test  = todas.filter(v => v.name.startsWith('test-v'));
+
+  // Si ya hay otra versión sin publicar (distinta a la activa), es la siguiente
+  const sinPublicar = test
+    .filter(v => !v.released && v.name !== window.versionActual)
+    .sort((a, b) => b.name.localeCompare(a.name));
+  if (sinPublicar.length) return sinPublicar[0].name;
+
+  // Si no, siguiente = max global (publicadas + no publicadas) + 1
+  const maxNum = test.reduce((max, v) => Math.max(max, parseInt(v.name.replace('test-v', ''), 10)), 0);
+  return `test-v${String(maxNum + 1).padStart(3, '0')}`;
+}
+
 async function iniciarSesion(motivo = 'Nueva sesión') {
   const projectId = await resolverProjectId();
 
@@ -62,28 +80,39 @@ async function iniciarSesion(motivo = 'Nueva sesión') {
     headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
   });
   const todas = rAll.ok ? await rAll.json() : [];
-  const maxNum = todas
-    .filter(v => v.name.startsWith('test-v'))
-    .reduce((max, v) => Math.max(max, parseInt(v.name.replace('test-v', ''), 10)), 0);
-  const siguiente = `test-v${String(maxNum + 1).padStart(3, '0')}`;
+  const test  = todas.filter(v => v.name.startsWith('test-v'));
 
-  const r = await fetch(`/jira/rest/api/3/version`, {
-    method: 'POST',
-    headers: { 'Authorization': AUTH, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify({
-      name: siguiente, description: motivo,
-      projectId: parseInt(projectId), released: false,
-      startDate: new Date().toISOString().split('T')[0]
-    })
-  });
-  if (!r.ok) { const e = await r.json(); throw new Error(JSON.stringify(e.errors || e)); }
-  const creada = await r.json();
-  window.versionActual   = siguiente;
-  window.versionActualId = creada.id;
+  // En este punto la versión publicada ya fue cerrada, así que cualquier
+  // sin-publicar que quede es una versión futura pre-existente — no crear otra.
+  const sinPublicar = test
+    .filter(v => !v.released)
+    .sort((a, b) => b.name.localeCompare(a.name));
+
+  if (sinPublicar.length) {
+    window.versionActual   = sinPublicar[0].name;
+    window.versionActualId = sinPublicar[0].id;
+  } else {
+    // Calcular siguiente sobre el máximo global (publicadas + no publicadas)
+    const maxNum  = test.reduce((max, v) => Math.max(max, parseInt(v.name.replace('test-v', ''), 10)), 0);
+    const nombre  = `test-v${String(maxNum + 1).padStart(3, '0')}`;
+    const r = await fetch(`/jira/rest/api/3/version`, {
+      method: 'POST',
+      headers: { 'Authorization': AUTH, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({
+        name: nombre, description: motivo,
+        projectId: parseInt(projectId), released: false,
+        startDate: new Date().toISOString().split('T')[0]
+      })
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(JSON.stringify(e.errors || e)); }
+    const creada = await r.json();
+    window.versionActual   = nombre;
+    window.versionActualId = creada.id;
+  }
 
   const badge = document.getElementById('version-actual');
-  if (badge) badge.textContent = siguiente;
-  return siguiente;
+  if (badge) badge.textContent = window.versionActual;
+  return window.versionActual;
 }
 
 async function cerrarSesion() {
@@ -121,7 +150,7 @@ async function obtenerDatosVersion(nombreVersion) {
       `project = QAA AND fixVersion = "${nombreVersion}" AND issuetype != Epic ORDER BY created ASC`
     );
     const r = await fetch(
-      `/jira/rest/api/3/search/jql?jql=${jql}&fields=summary,status,priority,labels,parent,assignee,created,issuelinks,issuetype&maxResults=100&startAt=${startAt}`,
+      `/jira/rest/api/3/search/jql?jql=${jql}&fields=summary,status,priority,labels,parent,assignee,created,issuelinks,issuetype,subtasks&maxResults=100&startAt=${startAt}`,
       { headers: { 'Authorization': AUTH, 'Accept': 'application/json' } }
     );
     if (!r.ok) throw new Error(`Jira search: HTTP ${r.status}`);
@@ -196,6 +225,54 @@ async function obtenerDatosVersion(nombreVersion) {
     pasosConfig:    configIssues.map(i => ({ key: i.key, summary: i.fields.summary })),
     bugsFijos:      bgIssues.length ? bgIssues.map(i => i.key) : failIssues.map(i => i.key),
   };
+}
+
+// ── Completar issues de una versión ──────────────────────────────────────────
+
+async function completarIssuesDeVersion(allIssues) {
+  // Recolectar issues + sus subtareas (que pueden no tener fixVersion)
+  const subtaskKeys = allIssues.flatMap(i => (i.fields.subtasks || []).map(s => s.key));
+  const extras = [];
+  if (subtaskKeys.length) {
+    const r = await fetch(
+      `/jira/rest/api/3/search/jql?jql=${encodeURIComponent(`key in (${subtaskKeys.join(',')})`)}&fields=status,issuetype&maxResults=200`,
+      { headers: { 'Authorization': AUTH, 'Accept': 'application/json' } }
+    );
+    if (r.ok) extras.push(...((await r.json()).issues || []));
+  }
+
+  const todos = [...allIssues, ...extras];
+  const pendientes = todos.filter(i => i.fields.status?.statusCategory?.key !== 'done');
+  if (!pendientes.length) return;
+
+  // Cache de transition ID por tipo de issue para evitar N+1
+  const cache = {};
+  const getTransId = async issue => {
+    const tipo = issue.fields.issuetype?.name || 'Task';
+    if (cache[tipo] !== undefined) return cache[tipo];
+    const r = await fetch(`/jira/rest/api/3/issue/${issue.key}/transitions`, {
+      headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
+    });
+    if (!r.ok) { cache[tipo] = null; return null; }
+    const { transitions } = await r.json();
+    const done = transitions.find(t =>
+      ['done', 'cerrada', 'completada', 'closed', 'complete', 'resuelto', 'finalizado'].includes(t.name.toLowerCase())
+    );
+    cache[tipo] = done?.id ?? null;
+    return cache[tipo];
+  };
+
+  await Promise.allSettled(
+    pendientes.map(async issue => {
+      const transId = await getTransId(issue);
+      if (!transId) return;
+      await fetch(`/jira/rest/api/3/issue/${issue.key}/transitions`, {
+        method:  'POST',
+        headers: { 'Authorization': AUTH, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ transition: { id: transId } }),
+      });
+    })
+  );
 }
 
 // ── Confluence ────────────────────────────────────────────────────────────────
@@ -431,8 +508,6 @@ async function promptPublicarVersion() {
   if (!window.versionActual) return alert('No hay versión activa');
 
   const publicada = window.versionActual;
-  const num       = parseInt(publicada.replace('test-v', ''), 10);
-  const siguiente = `test-v${String(num + 1).padStart(3, '0')}`;
 
   showModal('publish',
     `<span style="font-size:18px;font-weight:700">Publicar ${publicada}</span>`,
@@ -445,7 +520,13 @@ async function promptPublicarVersion() {
     requiereConfig: false, pasosConfig: [], bugsFijos: [],
     bgIssues: [], byModule: {}, bgBySeverity: {}, retestIssues: [], configIssues: [], qaaToBg: {},
   };
-  try { datos = await obtenerDatosVersion(publicada); } catch {}
+  let siguiente = `test-v${String(parseInt(publicada.replace('test-v',''),10)+1).padStart(3,'0')}`;
+  try {
+    [datos, siguiente] = await Promise.all([
+      obtenerDatosVersion(publicada),
+      calcularSiguienteVersion(),
+    ]);
+  } catch {}
 
   abrirModalPublicar(publicada, siguiente, datos);
 }
@@ -539,6 +620,9 @@ async function ejecutarPublicacion(publicada, siguiente) {
 
   try {
     const datos = await obtenerDatosVersion(publicada);
+
+    // Completar todas las tareas y subtareas antes de cerrar la versión
+    await completarIssuesDeVersion(datos.allIssues);
 
     // Confluence primero — si falla, no publicamos en Jira
     await agregarAlHistorialConfluence({ version: publicada, motivo, observaciones, datos });
