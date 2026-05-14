@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Actividades — Hybred</title>
+<link rel="stylesheet" href="/styles.css">
+<script src="/bg_reporter.js?v=20260513"></script>
+<script src="/releases.js?v=20260513"></script>
+<style>
+.mode-toggle {
+  display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+}
+.mode-btn {
+  padding: 6px 18px; font-size: 13px; font-weight: 500; cursor: pointer;
+  background: none; border: none; color: var(--g5); transition: all .15s;
+}
+.mode-btn.active { background: var(--g8); color: #fff; }
+.steps-list { display: flex; flex-direction: column; gap: 6px; }
+.step-row   { display: flex; align-items: center; gap: 8px; }
+.step-num   {
+  min-width: 24px; height: 24px; border-radius: 50%; background: var(--g8);
+  color: #fff; font-size: 11px; font-weight: 700; display: flex;
+  align-items: center; justify-content: center; flex-shrink: 0;
+}
+.step-row input { flex: 1; }
+.btn-rm {
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--g4); font-size: 14px; width: 24px; height: 24px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.btn-rm:hover { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
+.btn-add-step {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 8px; border: 1px dashed var(--border);
+  background: none; color: var(--g5); font-size: 12px; cursor: pointer;
+  transition: all .15s; margin-top: 4px;
+}
+.btn-add-step:hover { border-color: var(--g5); color: var(--g7); background: var(--g0); }
+.result-box {
+  display: none; padding: 16px 20px; border-radius: 10px;
+  border: 1.5px solid #6ee7b7; background: rgba(16,185,129,.08);
+  font-size: 14px; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.result-box.show { display: flex; }
+.result-box a { color: #059669; font-weight: 700; text-decoration: none; }
+.result-box a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- Header -->
+<div class="hdr">
+  <div class="hdr-icon">
+    <svg fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+      <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+    </svg>
+  </div>
+  <div class="hdr-text">
+    <h1>Actividades</h1>
+    <p>Hybred · QAA-179</p>
+  </div>
+  <div class="hdr-right">
+    <a href="/" class="btn-hdr-history">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+      </svg>
+      <span>Nuevo TC</span>
+    </a>
+    <a href="/bg-verificacion" class="btn-hdr-history" style="background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3);color:#fcd34d">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+      </svg>
+      <span>Verificar BG</span>
+    </a>
+    <a href="/history" class="btn-hdr-history">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+      </svg>
+      <span>Historial</span>
+    </a>
+  </div>
+</div>
+
+<!-- Form -->
+<div class="card">
+
+  <!-- Resultado -->
+  <div class="result-box" id="result-box">
+    <svg width="20" height="20" fill="none" stroke="#059669" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+      <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+    </svg>
+    <span id="result-msg">Actividad creada: <a id="result-link" href="#" target="_blank"></a></span>
+    <button onclick="resetForm()" style="margin-left:auto;padding:5px 14px;border-radius:7px;border:1px solid #6ee7b7;background:none;color:#059669;font-size:12px;font-weight:600;cursor:pointer">
+      Nueva actividad
+    </button>
+  </div>
+
+  <!-- 1 — Título -->
+  <div class="sec-hdr">
+    <div class="sec-icon">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+        <line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/>
+        <line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+      </svg>
+    </div>
+    <div><div class="sec-title">Título</div><div class="sec-sub">Nombre de la actividad</div></div>
+    <div class="sec-num">1</div>
+  </div>
+  <div class="fields">
+    <div class="field">
+      <input type="text" id="titulo" class="inp" placeholder="Descripción corta de la actividad..." autocomplete="off">
+    </div>
+  </div>
+
+  <!-- 2 — Descripción -->
+  <div class="sec-hdr" style="margin-top:4px">
+    <div class="sec-icon">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+      </svg>
+    </div>
+    <div><div class="sec-title">Descripción</div><div class="sec-sub">Texto libre o pasos numerados</div></div>
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="btn-modo-texto" onclick="setModo('texto')">Texto</button>
+      <button class="mode-btn"        id="btn-modo-pasos" onclick="setModo('pasos')">Pasos</button>
+    </div>
+    <div class="sec-num">2</div>
+  </div>
+  <div class="fields">
+    <div id="desc-texto" class="field">
+      <textarea id="texto-desc" class="inp" rows="5" placeholder="Descripción detallada de la actividad..." style="resize:vertical"></textarea>
+    </div>
+    <div id="desc-pasos" class="field" style="display:none">
+      <div class="steps-list" id="pasos-wrap">
+        <div class="step-row">
+          <div class="step-num">1</div>
+          <input type="text" class="inp" placeholder="Paso 1...">
+          <button class="btn-rm" onclick="removePaso(this)">×</button>
+        </div>
+      </div>
+      <button class="btn-add-step" onclick="addPaso()">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Agregar paso
+      </button>
+    </div>
+  </div>
+
+  <!-- 3 — Adjuntos -->
+  <div class="sec-hdr" style="margin-top:4px">
+    <div class="sec-icon">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+      </svg>
+    </div>
+    <div><div class="sec-title">Adjuntos</div><div class="sec-sub">Imágenes, capturas o archivos</div></div>
+    <div class="sec-num">3</div>
+  </div>
+  <div class="fields">
+    <div class="field">
+      <input type="file" id="adjuntos" accept="*/*" multiple style="display:none" onchange="onFilePicked(this)">
+      <div id="upload-zone">
+        <div class="upload-area" id="upload-empty" onclick="document.getElementById('adjuntos').click()">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4dbf94" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          <span>Clic para adjuntar <span class="upload-hint-sep">·</span> <kbd>Ctrl+V</kbd> para pegar</span>
+        </div>
+        <div id="upload-filled" style="display:none">
+          <div id="previews-wrap" class="previews-wrap"></div>
+          <button type="button" class="upload-add-btn" onclick="document.getElementById('adjuntos').click()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Agregar más
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BG fields (visible al marcar "Reportar como bug") -->
+  <div id="bg-assignee-wrap" style="display:none;padding:10px 24px;gap:8px 20px;flex-wrap:wrap;align-items:center;background:var(--g0);border-top:1px solid var(--border)">
+    <label style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:.8rem;color:var(--g4);white-space:nowrap">Asignar a:</span>
+      <select id="bg-asignado" class="sel" style="padding:4px 10px;font-size:.82rem;height:32px;min-width:150px;max-width:240px">
+        <option value="">Sin asignar</option>
+      </select>
+    </label>
+    <label style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:.8rem;color:var(--g4);white-space:nowrap">Versión:</span>
+      <select id="bg-version" class="sel" style="padding:4px 10px;font-size:.82rem;height:32px;min-width:120px;max-width:200px">
+        <option value="">—</option>
+      </select>
+    </label>
+    <label style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:.8rem;color:var(--g4);white-space:nowrap">Entorno:</span>
+      <select id="bg-entorno" class="sel" style="padding:4px 10px;font-size:.82rem;height:32px;min-width:110px">
+        <option value="Staging">Staging</option>
+        <option value="Producción">Producción</option>
+        <option value="Dev">Dev</option>
+        <option value="QA">QA</option>
+      </select>
+    </label>
+  </div>
+
+  <!-- Footer -->
+  <div class="form-footer">
+    <button class="btn-reset" onclick="resetForm()">Limpiar</button>
+    <label class="config-check-label">
+      <input type="checkbox" id="reportar-bug" onchange="onBugToggle(this)">
+      <span>🐛 Reportar como bug en BG</span>
+    </label>
+    <label class="checkbox-label">
+      <input type="checkbox" id="registrarEnQAAFinalizada"> FN QAA
+    </label>
+    <button class="btn-submit" id="btn-submit" onclick="submitActividad()">Crear actividad</button>
+  </div>
+
+</div>
+</div>
+
+<script>
+const JIRA_BASE = window.location.origin + '/jira';
+const JIRA_HOST = 'liceopinoverde.atlassian.net';
+const EPIC_KEY  = 'QAA-179';
+const AUTH      = '';       // el proxy del servidor inyecta la auth
+const configFiles = [];     // requerido por crearBugBG de bg_reporter.js
+
+let uploadedFiles = [];
+let modoActual    = 'texto';
+
+// ── Draft persistence ─────────────────────────────────────────────────────────
+let _db = null;
+function _openDB() {
+  return new Promise((res, rej) => {
+    if (_db) { res(_db); return; }
+    const r = indexedDB.open('act-draft', 1);
+    r.onupgradeneeded = e => e.target.result.createObjectStore('files', { keyPath: 'id', autoIncrement: true });
+    r.onsuccess = e => { _db = e.target.result; res(_db); };
+    r.onerror   = e => rej(e.target.error);
+  });
+}
+async function _saveFiles(files) {
+  const db = await _openDB();
+  const tx = db.transaction('files', 'readwrite');
+  const st = tx.objectStore('files');
+  st.clear();
+  for (const f of files) st.add({ name: f.name, type: f.type, buf: await f.arrayBuffer() });
+  return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = e => rej(e.target.error); });
+}
+async function _loadFiles() {
+  const db = await _openDB();
+  return new Promise((res, rej) => {
+    const r = db.transaction('files', 'readonly').objectStore('files').getAll();
+    r.onsuccess = e => res(e.target.result.map(x => new File([x.buf], x.name, { type: x.type })));
+    r.onerror   = e => rej(e.target.error);
+  });
+}
+function _clearFiles() { _openDB().then(db => db.transaction('files','readwrite').objectStore('files').clear()).catch(()=>{}); }
+
+function saveTextState() {
+  const pasos = Array.from(document.querySelectorAll('#pasos-wrap .step-row input')).map(i => i.value);
+  try {
+    localStorage.setItem('act_draft', JSON.stringify({
+      titulo:   document.getElementById('titulo').value,
+      modo:     modoActual,
+      texto:    document.getElementById('texto-desc').value,
+      pasos,
+      bug:      document.getElementById('reportar-bug').checked,
+      fnqaa:    document.getElementById('registrarEnQAAFinalizada').checked,
+      version:  document.getElementById('bg-version')?.value  || '',
+      entorno:  document.getElementById('bg-entorno')?.value  || '',
+    }));
+  } catch {}
+}
+
+async function restoreState() {
+  try {
+    const raw = localStorage.getItem('act_draft');
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (d.titulo) document.getElementById('titulo').value = d.titulo;
+      if (d.modo && d.modo !== 'texto') setModo(d.modo);
+      if (d.texto) document.getElementById('texto-desc').value = d.texto;
+      if (d.pasos?.length) {
+        const wrap = document.getElementById('pasos-wrap');
+        wrap.innerHTML = d.pasos.map((v, i) =>
+          `<div class="step-row"><div class="step-num">${i+1}</div>` +
+          `<input type="text" class="inp" placeholder="Paso ${i+1}..." value="${v.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}">` +
+          `<button class="btn-rm" onclick="removePaso(this)">×</button></div>`
+        ).join('');
+      }
+      if (d.bug) {
+        const chk = document.getElementById('reportar-bug');
+        chk.checked = true;
+        toggleBgAssignee(chk);
+        await loadBgVersions();
+        if (d.version) document.getElementById('bg-version').value = d.version;
+        if (d.entorno) document.getElementById('bg-entorno').value = d.entorno;
+      }
+      if (d.fnqaa) document.getElementById('registrarEnQAAFinalizada').checked = true;
+    }
+  } catch {}
+  try {
+    const files = await _loadFiles();
+    if (files.length) { uploadedFiles = files; renderPreviews(true); }
+  } catch {}
+}
+
+function clearDraft() {
+  try { localStorage.removeItem('act_draft'); } catch {}
+  _clearFiles();
+}
+
+// ── ADF helpers (requeridos por bg_reporter.js) ───────────────────────────────
+function mkH(text, level=2) { return { type:'heading', attrs:{level}, content:[{type:'text',text}] }; }
+function mkP(text)           { return { type:'paragraph', content:[{type:'text',text:text||'—'}] }; }
+function mkB(text)           { return { type:'paragraph', content:[{type:'text',text,marks:[{type:'strong'}]}] }; }
+function mkRule()            { return { type:'rule' }; }
+function mkPanel(panelType, content) { return { type:'panel', attrs:{panelType}, content }; }
+function mkOrderedList(items) {
+  return { type:'orderedList', content: items.map(t => ({
+    type:'listItem', content:[{ type:'paragraph', content:[{type:'text',text:t||'—'}] }]
+  }))};
+}
+function mkBulletList(items) {
+  return { type:'bulletList', content: items.map(t => ({
+    type:'listItem', content:[{ type:'paragraph', content:[{type:'text',text:t||'—'}] }]
+  }))};
+}
+function mkTableCell(text, isHeader=false) {
+  return { type: isHeader ? 'tableHeader' : 'tableCell', attrs:{}, content:[{ type:'paragraph', content:[{type:'text',text:String(text||'—')}] }] };
+}
+function mkTableRow(label, value) {
+  return { type:'tableRow', content:[mkTableCell(label,true), mkTableCell(String(value||'—'))] };
+}
+function mkTable(rows) {
+  return { type:'table', attrs:{isNumberColumnEnabled:false, layout:'default'}, content:rows };
+}
+
+// ── BG: versiones y toggle ────────────────────────────────────────────────────
+let bgVersionsLoaded = false;
+
+async function loadBgVersions() {
+  if (bgVersionsLoaded) return;
+  const sel = document.getElementById('bg-version');
+  sel.innerHTML = '<option value="">Cargando…</option>';
+  try {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/project/QAA/versions`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const versions = (await r.json())
+      .filter(v => !v.archived)
+      .sort((a, b) => b.name.localeCompare(a.name));
+    if (!versions.length) throw new Error('Sin versiones');
+    sel.innerHTML = '<option value="">Sin versión</option>' +
+      versions.map(v => `<option value="${v.name}">${v.name}${v.released ? '' : ' ✦'}</option>`).join('');
+    // Pre-seleccionar la versión activa (test-v más reciente no publicada)
+    const activa = window.versionActual
+      || versions.find(v => !v.released && v.name.startsWith('test-v'))?.name;
+    if (activa) sel.value = activa;
+    bgVersionsLoaded = true;
+  } catch(e) {
+    console.warn('[BG versions]', e.message);
+    sel.innerHTML = '<option value="">Sin versión</option>';
+    bgVersionsLoaded = true;
+  }
+}
+
+function onBugToggle(chk) {
+  toggleBgAssignee(chk);
+  if (chk.checked) loadBgVersions();
+  saveTextState();
+}
+
+// ── Modo texto / pasos ────────────────────────────────────────────────────────
+function setModo(modo) {
+  modoActual = modo;
+  document.getElementById('desc-texto').style.display = modo === 'texto' ? '' : 'none';
+  document.getElementById('desc-pasos').style.display = modo === 'pasos' ? '' : 'none';
+  document.getElementById('btn-modo-texto').classList.toggle('active', modo === 'texto');
+  document.getElementById('btn-modo-pasos').classList.toggle('active', modo === 'pasos');
+  saveTextState();
+}
+
+function addPaso() {
+  const wrap = document.getElementById('pasos-wrap');
+  const n = wrap.querySelectorAll('.step-row').length + 1;
+  const d = document.createElement('div'); d.className = 'step-row';
+  d.innerHTML = `<div class="step-num">${n}</div><input type="text" class="inp" placeholder="Paso ${n}..."><button class="btn-rm" onclick="removePaso(this)">×</button>`;
+  wrap.appendChild(d);
+  d.querySelector('input').focus();
+  saveTextState();
+}
+
+function removePaso(btn) {
+  const wrap = document.getElementById('pasos-wrap');
+  if (wrap.querySelectorAll('.step-row').length <= 1) return;
+  btn.closest('.step-row').remove();
+  wrap.querySelectorAll('.step-row').forEach((r, i) => {
+    r.querySelector('.step-num').textContent = i + 1;
+    r.querySelector('input').placeholder = `Paso ${i + 1}...`;
+  });
+  saveTextState();
+}
+
+// ── Descripción ADF ───────────────────────────────────────────────────────────
+function buildDescription() {
+  if (modoActual === 'texto') {
+    const texto = document.getElementById('texto-desc').value.trim();
+    if (!texto) return null;
+    return { type:'doc', version:1, content:[ mkP(texto) ] };
+  } else {
+    const pasos = Array.from(document.querySelectorAll('#pasos-wrap .step-row input'))
+      .map(i => i.value.trim()).filter(Boolean);
+    if (!pasos.length) return null;
+    return { type:'doc', version:1, content:[ mkOrderedList(pasos) ] };
+  }
+}
+
+// ── Adjuntos ──────────────────────────────────────────────────────────────────
+function onFilePicked(input) {
+  Array.from(input.files).forEach(f => uploadedFiles.push(f));
+  input.value = '';
+  renderPreviews();
+}
+
+function removeFile(i) {
+  uploadedFiles.splice(i, 1);
+  renderPreviews();
+}
+
+function renderPreviews(skipSave) {
+  const empty  = document.getElementById('upload-empty');
+  const filled = document.getElementById('upload-filled');
+  const wrap   = document.getElementById('previews-wrap');
+  if (!uploadedFiles.length) { empty.style.display = ''; filled.style.display = 'none'; return; }
+  empty.style.display = 'none'; filled.style.display = '';
+  if (!skipSave) _saveFiles(uploadedFiles).catch(() => {});
+  wrap.innerHTML = uploadedFiles.map((f, i) => {
+    const isImg = f.type.startsWith('image/');
+    const preview = isImg
+      ? `<img src="${URL.createObjectURL(f)}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`
+      : `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:4px;padding:8px">
+           <svg width="20" height="20" fill="none" stroke="var(--g4)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+           <span style="font-size:10px;color:var(--g4);text-align:center;word-break:break-all;max-width:90px">${f.name}</span>
+         </div>`;
+    return `<div class="preview-item" style="position:relative">
+      ${preview}
+      <button onclick="removeFile(${i})" class="preview-rm" style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.55);border:none;color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">×</button>
+    </div>`;
+  }).join('');
+}
+
+document.addEventListener('paste', e => {
+  const items = Array.from(e.clipboardData?.items || []);
+  const files = items.filter(i => i.kind === 'file').map(i => i.getAsFile()).filter(Boolean);
+  if (!files.length) return;
+  files.forEach(f => uploadedFiles.push(f));
+  renderPreviews();
+});
+
+document.getElementById('titulo').addEventListener('input', saveTextState);
+document.getElementById('texto-desc').addEventListener('input', saveTextState);
+document.getElementById('pasos-wrap').addEventListener('input', saveTextState);
+document.getElementById('registrarEnQAAFinalizada').addEventListener('change', saveTextState);
+
+// Cargar versión activa en background para que esté lista cuando el usuario abra el panel BG
+inicializarSistemaVersiones().catch(() => {});
+
+restoreState();
+
+// ── Submit ────────────────────────────────────────────────────────────────────
+async function submitActividad() {
+  const titulo = document.getElementById('titulo').value.trim();
+  if (!titulo) { document.getElementById('titulo').focus(); return; }
+
+  const btn = document.getElementById('btn-submit');
+  btn.disabled = true;
+
+  // Issues creados — usados para rollback si algo falla
+  let qaaKey = null;
+  let bgKey  = null;
+
+  async function rollback() {
+    if (!qaaKey && !bgKey) return;
+    btn.textContent = 'Revirtiendo…';
+    await Promise.allSettled([
+      qaaKey ? fetch(`${JIRA_BASE}/rest/api/3/issue/${qaaKey}`, { method: 'DELETE' }) : null,
+      bgKey  ? fetch(`${JIRA_BASE}/rest/api/3/issue/${bgKey}`,  { method: 'DELETE' }) : null,
+    ].filter(Boolean));
+  }
+
+  try {
+    const description = buildDescription();
+    const pasos = modoActual === 'pasos'
+      ? Array.from(document.querySelectorAll('#pasos-wrap .step-row input')).map(i => i.value.trim()).filter(Boolean)
+      : [];
+
+    // ── 1. Crear issue QAA ──
+    btn.textContent = 'Creando en QAA…';
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ fields: {
+        project:           { key: 'QAA' },
+        parent:            { key: EPIC_KEY },
+        customfield_10014: EPIC_KEY,
+        summary:           titulo,
+        issuetype:         { name: 'Tarea' },
+        ...(window.versionActual ? { fixVersions: [{ name: window.versionActual }] } : {}),
+        ...(description ? { description } : {}),
+      }}),
+    });
+    if (!r.ok) {
+      const e = await r.json();
+      throw new Error(e.errors ? Object.values(e.errors).join(', ') : JSON.stringify(e));
+    }
+    const created  = await r.json();
+    qaaKey = created.key;
+    const issueUrl = `https://${JIRA_HOST}/browse/${qaaKey}`;
+
+    // ── 2. Adjuntos a QAA ──
+    for (const file of uploadedFiles) {
+      btn.textContent = `Subiendo ${file.name}…`;
+      const fd = new FormData(); fd.append('file', file);
+      const ar = await fetch(`${JIRA_BASE}/rest/api/3/issue/${qaaKey}/attachments`, {
+        method: 'POST', headers: { 'X-Atlassian-Token': 'no-check' }, body: fd,
+      });
+      if (!ar.ok) throw new Error(`Error subiendo "${file.name}" a ${qaaKey}`);
+    }
+
+    // ── 3. Bug en BG ──
+    if (document.getElementById('reportar-bug')?.checked) {
+      btn.textContent = 'Creando bug en BG…';
+      const textoDesc     = document.getElementById('texto-desc').value.trim();
+      const versionParaBG = document.getElementById('bg-version').value;
+      const entornoParaBG = document.getElementById('bg-entorno').value;
+      const stepsParaBG   = modoActual === 'pasos'
+        ? pasos
+        : textoDesc ? textoDesc.split('\n').map(s => s.trim()).filter(Boolean) : [];
+
+      const bg = await crearBugBG({
+        tcId:          qaaKey,
+        desc:          titulo,
+        moduloNombre:  EPIC_KEY,
+        moduloLabel:   EPIC_KEY,
+        versionActual: versionParaBG,
+        severidad:     'severity-medio',
+        sevLbl:        'Medio',
+        entorno:       entornoParaBG,
+        steps:         stepsParaBG,
+        precon:        [],
+        esperado:      [],
+        obtenido:      [],
+        impacto:       '',
+        soluciones:    [],
+        linkIssueKey:  qaaKey,
+      });
+      bgKey = bg.key;
+
+      // ── 4. Adjuntos a BG ──
+      for (const file of uploadedFiles) {
+        btn.textContent = `Subiendo ${file.name} → BG…`;
+        const fd = new FormData(); fd.append('file', file);
+        const ar = await fetch(`${JIRA_BASE}/rest/api/3/issue/${bgKey}/attachments`, {
+          method: 'POST', headers: { 'X-Atlassian-Token': 'no-check' }, body: fd,
+        });
+        if (!ar.ok) throw new Error(`Error subiendo "${file.name}" a ${bgKey}`);
+      }
+    }
+
+    // ── 5. Transición a Finalizada ──
+    if (document.getElementById('registrarEnQAAFinalizada')?.checked) {
+      btn.textContent = 'Finalizando…';
+      const tr = await fetch(`${JIRA_BASE}/rest/api/3/issue/${qaaKey}/transitions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transition: { id: '31' } }),
+      });
+      if (!tr.ok) throw new Error(`Error al finalizar ${qaaKey}`);
+    }
+
+    // ── Todo ok — mostrar resultado ──
+    const msg = document.getElementById('result-msg');
+    msg.innerHTML = `Actividad creada: <a href="${issueUrl}" target="_blank" style="color:#059669;font-weight:700">${qaaKey}</a>`
+      + (bgKey ? ` &nbsp;·&nbsp; Bug BG: <a href="https://${JIRA_HOST}/browse/${bgKey}" target="_blank" style="color:#dc2626;font-weight:700">${bgKey}</a>` : '');
+    document.getElementById('result-box').classList.add('show');
+    document.getElementById('result-box').scrollIntoView({ behavior: 'smooth' });
+    clearDraft();
+
+  } catch(e) {
+    await rollback();
+    const eliminados = [qaaKey, bgKey].filter(Boolean);
+    alert(
+      `Error — no se creó nada.\n\n${e.message}`
+      + (eliminados.length ? `\n\nSe eliminó: ${eliminados.join(', ')}` : '')
+    );
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Crear actividad';
+}
+
+function resetForm() {
+  clearDraft();
+  document.getElementById('titulo').value      = '';
+  document.getElementById('texto-desc').value  = '';
+  document.getElementById('pasos-wrap').innerHTML = `
+    <div class="step-row">
+      <div class="step-num">1</div>
+      <input type="text" class="inp" placeholder="Paso 1...">
+      <button class="btn-rm" onclick="removePaso(this)">×</button>
+    </div>`;
+  document.getElementById('reportar-bug').checked              = false;
+  document.getElementById('registrarEnQAAFinalizada').checked  = false;
+  document.getElementById('bg-assignee-wrap').style.display    = 'none';
+  uploadedFiles = [];
+  renderPreviews();
+  setModo('texto');
+  document.getElementById('result-box').classList.remove('show');
+}
+</script>
+</body>
+</html>

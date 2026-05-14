@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QA Testing — Hybred</title>
 <link rel="stylesheet" href="/styles.css">
-
+<script src="/epic-filter.js"></script>
 </head>
 <body>
 <div class="page">
@@ -43,12 +43,19 @@
       </svg>
       <span>Verificar BG</span>
     </a>
+    <a href="/actividades" class="btn-hdr-history" style="background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.3);color:#6ee7b7">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+      </svg>
+      <span>Actividades</span>
+    </a>
     <a href="/history" class="btn-hdr-history">
       <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
         <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
       </svg>
       <span>Historial</span>
     </a>
+    <div id="epic-filter-container"></div>
   </div>
 </div>
 
@@ -1524,21 +1531,28 @@ async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual
   const sevSuffix    = severidad.replace(/^severity-/, '');
   const bgAsignadoId = document.getElementById('bg-asignado').value;
 
+  const bugPanelType = { critico:'error', mayor:'warning', medio:'note', menor:'info', bajo:'info' }[sevSuffix] || 'warning';
+
   const bgDescription = { type:'doc', version:1, content:[
-    mkB(`Test Case: ${tcId}`),
-    mkB(`Módulo: ${moduloNombre}`),
-    mkB(`Versión: ${versionActual || '—'}`),
-    mkB(`Severidad: ${sevLbl}`),
-    mkB(`Entorno: ${entorno}`),
-    ...(tipoPrueba ? [mkB(`Tipo de prueba: ${tipoPrueba}`)] : []),
-    ...(urlPantalla ? [mkB(`URL / Pantalla: ${urlPantalla}`)] : []),
+    mkPanel(bugPanelType, [
+      mkH('Reporte de Bug'),
+      mkTable([
+        mkTableRow('Test Case',     tcId),
+        mkTableRow('Módulo',        moduloNombre),
+        mkTableRow('Versión',       versionActual || '—'),
+        mkTableRow('Severidad',     sevLbl),
+        mkTableRow('Entorno',       entorno),
+        ...(tipoPrueba  ? [mkTableRow('Tipo de prueba', tipoPrueba)]  : []),
+        ...(urlPantalla ? [mkTableRow('URL / Pantalla', urlPantalla)] : []),
+      ])
+    ]),
     mkRule(),
     mkH('Pasos para reproducir'), steps.length > 0 ? mkOrderedList(steps) : mkOrderedList(precon),
-    mkH('Resultado esperado'), mkOrderedList(esperado),
-    mkH('Resultado obtenido'), mkOrderedList(obtenido),
-    ...(impacto ? [mkH('Impacto'), mkP(impacto)] : []),
-    ...(soluciones.length > 0   ? [mkH('Solución propuesta'), mkOrderedList(soluciones)]  : []),
-    ...(sugerencias.length > 0  ? [mkH('Sugerencias'),        mkOrderedList(sugerencias)] : []),
+    mkH('Resultado esperado'),    mkOrderedList(esperado),
+    mkH('Resultado obtenido'),    mkOrderedList(obtenido),
+    ...(impacto ? [mkPanel('warning', [mkH('Impacto'), mkP(impacto)])] : []),
+    ...(soluciones.length > 0  ? [mkH('Solución propuesta'), mkBulletList(soluciones)]  : []),
+    ...(sugerencias.length > 0 ? [mkH('Sugerencias'),        mkBulletList(sugerencias)] : []),
   ]};
 
   const bugRes = await fetch(`${JIRA_BASE}/rest/api/3/issue`, {
@@ -2026,14 +2040,29 @@ function showError(msg) {
 }
 
 /* ── ADF helpers ── */
-function mkH(text, level=3) { return { type:'heading', attrs:{level}, content:[{type:'text',text}] }; }
+function mkH(text, level=2) { return { type:'heading', attrs:{level}, content:[{type:'text',text}] }; }
 function mkP(text)           { return { type:'paragraph', content:[{type:'text',text:text||'—'}] }; }
 function mkB(text)           { return { type:'paragraph', content:[{type:'text',text,marks:[{type:'strong'}]}] }; }
 function mkRule()            { return { type:'rule' }; }
+function mkPanel(panelType, content) { return { type:'panel', attrs:{panelType}, content }; }
 function mkOrderedList(items) {
-  return { type:'orderedList', content: items.map(item => ({
-    type:'listItem', content:[{ type:'paragraph', content:[{type:'text',text:item}] }]
+  return { type:'orderedList', content: items.map(i => ({
+    type:'listItem', content:[{type:'paragraph', content:[{type:'text',text:i}]}]
   }))};
+}
+function mkBulletList(items) {
+  return { type:'bulletList', content: items.map(i => ({
+    type:'listItem', content:[{type:'paragraph', content:[{type:'text',text:i}]}]
+  }))};
+}
+function mkTableCell(text, isHeader=false) {
+  return { type:isHeader?'tableHeader':'tableCell', attrs:{}, content:[{type:'paragraph',content:[{type:'text',text:String(text||'—')}]}] };
+}
+function mkTableRow(label, value) {
+  return { type:'tableRow', content:[mkTableCell(label,true), mkTableCell(String(value||'—'))] };
+}
+function mkTable(rows) {
+  return { type:'table', attrs:{isNumberColumnEnabled:false, layout:'default'}, content:rows };
 }
 
 /* ── EPICS map — se llena dinámicamente desde Jira ── */
@@ -2091,12 +2120,13 @@ async function cargarEpicsDesdeJira() {
     }
 
     select.disabled = false;
+    filtrarModuloSelect();
 
     // Restaurar módulo del draft (salvo que se llegue desde history con ?tc)
     const _tcParam = new URLSearchParams(window.location.search).get('tc');
     if (!_tcParam) {
       const savedModulo = (() => { try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}').modulo; } catch { return ''; } })();
-      if (savedModulo && select.querySelector(`option[value="${savedModulo}"]`)) {
+      if (savedModulo && select.querySelector(`option[value="${savedModulo}"]:not([hidden])`)) {
         select.value = savedModulo;
         onModuloChange();
       }
@@ -2106,6 +2136,21 @@ async function cargarEpicsDesdeJira() {
     console.error('[cargarEpicsDesdeJira]', e.message);
     select.innerHTML = '<option value="">— Error cargando módulos —</option>';
     select.disabled = false;
+  }
+}
+
+function filtrarModuloSelect() {
+  const ignorados = EpicFilter.getIgnoredEpics();
+  const select = document.getElementById('modulo');
+  for (const opt of Array.from(select.options)) {
+    if (!opt.value) continue;
+    const epic = EPICS[opt.value];
+    opt.hidden = !!(epic && ignorados.includes(epic.key));
+  }
+  const current = select.options[select.selectedIndex];
+  if (current?.hidden) {
+    select.value = '';
+    onModuloChange();
   }
 }
 
@@ -2541,30 +2586,45 @@ async function submitForm() {
   // En edit mode tc-id tiene la JIRA key; el ID de definición está en tcPrefix
   const tcDefId = window.editMode ? (window.editMode.tcPrefix || tcId) : tcId;
 
-  // ADF description — solo nodos seguros (sin panel)
+  const resultadoPanelType = { pass:'success', fail:'error', blocked:'warning' }[estado] || 'note';
+  const tcSevSuffix = (severidad || '').replace(/^severity-/, '');
+  const tcPanelType = { critico:'error', mayor:'warning', medio:'note', menor:'info', bajo:'info' }[tcSevSuffix] || 'info';
+
   const description = { type:'doc', version:1, content:[
-    mkB('Identificador: ' + tcDefId),
-    mkB('Tester: ' + tester),
-    mkB('Fecha: ' + fecha),
-    mkB('Módulo: ' + moduloNombre),
-    mkB('Tipo: ' + tipoLabel),
-    mkB('Entorno: ' + entorno),
-    ...(urlPantalla ? [mkB('URL / Pantalla: ' + urlPantalla)] : []),
-    ...(rolUsuario  ? [mkB('Rol de usuario: ' + rolUsuario)]  : []),
-    ...(historia ? [mkB('Historia: ' + historia)] : []),
+    mkPanel('info', [
+      mkH('Identificación del Test Case'),
+      mkTable([
+        mkTableRow('Identificador', tcDefId),
+        mkTableRow('Tester',        tester),
+        mkTableRow('Fecha',         fecha),
+        mkTableRow('Módulo',        moduloNombre),
+        mkTableRow('Tipo',          tipoLabel),
+        mkTableRow('Entorno',       entorno),
+        ...(urlPantalla  ? [mkTableRow('URL / Pantalla', urlPantalla)] : []),
+        ...(rolUsuario   ? [mkTableRow('Rol de usuario', rolUsuario)]  : []),
+        ...(historia     ? [mkTableRow('Historia',       historia)]    : []),
+        ...(versionActual? [mkTableRow('Versión',        versionActual)] : []),
+      ])
+    ]),
     mkRule(),
-    mkH('Resultado'), mkB('Estado: ' + estadoLbl),
-    ...(estado==='fail' ? [ mkB('Severidad: ' + sevLbl), mkB('Frecuencia: ' + frecuencia) ] : []),
-    ...(impacto ? [mkB('Impacto: ' + impacto)] : []),
+    mkPanel(resultadoPanelType, [
+      mkH('Resultado'),
+      mkB('Estado: ' + estadoLbl),
+      ...(estado==='fail' ? [
+        mkB('Severidad: ' + sevLbl),
+        mkB('Frecuencia: ' + frecuencia),
+        ...(impacto ? [mkRule(), mkP(impacto)] : []),
+      ] : []),
+    ]),
     mkRule(),
-    mkH('Precondiciones'), mkOrderedList(precon),
+    mkH('Precondiciones'),   mkOrderedList(precon),
     mkH('Datos de entrada'), datos.length > 0 ? mkOrderedList(datos) : mkP('—'),
-    mkH('Pasos a seguir'), steps.length > 0 ? mkOrderedList(steps) : mkP('—'),
+    mkH('Pasos a seguir'),   steps.length > 0 ? mkOrderedList(steps) : mkP('—'),
     mkH('Resultado esperado'), mkOrderedList(esperado),
     mkH('Resultado obtenido'), mkOrderedList(obtenido),
-    ...(postcon.length > 0    ? [mkH('Postcondiciones'), mkOrderedList(postcon)]       : []),
-    ...(soluciones.length > 0 ? [mkH('Soluciones'),      mkOrderedList(soluciones)]    : []),
-    ...(sugerencias.length > 0? [mkH('Sugerencias'),     mkOrderedList(sugerencias)]   : []),
+    ...(postcon.length > 0    ? [mkH('Postcondiciones'), mkOrderedList(postcon)]    : []),
+    ...(soluciones.length > 0 ? [mkH('Soluciones'),      mkBulletList(soluciones)] : []),
+    ...(sugerencias.length > 0? [mkH('Sugerencias'),     mkBulletList(sugerencias)]: []),
   ]};
 
   setLoading(true);
@@ -2632,20 +2692,25 @@ async function submitForm() {
         editBugUrl = `https://liceopinoverde.atlassian.net/browse/${bgKey}`;
 
         const bgDescription = { type:'doc', version:1, content:[
-          mkB(`Test Case: ${tcId}`),
-          mkB(`Módulo: ${moduloNombre}`),
-          mkB(`Versión: ${versionActual || '—'}`),
-          mkB(`Severidad: ${sevLbl}`),
-          mkB(`Entorno: ${entorno}`),
-          ...(tipoPrueba ? [mkB(`Tipo de prueba: ${tipoPrueba}`)] : []),
-          ...(urlPantalla ? [mkB(`URL / Pantalla: ${urlPantalla}`)] : []),
+          mkPanel(tcPanelType, [
+            mkH('Reporte de Bug'),
+            mkTable([
+              mkTableRow('Test Case',     tcId),
+              mkTableRow('Módulo',        moduloNombre),
+              mkTableRow('Versión',       versionActual || '—'),
+              mkTableRow('Severidad',     sevLbl),
+              mkTableRow('Entorno',       entorno),
+              ...(tipoPrueba  ? [mkTableRow('Tipo de prueba', tipoPrueba)]  : []),
+              ...(urlPantalla ? [mkTableRow('URL / Pantalla', urlPantalla)] : []),
+            ])
+          ]),
           mkRule(),
           mkH('Pasos para reproducir'), steps.length > 0 ? mkOrderedList(steps) : mkOrderedList(precon),
-          mkH('Resultado esperado'), mkOrderedList(esperado),
-          mkH('Resultado obtenido'), mkOrderedList(obtenido),
-          ...(impacto       ? [mkH('Impacto'),           mkP(impacto)]              : []),
-          ...(soluciones.length > 0  ? [mkH('Solución propuesta'), mkOrderedList(soluciones)]  : []),
-          ...(sugerencias.length > 0 ? [mkH('Sugerencias'),        mkOrderedList(sugerencias)] : []),
+          mkH('Resultado esperado'),    mkOrderedList(esperado),
+          mkH('Resultado obtenido'),    mkOrderedList(obtenido),
+          ...(impacto ? [mkPanel('warning', [mkH('Impacto'), mkP(impacto)])] : []),
+          ...(soluciones.length > 0  ? [mkH('Solución propuesta'), mkBulletList(soluciones)]  : []),
+          ...(sugerencias.length > 0 ? [mkH('Sugerencias'),        mkBulletList(sugerencias)] : []),
         ]};
 
         const bgSevSuffix = severidad.replace(/^severity-/, '');
@@ -3001,6 +3066,14 @@ activarSpellcheck(document);
 new MutationObserver(muts => muts.forEach(m =>
   m.addedNodes.forEach(n => { if (n.nodeType === 1) activarSpellcheck(n); })
 )).observe(document.body, { childList: true, subtree: true });
+</script>
+<script>
+EpicFilter.init({
+  pageKey:   'qa-form',
+  container: document.getElementById('epic-filter-container'),
+  onUpdate:  filtrarModuloSelect
+});
+EpicFilter.loadEpicsFromJira(window.location.origin + '/jira');
 </script>
 <script src="/releases.js"></script>
 </body>

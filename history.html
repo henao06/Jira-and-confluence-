@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Historial QA — Hybred</title>
 <link rel="stylesheet" href="/styles.css">
+<script src="/epic-filter.js"></script>
 <style>
 :root {
   --pass-bg:#dcfce7; --pass-fg:#15803d;
@@ -302,6 +303,13 @@
       </svg>
       <span>Nuevo TC</span>
     </a>
+    <a href="/actividades" class="btn-hdr-history" style="background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.3);color:#6ee7b7">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+      </svg>
+      <span>Actividades</span>
+    </a>
+    <div id="epic-filter-container"></div>
   </div>
 </div>
 
@@ -394,6 +402,7 @@
     <div class="filter-checks">
       <label class="filter-check-item"><input type="checkbox" id="f-config"> ⚙️ Requiere configuración</label>
       <label class="filter-check-item"><input type="checkbox" id="f-retest"> 🔁 Solo retest</label>
+      <label class="filter-check-item"><input type="checkbox" id="f-enlazadas" onchange="onEnlazadasChange()"> 🔗 Enlazadas a BG</label>
     </div>
     <div class="filter-group" style="margin-top:10px">
       <span class="filter-label">🔁 Estado Retest (Fail)</span>
@@ -583,7 +592,7 @@ function toggleFilters() {
 
 function actualizarBadge() {
   const selects = ['f-version','f-epic','f-estado','f-tipo','f-prioridad','f-severidad','f-desde','f-hasta','f-retest-estado'];
-  const checks  = ['f-config','f-retest'];
+  const checks  = ['f-config','f-retest','f-enlazadas'];
   const texto   = document.getElementById('f-texto').value.trim();
   let n = selects.filter(id => document.getElementById(id).value).length
         + checks.filter(id => document.getElementById(id).checked).length
@@ -615,6 +624,60 @@ async function cargarFiltros() {
     o.textContent = e.fields.summary;
     selE.appendChild(o);
   });
+  filtrarEpicFiltroSelect();
+}
+
+function filtrarEpicFiltroSelect() {
+  const ignorados = EpicFilter.getIgnoredEpics();
+  const selE = document.getElementById('f-epic');
+  for (const opt of Array.from(selE.options)) {
+    if (!opt.value) continue;
+    opt.hidden = ignorados.includes(opt.value);
+  }
+  if (selE.options[selE.selectedIndex]?.hidden) {
+    selE.value = '';
+    applyFilters();
+  }
+}
+
+let enlazadasKeys = null; // null=sin cargar, []=cargado vacío, [keys...]=cargado con resultados
+
+async function onEnlazadasChange() {
+  const chk = document.getElementById('f-enlazadas');
+  if (!chk.checked) { enlazadasKeys = null; applyFilters(); return; }
+  chk.disabled = true;
+  enlazadasKeys = await fetchEnlazadasKeys();
+  chk.disabled = false;
+  applyFilters();
+}
+
+async function fetchEnlazadasKeys() {
+  // Consultamos desde BG: traemos sus issuelinks y extraemos las keys QAA.
+  // Es más confiable que buscar desde QAA porque el link se crea en BG
+  // y Jira no siempre devuelve issuelinks en búsquedas del lado inverso.
+  const qaaKeys = new Set();
+  try {
+    let nextToken = null;
+    while (true) {
+      let url = `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent('project = BG ORDER BY created DESC')}&fields=issuelinks&maxResults=100`;
+      if (nextToken) url += `&nextPageToken=${encodeURIComponent(nextToken)}`;
+      const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!r.ok) { console.warn('[enlazadas] HTTP', r.status); break; }
+      const d = await r.json();
+      (d.issues || []).forEach(issue => {
+        (issue.fields.issuelinks || []).forEach(link => {
+          const key = link.inwardIssue?.key || link.outwardIssue?.key;
+          if (key?.startsWith('QAA-')) qaaKeys.add(key);
+        });
+      });
+      if (d.isLast || !d.nextPageToken) break;
+      nextToken = d.nextPageToken;
+    }
+    console.log('[enlazadas] QAA keys con link BG:', [...qaaKeys]);
+  } catch(e) {
+    console.error('[enlazadas]', e);
+  }
+  return [...qaaKeys];
 }
 
 // ── JQL ───────────────────────────────────────────────────────────────────────
@@ -636,6 +699,12 @@ function buildJQL() {
   }
   if (g('f-config').checked)  parts.push('labels = "requiere-config"');
   if (g('f-retest').checked)  parts.push('labels = "retest"');
+  if (g('f-enlazadas').checked) {
+    if (enlazadasKeys && enlazadasKeys.length > 0)
+      parts.push(`key in (${enlazadasKeys.join(',')})`);
+    else if (enlazadasKeys !== null)
+      parts.push('key = "NONE-0"');
+  }
   const retestEstado = g('f-retest-estado').value;
   if (retestEstado === 'fail-pendiente') {
     parts.push('labels = "estado-fail"');
@@ -834,6 +903,7 @@ function saveFilters() {
     texto:     g('f-texto').value,
     config:       g('f-config').checked,
     retest:       g('f-retest').checked,
+    enlazadas:    g('f-enlazadas').checked,
     retestEstado: g('f-retest-estado').value,
   }));
 }
@@ -852,12 +922,13 @@ function restoreFilters() {
     if (s.desde)     g('f-desde').value      = s.desde;
     if (s.hasta)     g('f-hasta').value      = s.hasta;
     if (s.texto)   { g('f-texto').value = s.texto; g('search-clear').style.display = 'block'; }
-    g('f-config').checked = s.config || false;
-    g('f-retest').checked = s.retest || false;
+    g('f-config').checked    = s.config    || false;
+    g('f-retest').checked    = s.retest    || false;
+    g('f-enlazadas').checked = s.enlazadas || false;
     if (s.retestEstado) g('f-retest-estado').value = s.retestEstado;
     // Abrir panel si hay algún filtro activo
     const hayFiltros = s.version || s.epic || s.estado || s.tipo || s.prioridad ||
-                       s.severidad || s.desde || s.hasta || s.config || s.retest || s.retestEstado;
+                       s.severidad || s.desde || s.hasta || s.config || s.retest || s.enlazadas || s.retestEstado;
     if (hayFiltros) {
       document.getElementById('filters-panel').classList.add('open');
       document.getElementById('btn-toggle').classList.add('active');
@@ -884,7 +955,7 @@ function applyFilters() {
 function clearFilters() {
   ['f-version','f-epic','f-estado','f-tipo','f-prioridad','f-severidad','f-retest-estado'].forEach(id => document.getElementById(id).value='');
   ['f-desde','f-hasta'].forEach(id => document.getElementById(id).value='');
-  ['f-config','f-retest'].forEach(id => document.getElementById(id).checked=false);
+  ['f-config','f-retest','f-enlazadas'].forEach(id => document.getElementById(id).checked=false);
   document.getElementById('f-texto').value='';
   document.getElementById('search-clear').style.display='none';
   localStorage.removeItem(FILTERS_KEY);
@@ -1313,10 +1384,22 @@ function applyFiltersDebounced() {
 document.addEventListener('DOMContentLoaded', async () => {
   await cargarFiltros();
   restoreFilters();
+
+  // Si el checkbox de enlazadas fue restaurado como activo, cargar las keys
+  // antes del primer render para que el filtro aplique desde el inicio
+  if (document.getElementById('f-enlazadas').checked && enlazadasKeys === null) {
+    const chk = document.getElementById('f-enlazadas');
+    chk.disabled = true;
+    enlazadasKeys = await fetchEnlazadasKeys();
+    chk.disabled = false;
+  }
+
   currentJQL = buildJQL();
   loadPage(currentJQL, 0);
 
   // Auto-buscar al cambiar cualquier filtro
+  // Nota: f-enlazadas NO va aquí — tiene su propio onchange (onEnlazadasChange)
+  // que maneja la carga async de keys antes de llamar applyFilters
   ['f-version','f-epic','f-estado','f-tipo','f-prioridad','f-severidad','f-retest-estado']
     .forEach(id => document.getElementById(id)?.addEventListener('change', applyFilters));
   ['f-config','f-retest']
@@ -1327,6 +1410,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   actualizarMissingPanel();
   actualizarRetestPanel();
 });
+
+EpicFilter.init({
+  pageKey:   'history',
+  container: document.getElementById('epic-filter-container'),
+  onUpdate:  filtrarEpicFiltroSelect
+});
+EpicFilter.loadEpicsFromJira(window.location.origin + '/jira');
 </script>
 </body>
 </html>

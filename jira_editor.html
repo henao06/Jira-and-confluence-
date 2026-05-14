@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Editor JSON — Hybred QA</title>
 <link rel="stylesheet" href="/styles.css">
+<script src="/epic-filter.js"></script>
 <style>
 .editor-wrap {
   display: flex; flex-direction: column; gap: 0;
@@ -107,6 +108,7 @@
       </svg>
       <span>Historial</span>
     </a>
+    <div id="epic-filter-container"></div>
   </div>
 </div>
 
@@ -414,6 +416,13 @@ function handleTab(e) {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 cargarEpics();
+
+EpicFilter.init({
+  pageKey:   'jira-editor',
+  container: document.getElementById('epic-filter-container'),
+  onUpdate:  () => {}
+});
+EpicFilter.loadEpicsFromJira(JIRA_BASE + '/jira');
 </script>
 </body>
 </html>

@@ -41,6 +41,7 @@ const AUTH = ENV_ERROR ? '' : 'Basic ' + Buffer.from(JIRA_EMAIL + ':' + JIRA_TOK
 let myAccountId        = null;
 let myDisplayName      = null;
 let dependenciaDefault = null;
+let categoriaDefault   = null;
 
 // ── Helpers Jira ──────────────────────────────────────────────────────────────
 
@@ -193,6 +194,94 @@ async function fetchDependenciaDefault() {
   `);
 }
 
+async function fetchCategoriaDefault() {
+  if (ENV_ERROR) return;
+
+  // Override manual desde .env — tiene prioridad sobre todo
+  if (process.env.CATEGORIA_JSON) {
+    try {
+      categoriaDefault = JSON.parse(process.env.CATEGORIA_JSON);
+      console.log(`  categoriaDefault (desde .env): ${JSON.stringify(categoriaDefault)}`);
+      return;
+    } catch(e) { console.warn('[CATEGORIA] CATEGORIA_JSON inválido en .env:', e.message); }
+  }
+
+  // 1. Buscar en issues QAA existentes que ya tengan el campo seteado
+  try {
+    const res = await jiraPost('/rest/api/3/search/jql', {
+      jql: 'project = QAA AND issuetype = Tarea ORDER BY created DESC',
+      maxResults: 10,
+      fields: ['customfield_10441'],
+    });
+    const found = (res.issues || []).find(i => i.fields?.customfield_10441 != null);
+    if (found) {
+      categoriaDefault = found.fields.customfield_10441;
+      console.log(`  categoriaDefault (desde issue existente): ${JSON.stringify(categoriaDefault)}`);
+      return;
+    }
+    console.log('[CATEGORIA] ningún issue QAA/Tarea tiene customfield_10441 seteado aún');
+  } catch(e) { console.warn('[CATEGORIA] búsqueda QAA falló:', e.message); }
+
+  // 2. createmeta con expand completo (endpoint legacy pero más confiable)
+  try {
+    const meta = await jiraGet('/rest/api/3/issue/createmeta?projectKeys=QAA&issuetypeNames=Tarea&expand=projects.issuetypes.fields');
+    const fields = meta.projects?.[0]?.issuetypes?.[0]?.fields || {};
+    const field  = fields['customfield_10441'];
+    console.log('[CATEGORIA] createmeta legacy field:', JSON.stringify(field?.allowedValues?.slice(0,3)));
+    if (field?.allowedValues?.length) {
+      categoriaDefault = field.allowedValues[0];
+      console.log(`  categoriaDefault (createmeta): ${JSON.stringify(categoriaDefault)}`);
+      return;
+    }
+  } catch(e) { console.warn('[CATEGORIA] createmeta legacy falló:', e.message); }
+
+  // 3. API de contextos de campo — el más confiable para campos con allowedValues
+  try {
+    const contexts = await jiraGet('/rest/api/3/field/customfield_10441/context?projectId=QAA&maxResults=10');
+    const ctxList  = contexts.values || [];
+    console.log('[CATEGORIA] contextos del campo:', ctxList.map(c => `${c.id} (${c.name})`));
+    for (const ctx of ctxList) {
+      const opts = await jiraGet(`/rest/api/3/field/customfield_10441/context/${ctx.id}/option?maxResults=10`);
+      const values = opts.values || [];
+      console.log(`[CATEGORIA] opciones contexto ${ctx.id}:`, JSON.stringify(values.slice(0,5)));
+      if (values.length) {
+        categoriaDefault = { id: String(values[0].id) };
+        console.log(`  categoriaDefault (context API): ${JSON.stringify(categoriaDefault)}`);
+        return;
+      }
+    }
+  } catch(e) { console.warn('[CATEGORIA] context API falló:', e.message); }
+
+  // 4. editmeta de un issue QAA existente — funciona con permisos normales
+  try {
+    const search = await jiraPost('/rest/api/3/search/jql', {
+      jql: 'project = QAA AND issuetype = Tarea ORDER BY created DESC',
+      maxResults: 5,
+      fields: ['summary'],
+    });
+    const issues = search.issues || [];
+    console.log('[CATEGORIA] issues QAA/Tarea encontrados para editmeta:', issues.map(i => i.key));
+    for (const issue of issues) {
+      const meta  = await jiraGet(`/rest/api/3/issue/${issue.key}/editmeta`);
+      const field = meta.fields?.customfield_10441;
+      console.log(`[CATEGORIA] editmeta ${issue.key} → customfield_10441:`, JSON.stringify(field?.allowedValues?.slice(0,5)));
+      if (field?.allowedValues?.length) {
+        categoriaDefault = { id: String(field.allowedValues[0].id) };
+        console.log(`  categoriaDefault (editmeta): ${JSON.stringify(categoriaDefault)}`);
+        return;
+      }
+    }
+  } catch(e) { console.warn('[CATEGORIA] editmeta falló:', e.message); }
+
+  console.warn(`
+  [CATEGORIA] ❌ ningún método automático funcionó para customfield_10441.
+  Abrí Jira, creá una tarea en QAA a mano, abrí DevTools → Network,
+  buscá el POST a /rest/api/3/issue y fijate el valor de customfield_10441.
+  Luego agregá en .env:
+    CATEGORIA_JSON={"id":"XXXXX"}
+  `);
+}
+
 // ── MIME types ────────────────────────────────────────────────────────────────
 
 const MIME = {
@@ -225,6 +314,45 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // ── Diagnóstico de campos QAA ──────────────────────────────────────────────
+  if (parsed.pathname === '/debug/campos-qaa') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    (async () => {
+      try {
+        // Buscar cualquier issue de QAA y llamar editmeta
+        const search = await jiraPost('/rest/api/3/search/jql', {
+          jql: 'project = QAA ORDER BY created DESC',
+          maxResults: 5,
+          fields: ['summary', 'issuetype'],
+        });
+        const issues = search.issues || [];
+        const resultados = [];
+        for (const issue of issues) {
+          try {
+            const meta  = await jiraGet(`/rest/api/3/issue/${issue.key}/editmeta`);
+            const campo = meta.fields?.customfield_10441;
+            resultados.push({ key: issue.key, tipo: issue.fields?.issuetype?.name, campo10441: campo });
+            if (campo?.allowedValues?.length) break;
+          } catch(e) { resultados.push({ key: issue.key, error: e.message }); }
+        }
+        // Leer el campo directamente de los issues existentes
+        const valoresReales = [];
+        for (const issue of issues) {
+          try {
+            const full  = await jiraGet(`/rest/api/3/issue/${issue.key}?fields=customfield_10441`);
+            const valor = full.fields?.customfield_10441;
+            valoresReales.push({ key: issue.key, customfield_10441: valor });
+          } catch(e) { valoresReales.push({ key: issue.key, error: e.message }); }
+        }
+
+        res.end(JSON.stringify({ resultados, valoresReales }, null, 2));
+      } catch(e) {
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    })();
+    return;
+  }
+
   // ── PROXY: /jira/* → Jira API ─────────────────────────────────────────────
   if (parsed.pathname.startsWith('/jira/')) {
     const jiraPath = parsed.pathname.replace('/jira', '') + (parsed.search || '');
@@ -242,6 +370,7 @@ const server = http.createServer((req, res) => {
             if (!payload.fields.customfield_10271) payload.fields.customfield_10271 = JIRA_EMAIL;
             if (!payload.fields.customfield_10337) payload.fields.customfield_10337 = myDisplayName || JIRA_EMAIL;
             if (!payload.fields.customfield_10370 && dependenciaDefault) payload.fields.customfield_10370 = dependenciaDefault;
+            if (!payload.fields.customfield_10441 && categoriaDefault)   payload.fields.customfield_10441 = categoriaDefault;
             bodyData = Buffer.from(JSON.stringify(payload));
 
             const proj = payload.fields.project?.key || '?';
@@ -354,13 +483,17 @@ const server = http.createServer((req, res) => {
                : parsed.pathname === '/history'           ? '/history.html'
                : parsed.pathname === '/jira-editor'       ? '/jira_editor.html'
                : parsed.pathname === '/bg-verificacion'   ? '/bg_verificacion.html'
+               : parsed.pathname === '/actividades'       ? '/actividades.html'
                : parsed.pathname;
   filePath = path.join(__dirname, filePath);
 
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('Not found'); return; }
-    const mime = MIME[path.extname(filePath)] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': mime });
+    const ext  = path.extname(filePath);
+    const mime = MIME[ext] || 'application/octet-stream';
+    const headers = { 'Content-Type': mime };
+    if (ext === '.js') headers['Cache-Control'] = 'no-cache, must-revalidate';
+    res.writeHead(200, headers);
     res.end(data);
   });
 });
@@ -370,5 +503,5 @@ server.listen(PORT, () => {
   console.log('  Servidor QA corriendo');
   console.log(`  http://localhost:${PORT}`);
   console.log('');
-  fetchMyself().then(() => fetchDependenciaDefault());
+  fetchMyself().then(() => Promise.all([fetchDependenciaDefault(), fetchCategoriaDefault()]));
 });
