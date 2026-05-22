@@ -42,6 +42,7 @@ let myAccountId        = null;
 let myDisplayName      = null;
 let dependenciaDefault = null;
 let categoriaDefault   = null;
+let categoriasDefault  = null;
 
 // ── Helpers Jira ──────────────────────────────────────────────────────────────
 
@@ -282,6 +283,110 @@ async function fetchCategoriaDefault() {
   `);
 }
 
+async function fetchCategoriasDefault() {
+  if (ENV_ERROR) return;
+
+  // Override manual desde .env — tiene prioridad sobre todo
+  if (process.env.CATEGORIAS_JSON) {
+    try {
+      categoriasDefault = JSON.parse(process.env.CATEGORIAS_JSON);
+      console.log(`  categoriasDefault (desde .env): ${JSON.stringify(categoriasDefault)}`);
+      return;
+    } catch(e) { console.warn('[CATEGORIAS] CATEGORIAS_JSON inválido en .env:', e.message); }
+  }
+
+  // Diagnóstico: tipo del campo
+  try {
+    const allFields = await jiraGet('/rest/api/3/field');
+    const def = allFields.find(f => f.id === 'customfield_10474');
+    if (def) {
+      console.log(`[CATEGORIAS] tipo del campo "${def.name}":`, JSON.stringify({
+        type:   def.schema?.type,
+        items:  def.schema?.items,
+        custom: def.schema?.custom,
+      }));
+    } else {
+      console.warn('[CATEGORIAS] customfield_10474 no encontrado en /rest/api/3/field');
+    }
+  } catch(e) { console.warn('[CATEGORIAS] no se pudo obtener definición del campo:', e.message); }
+
+  // 1. Buscar en issues reales de QAA con el campo seteado
+  for (const proj of ['QAA', 'BG']) {
+    try {
+      const res = await jiraPost('/rest/api/3/search/jql', {
+        jql: `project = ${proj} AND cf[10474] is not EMPTY ORDER BY created DESC`,
+        maxResults: 1,
+        fields: ['customfield_10474'],
+      });
+      console.log(`[CATEGORIAS] issues ${proj} con campo seteado:`, res.total);
+      if (res.issues?.[0]?.fields?.customfield_10474) {
+        categoriasDefault = res.issues[0].fields.customfield_10474;
+        console.log(`  categoriasDefault: ${JSON.stringify(categoriasDefault)}`);
+        return;
+      }
+    } catch(e) { console.warn(`[CATEGORIAS] búsqueda ${proj} falló:`, e.message); }
+  }
+
+  // 2. allowedValues desde createmeta (QAA/Tarea)
+  try {
+    const meta   = await jiraGet('/rest/api/3/issue/createmeta/QAA/issuetypes/10046');
+    const values = meta.values || meta.fields || [];
+    const list   = Array.isArray(values) ? values : Object.values(values);
+    const field  = list.find(v => v.fieldId === 'customfield_10474' || v.key === 'customfield_10474');
+    console.log('[CATEGORIAS] createmeta field:', JSON.stringify(field?.allowedValues?.slice(0,3)));
+    if (field?.allowedValues?.length) {
+      categoriasDefault = { id: String(field.allowedValues[0].id) };
+      console.log(`  categoriasDefault (createmeta): ${JSON.stringify(categoriasDefault)}`);
+      return;
+    }
+  } catch(e) { console.warn('[CATEGORIAS] createmeta falló:', e.message); }
+
+  // 3. Contextos del campo
+  try {
+    const contexts = await jiraGet('/rest/api/3/field/customfield_10474/context?maxResults=10');
+    const ctxList  = contexts.values || [];
+    console.log('[CATEGORIAS] contextos del campo:', ctxList.map(c => `${c.id} (${c.name})`));
+    for (const ctx of ctxList) {
+      const opts   = await jiraGet(`/rest/api/3/field/customfield_10474/context/${ctx.id}/option?maxResults=10`);
+      const values = opts.values || [];
+      console.log(`[CATEGORIAS] opciones contexto ${ctx.id}:`, JSON.stringify(values.slice(0,5)));
+      if (values.length) {
+        categoriasDefault = { id: String(values[0].id) };
+        console.log(`  categoriasDefault (context API): ${JSON.stringify(categoriasDefault)}`);
+        return;
+      }
+    }
+  } catch(e) { console.warn('[CATEGORIAS] context API falló:', e.message); }
+
+  // 4. editmeta de issue existente
+  try {
+    const search = await jiraPost('/rest/api/3/search/jql', {
+      jql: 'project = QAA AND issuetype = Tarea ORDER BY created DESC',
+      maxResults: 5,
+      fields: ['summary'],
+    });
+    const issues = search.issues || [];
+    for (const issue of issues) {
+      const meta  = await jiraGet(`/rest/api/3/issue/${issue.key}/editmeta`);
+      const field = meta.fields?.customfield_10474;
+      console.log(`[CATEGORIAS] editmeta ${issue.key} → customfield_10474:`, JSON.stringify(field?.allowedValues?.slice(0,5)));
+      if (field?.allowedValues?.length) {
+        categoriasDefault = { id: String(field.allowedValues[0].id) };
+        console.log(`  categoriasDefault (editmeta): ${JSON.stringify(categoriasDefault)}`);
+        return;
+      }
+    }
+  } catch(e) { console.warn('[CATEGORIAS] editmeta falló:', e.message); }
+
+  console.warn(`
+  [CATEGORIAS] ❌ ningún método automático funcionó para customfield_10474.
+  Abrí Jira, creá una tarea a mano, DevTools → Network,
+  buscá el POST a /rest/api/3/issue y fijate el valor de customfield_10474.
+  Luego agregá en .env:
+    CATEGORIAS_JSON={"id":"XXXXX"}
+  `);
+}
+
 // ── MIME types ────────────────────────────────────────────────────────────────
 
 const MIME = {
@@ -371,6 +476,7 @@ const server = http.createServer((req, res) => {
             if (!payload.fields.customfield_10337) payload.fields.customfield_10337 = myDisplayName || JIRA_EMAIL;
             if (!payload.fields.customfield_10370 && dependenciaDefault) payload.fields.customfield_10370 = dependenciaDefault;
             if (!payload.fields.customfield_10441 && categoriaDefault)   payload.fields.customfield_10441 = categoriaDefault;
+            if (!payload.fields.customfield_10474 && categoriasDefault)  payload.fields.customfield_10474 = categoriasDefault;
             bodyData = Buffer.from(JSON.stringify(payload));
 
             const proj = payload.fields.project?.key || '?';
@@ -503,5 +609,5 @@ server.listen(PORT, () => {
   console.log('  Servidor QA corriendo');
   console.log(`  http://localhost:${PORT}`);
   console.log('');
-  fetchMyself().then(() => Promise.all([fetchDependenciaDefault(), fetchCategoriaDefault()]));
+  fetchMyself().then(() => Promise.all([fetchDependenciaDefault(), fetchCategoriaDefault(), fetchCategoriasDefault()]));
 });

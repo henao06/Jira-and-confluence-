@@ -46,7 +46,7 @@ async function toggleBgAssignee(chk) {
  * Crea una tarea en BG y la vincula al issue QAA si se provee linkIssueKey.
  * @returns {{ key: string, url: string }}
  */
-async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, linkIssueKey }) {
+async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual, severidad, sevLbl, entorno, steps, precon, esperado, obtenido, impacto, soluciones, linkIssueKey, tipo = 'Tarea' }) {
   const sevSuffix    = severidad.replace(/^severity-/, '');
   const prioridadBug = { critico:'Highest', mayor:'High', medio:'Medium', menor:'Low', bajo:'Low' }[sevSuffix] || 'Medium';
   const bgAsignadoId = document.getElementById('bg-asignado').value;
@@ -79,7 +79,7 @@ async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual
       project:     { key: 'BG' },
       summary:     `${tcId} — ${desc}`,
       description: bgDescription,
-      issuetype:   { name: 'Tarea' },
+      issuetype:   { name: tipo },
       priority:    { name: prioridadBug },
       labels:      [ `severity-${sevSuffix}`, ...moduloLabel.split('+').map(s => s.trim()).filter(Boolean), 'qa-reported', ...(versionActual ? [versionActual] : []) ],
       ...(bgAsignadoId ? { assignee: { accountId: bgAsignadoId } } : {}),

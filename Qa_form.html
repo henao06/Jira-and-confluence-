@@ -1536,15 +1536,15 @@ async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual
   const bgDescription = { type:'doc', version:1, content:[
     mkPanel(bugPanelType, [
       mkH('Reporte de Bug'),
-      mkTable([
-        mkTableRow('Test Case',     tcId),
-        mkTableRow('Módulo',        moduloNombre),
-        mkTableRow('Versión',       versionActual || '—'),
-        mkTableRow('Severidad',     sevLbl),
-        mkTableRow('Entorno',       entorno),
-        ...(tipoPrueba  ? [mkTableRow('Tipo de prueba', tipoPrueba)]  : []),
-        ...(urlPantalla ? [mkTableRow('URL / Pantalla', urlPantalla)] : []),
-      ])
+    ]),
+    mkTable([
+      mkTableRow('Test Case',     tcId),
+      mkTableRow('Módulo',        moduloNombre),
+      mkTableRow('Versión',       versionActual || '—'),
+      mkTableRow('Severidad',     sevLbl),
+      mkTableRow('Entorno',       entorno),
+      ...(tipoPrueba  ? [mkTableRow('Tipo de prueba', tipoPrueba)]  : []),
+      ...(urlPantalla ? [mkTableRow('URL / Pantalla', urlPantalla)] : []),
     ]),
     mkRule(),
     mkH('Pasos para reproducir'), steps.length > 0 ? mkOrderedList(steps) : mkOrderedList(precon),
@@ -2046,13 +2046,17 @@ function mkB(text)           { return { type:'paragraph', content:[{type:'text',
 function mkRule()            { return { type:'rule' }; }
 function mkPanel(panelType, content) { return { type:'panel', attrs:{panelType}, content }; }
 function mkOrderedList(items) {
-  return { type:'orderedList', content: items.map(i => ({
-    type:'listItem', content:[{type:'paragraph', content:[{type:'text',text:i}]}]
+  const safe = (items || []).filter(i => i != null && String(i).trim() !== '');
+  if (!safe.length) return mkP('—');  // una lista vacía es ADF inválido
+  return { type:'orderedList', content: safe.map(i => ({
+    type:'listItem', content:[{type:'paragraph', content:[{type:'text',text:String(i)}]}]
   }))};
 }
 function mkBulletList(items) {
-  return { type:'bulletList', content: items.map(i => ({
-    type:'listItem', content:[{type:'paragraph', content:[{type:'text',text:i}]}]
+  const safe = (items || []).filter(i => i != null && String(i).trim() !== '');
+  if (!safe.length) return mkP('—');  // una lista vacía es ADF inválido
+  return { type:'bulletList', content: safe.map(i => ({
+    type:'listItem', content:[{type:'paragraph', content:[{type:'text',text:String(i)}]}]
   }))};
 }
 function mkTableCell(text, isHeader=false) {
@@ -2593,18 +2597,18 @@ async function submitForm() {
   const description = { type:'doc', version:1, content:[
     mkPanel('info', [
       mkH('Identificación del Test Case'),
-      mkTable([
-        mkTableRow('Identificador', tcDefId),
-        mkTableRow('Tester',        tester),
-        mkTableRow('Fecha',         fecha),
-        mkTableRow('Módulo',        moduloNombre),
-        mkTableRow('Tipo',          tipoLabel),
-        mkTableRow('Entorno',       entorno),
-        ...(urlPantalla  ? [mkTableRow('URL / Pantalla', urlPantalla)] : []),
-        ...(rolUsuario   ? [mkTableRow('Rol de usuario', rolUsuario)]  : []),
-        ...(historia     ? [mkTableRow('Historia',       historia)]    : []),
-        ...(versionActual? [mkTableRow('Versión',        versionActual)] : []),
-      ])
+    ]),
+    mkTable([
+      mkTableRow('Identificador', tcDefId),
+      mkTableRow('Tester',        tester),
+      mkTableRow('Fecha',         fecha),
+      mkTableRow('Módulo',        moduloNombre),
+      mkTableRow('Tipo',          tipoLabel),
+      mkTableRow('Entorno',       entorno),
+      ...(urlPantalla  ? [mkTableRow('URL / Pantalla', urlPantalla)] : []),
+      ...(rolUsuario   ? [mkTableRow('Rol de usuario', rolUsuario)]  : []),
+      ...(historia     ? [mkTableRow('Historia',       historia)]    : []),
+      ...(versionActual? [mkTableRow('Versión',        versionActual)] : []),
     ]),
     mkRule(),
     mkPanel(resultadoPanelType, [
@@ -2694,15 +2698,15 @@ async function submitForm() {
         const bgDescription = { type:'doc', version:1, content:[
           mkPanel(tcPanelType, [
             mkH('Reporte de Bug'),
-            mkTable([
-              mkTableRow('Test Case',     tcId),
-              mkTableRow('Módulo',        moduloNombre),
-              mkTableRow('Versión',       versionActual || '—'),
-              mkTableRow('Severidad',     sevLbl),
-              mkTableRow('Entorno',       entorno),
-              ...(tipoPrueba  ? [mkTableRow('Tipo de prueba', tipoPrueba)]  : []),
-              ...(urlPantalla ? [mkTableRow('URL / Pantalla', urlPantalla)] : []),
-            ])
+          ]),
+          mkTable([
+            mkTableRow('Test Case',     tcId),
+            mkTableRow('Módulo',        moduloNombre),
+            mkTableRow('Versión',       versionActual || '—'),
+            mkTableRow('Severidad',     sevLbl),
+            mkTableRow('Entorno',       entorno),
+            ...(tipoPrueba  ? [mkTableRow('Tipo de prueba', tipoPrueba)]  : []),
+            ...(urlPantalla ? [mkTableRow('URL / Pantalla', urlPantalla)] : []),
           ]),
           mkRule(),
           mkH('Pasos para reproducir'), steps.length > 0 ? mkOrderedList(steps) : mkOrderedList(precon),

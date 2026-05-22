@@ -107,6 +107,12 @@
       </svg>
     </div>
     <div><div class="sec-title">Título</div><div class="sec-sub">Nombre de la actividad</div></div>
+    <label style="display:flex;align-items:center;gap:6px;margin-left:auto">
+      <span style="font-size:.8rem;color:var(--g4);white-space:nowrap">Tipo:</span>
+      <select id="tipo-actividad" class="sel" style="padding:4px 10px;font-size:.82rem;height:32px;min-width:130px">
+        <option value="Tarea">Tarea</option>
+      </select>
+    </label>
     <div class="sec-num">1</div>
   </div>
   <div class="fields">
@@ -272,6 +278,7 @@ function saveTextState() {
   try {
     localStorage.setItem('act_draft', JSON.stringify({
       titulo:   document.getElementById('titulo').value,
+      tipo:     document.getElementById('tipo-actividad')?.value || 'Tarea',
       modo:     modoActual,
       texto:    document.getElementById('texto-desc').value,
       pasos,
@@ -284,11 +291,16 @@ function saveTextState() {
 }
 
 async function restoreState() {
+  await loadTiposActividad();
   try {
     const raw = localStorage.getItem('act_draft');
     if (raw) {
       const d = JSON.parse(raw);
       if (d.titulo) document.getElementById('titulo').value = d.titulo;
+      if (d.tipo) {
+        const sel = document.getElementById('tipo-actividad');
+        if (Array.from(sel.options).some(o => o.value === d.tipo)) sel.value = d.tipo;
+      }
       if (d.modo && d.modo !== 'texto') setModo(d.modo);
       if (d.texto) document.getElementById('texto-desc').value = d.texto;
       if (d.pasos?.length) {
@@ -328,13 +340,17 @@ function mkB(text)           { return { type:'paragraph', content:[{type:'text',
 function mkRule()            { return { type:'rule' }; }
 function mkPanel(panelType, content) { return { type:'panel', attrs:{panelType}, content }; }
 function mkOrderedList(items) {
-  return { type:'orderedList', content: items.map(t => ({
-    type:'listItem', content:[{ type:'paragraph', content:[{type:'text',text:t||'—'}] }]
+  const safe = (items || []).filter(t => t != null && String(t).trim() !== '');
+  if (!safe.length) return mkP('—');  // una lista vacía es ADF inválido
+  return { type:'orderedList', content: safe.map(t => ({
+    type:'listItem', content:[{ type:'paragraph', content:[{type:'text',text:String(t)}] }]
   }))};
 }
 function mkBulletList(items) {
-  return { type:'bulletList', content: items.map(t => ({
-    type:'listItem', content:[{ type:'paragraph', content:[{type:'text',text:t||'—'}] }]
+  const safe = (items || []).filter(t => t != null && String(t).trim() !== '');
+  if (!safe.length) return mkP('—');  // una lista vacía es ADF inválido
+  return { type:'bulletList', content: safe.map(t => ({
+    type:'listItem', content:[{ type:'paragraph', content:[{type:'text',text:String(t)}] }]
   }))};
 }
 function mkTableCell(text, isHeader=false) {
@@ -345,6 +361,34 @@ function mkTableRow(label, value) {
 }
 function mkTable(rows) {
   return { type:'table', attrs:{isNumberColumnEnabled:false, layout:'default'}, content:rows };
+}
+
+// ── Tipos de actividad (issuetypes del proyecto QAA) ──────────────────────────
+let tiposLoaded = false;
+
+async function loadTiposActividad() {
+  if (tiposLoaded) return;
+  const sel = document.getElementById('tipo-actividad');
+  try {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/project/QAA`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    // Solo tipos que pueden ser hijos directos de la Epic: nivel 0, no subtareas
+    const tipos = (data.issueTypes || [])
+      .filter(t => !t.subtask && t.hierarchyLevel === 0);
+    if (!tipos.length) throw new Error('Sin tipos');
+    const prev = sel.value || 'Tarea';
+    sel.innerHTML = tipos.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+    sel.value = tipos.some(t => t.name === prev) ? prev
+              : tipos.some(t => t.name === 'Tarea') ? 'Tarea'
+              : tipos[0].name;
+    tiposLoaded = true;
+  } catch(e) {
+    console.warn('[tipos actividad]', e.message);
+    tiposLoaded = true; // el HTML ya tiene "Tarea" como fallback
+  }
 }
 
 // ── BG: versiones y toggle ────────────────────────────────────────────────────
@@ -471,6 +515,7 @@ document.addEventListener('paste', e => {
 });
 
 document.getElementById('titulo').addEventListener('input', saveTextState);
+document.getElementById('tipo-actividad').addEventListener('change', saveTextState);
 document.getElementById('texto-desc').addEventListener('input', saveTextState);
 document.getElementById('pasos-wrap').addEventListener('input', saveTextState);
 document.getElementById('registrarEnQAAFinalizada').addEventListener('change', saveTextState);
@@ -517,7 +562,7 @@ async function submitActividad() {
         parent:            { key: EPIC_KEY },
         customfield_10014: EPIC_KEY,
         summary:           titulo,
-        issuetype:         { name: 'Tarea' },
+        issuetype:         { name: document.getElementById('tipo-actividad').value || 'Tarea' },
         ...(window.versionActual ? { fixVersions: [{ name: window.versionActual }] } : {}),
         ...(description ? { description } : {}),
       }}),
@@ -566,6 +611,7 @@ async function submitActividad() {
         impacto:       '',
         soluciones:    [],
         linkIssueKey:  qaaKey,
+        tipo:          document.getElementById('tipo-actividad').value || 'Tarea',
       });
       bgKey = bg.key;
 
@@ -615,6 +661,8 @@ async function submitActividad() {
 function resetForm() {
   clearDraft();
   document.getElementById('titulo').value      = '';
+  const tipoSel = document.getElementById('tipo-actividad');
+  if (Array.from(tipoSel.options).some(o => o.value === 'Tarea')) tipoSel.value = 'Tarea';
   document.getElementById('texto-desc').value  = '';
   document.getElementById('pasos-wrap').innerHTML = `
     <div class="step-row">
