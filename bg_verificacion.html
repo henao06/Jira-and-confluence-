@@ -6,6 +6,7 @@
 <title>Verificación BG — Hybred QA</title>
 <link rel="stylesheet" href="/styles.css">
 <script src="/epic-filter.js"></script>
+<script src="/bulk-epic.js"></script>
 <style>
 body { padding: 20px 16px 40px; }
 
@@ -15,6 +16,182 @@ body { padding: 20px 16px 40px; }
   gap: 20px;
   align-items: start;
 }
+
+/* ── Tab panels (visibility) ────────────────────────────────────────────── */
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── Botones de tab en el header ────────────────────────────────────────── */
+.btn-hdr-tab { position: relative; }
+.btn-hdr-tab.active {
+  background: linear-gradient(135deg, #0f6e56 0%, #10b981 100%) !important;
+  border-color: rgba(16,185,129,.6) !important;
+  color: white !important;
+  box-shadow: 0 2px 8px rgba(15,110,86,.4);
+}
+.btn-hdr-tab.active svg { stroke: white !important; }
+
+/* ── Bulk por Epic ──────────────────────────────────────────────────────── */
+.bulk-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.bulk-epic-list {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--rl);
+  box-shadow: var(--s1);
+  max-height: 75vh;
+  overflow-y: auto;
+}
+.bulk-epic-item {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: background .12s;
+}
+.bulk-epic-item:hover { background: var(--g0); }
+.bulk-epic-item.selected { background: #eff6ff; border-left: 3px solid #2563eb; padding-left: 11px; }
+.bulk-epic-item-key { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 10px; font-weight: 700; color: var(--g6); }
+.bulk-epic-item-name { font-size: 13px; font-weight: 600; color: var(--g8); }
+.bulk-epic-item-count {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #1e3a8a;
+  background: #dbeafe;
+  border: 1px solid #93c5fd;
+  border-radius: 10px;
+  padding: 1px 8px;
+  width: max-content;
+}
+.bulk-epic-item-count.zero { color: #065f46; background: #d1fae5; border-color: #6ee7b7; }
+.bulk-detail {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--rl);
+  box-shadow: var(--s1);
+  padding: 20px;
+  min-height: 400px;
+}
+.bulk-detail-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 360px;
+  color: var(--sub);
+  text-align: center;
+  gap: 10px;
+}
+.bulk-detail-empty svg { width: 48px; height: 48px; opacity: .35; }
+.bulk-detail-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.bulk-detail-title { font-size: 16px; font-weight: 700; color: var(--g8); }
+.bulk-detail-sub   { font-size: 12px; color: var(--sub); margin-top: 3px; }
+.bulk-task-list {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  background: var(--g0);
+}
+.bulk-task-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.bulk-task-row:last-child { border-bottom: none; }
+.bulk-task-row .badge-key { font-size: 9px; }
+.bulk-task-summary { color: var(--g7); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bulk-task-status  { font-size: 10px; font-weight: 700; color: var(--g6); background: var(--white); border: 1px solid var(--g2); border-radius: 10px; padding: 1px 7px; }
+.bulk-form-group { margin-bottom: 14px; }
+.bulk-form-label { display: block; font-size: 11px; font-weight: 700; color: var(--g7); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+.bulk-radio-row { display: flex; gap: 10px; }
+.bulk-radio {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 12px;
+  background: var(--white);
+  transition: all .15s;
+}
+.bulk-radio.selected.pasa  { border-color: #10b981; background: #ecfdf5; color: #065f46; }
+.bulk-radio.selected.falla { border-color: var(--red-b); background: var(--red-bg); color: var(--red); }
+.bulk-textarea {
+  width: 100%;
+  min-height: 80px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+.bulk-textarea:focus { outline: 2px solid #93c5fd; outline-offset: 1px; border-color: #2563eb; }
+.bulk-files {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bulk-file-row { display: flex; align-items: center; gap: 8px; padding: 5px 9px; background: var(--g0); border-radius: 6px; font-size: 11px; }
+.bulk-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--g7); }
+.bulk-file-remove { background: none; border: none; color: var(--red); cursor: pointer; font-weight: 700; font-size: 14px; line-height: 1; padding: 0 4px; }
+.bulk-actions { display: flex; align-items: center; gap: 12px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.bulk-progress { font-size: 12px; color: var(--sub); flex: 1; }
+.bulk-btn-complete {
+  background: linear-gradient(135deg, #0f6e56 0%, #10b981 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 11px 22px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .15s;
+  box-shadow: 0 2px 8px rgba(15,110,86,.25);
+}
+.bulk-btn-complete:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(15,110,86,.35); }
+.bulk-btn-complete:disabled { opacity: .5; cursor: not-allowed; }
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--g5);
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--g0);
+  transition: border-color .15s, color .15s, background .15s;
+  white-space: nowrap;
+  user-select: none;
+}
+.checkbox-label:has(input:checked) {
+  border-color: #10b981;
+  color: #065f46;
+  background: rgba(16,185,129,.08);
+}
+.checkbox-label input[type="checkbox"] { accent-color: #10b981; width: 14px; height: 14px; cursor: pointer; }
 
 .col-panel {
   background: var(--white);
@@ -75,7 +252,9 @@ body { padding: 20px 16px 40px; }
 }
 
 .btn-reload:hover { border-color: var(--g4); color: var(--g7); }
+.btn-reload:disabled { opacity: .65; cursor: wait; }
 .btn-reload svg { width: 11px; height: 11px; stroke: currentColor; }
+.btn-reload.is-loading svg { animation: spin .8s linear infinite; }
 
 .col-body {
   flex: 1;
@@ -121,7 +300,11 @@ body { padding: 20px 16px 40px; }
   border-radius: 4px;
   padding: 2px 7px;
   white-space: nowrap;
+  text-decoration: none;
+  transition: all .15s;
 }
+a.badge-key { cursor: pointer; }
+a.badge-key:hover { color: #0052cc; border-color: #b3d4ff; background: #e9f2ff; }
 
 .badge-priority {
   font-size: 10px;
@@ -225,6 +408,7 @@ body { padding: 20px 16px 40px; }
 .badge-ok    { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
 .badge-fail  { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-b); }
 .badge-progress { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+.badge-updated  { background: #dbeafe; color: #1e3a8a; border: 1px solid #93c5fd; }
 
 /* ── Drop zone ── */
 .drop-zone {
@@ -989,10 +1173,25 @@ body { padding: 20px 16px 40px; }
       </svg>
       <span>Historial</span>
     </a>
+    <button class="btn-hdr-history btn-hdr-tab active" data-tab="verif" onclick="cambiarTab('verif')" title="Modo verificación BG individual">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+      </svg>
+      <span>Verificación</span>
+    </button>
+    <button class="btn-hdr-history btn-hdr-tab" data-tab="bulk" onclick="cambiarTab('bulk')" title="Completar test cases en masa por Epic">
+      <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="12" width="18" height="4" rx="1"/><rect x="3" y="20" width="18" height="0.1"/>
+      </svg>
+      <span>Bulk Epic</span>
+    </button>
     <div id="epic-filter-container"></div>
     <a id="version-badge" href="https://liceopinoverde.atlassian.net/jira/software/projects/QAA/releases" target="_blank" class="btn-hdr-history" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#a5b4fc" title="Versión activa">...</a>
   </div>
 </div>
+
+<!-- Tab: Verificación BG -->
+<div class="tab-panel active" data-panel="verif">
 
 <!-- Two columns -->
 <div class="two-col">
@@ -1046,6 +1245,29 @@ body { padding: 20px 16px 40px; }
 
 </div>
 </div>
+<!-- /tab verif -->
+
+<!-- Tab: Bulk por Epic -->
+<div class="tab-panel" data-panel="bulk">
+  <div id="bulk-banner" class="summary-banner"></div>
+  <div class="bulk-layout">
+    <div class="bulk-epic-list" id="bulk-epic-list">
+      <div style="padding:20px;color:var(--sub);font-size:12px;text-align:center;">Cargando epics...</div>
+    </div>
+    <div class="bulk-detail" id="bulk-detail">
+      <div class="bulk-detail-empty">
+        <svg fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+        </svg>
+        <div>Seleccioná un Epic de la izquierda para ver las tareas pendientes</div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- /tab bulk -->
+
+</div>
+<!-- /page -->
 
 <script>
 const JIRA_BASE  = window.location.origin + '/jira';
@@ -1147,15 +1369,24 @@ async function cargarJqlDesdeEpic() {
 
 // ── Load pending ─────────────────────────────────────────────────────────────
 
-async function cargarPendientes() {
-  const body    = document.getElementById('pending-body');
-  const loading = document.getElementById('pending-loading');
+function _crearLoadingEl() {
+  const div = document.createElement('div');
+  div.className = 'state-loading';
+  div.id        = 'pending-loading';
+  div.innerHTML = '<div class="spin"></div><span>Cargando bugs...</span>';
+  return div;
+}
 
-  body.innerHTML = '';
-  body.appendChild(loading);
-  loading.style.display = 'flex';
+async function cargarPendientes() {
+  const body = document.getElementById('pending-body');
+  const btn  = document.getElementById('btn-reload');
+
+  if (btn) { btn.classList.add('is-loading'); btn.disabled = true; }
 
   try {
+    body.innerHTML = '';
+    body.appendChild(_crearLoadingEl());
+
     const epicClause = EpicFilter.getJqlClause();
     let finalJql = jql;
     if (epicClause) {
@@ -1175,29 +1406,74 @@ async function cargarPendientes() {
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
-    loading.style.display = 'none';
 
     const issues = data.issues || [];
+    body.innerHTML = '';
 
     if (issues.length === 0) {
-      body.innerHTML = '';
       body.appendChild(makeEmptyState('No hay bugs Under Review en BG'));
       updatePendingCount();
       return;
     }
 
-    body.innerHTML = '';
+    let pintadas = 0;
     for (const issue of issues) {
       bugs[issue.key] = issue;
       if (!queue.includes(issue.key)) {
         body.appendChild(makePendingCard(issue));
+        pintadas++;
       }
     }
+
+    if (pintadas === 0) {
+      body.appendChild(makeEmptyState(`Todos los bugs (${issues.length}) ya están en la cola`));
+    }
+
     updatePendingCount();
+
+    // Refrescar datos de las cards que están en cola (status + transiciones)
+    refrescarCardsEnCola();
   } catch (e) {
-    loading.style.display = 'none';
+    console.error('[cargarPendientes] error:', e);
     body.innerHTML = '';
-    body.appendChild(makeErrorState('Error al cargar: ' + e.message));
+    body.appendChild(makeErrorState('Error al cargar: ' + (e?.message || e)));
+  } finally {
+    if (btn) { btn.classList.remove('is-loading'); btn.disabled = false; }
+  }
+}
+
+// Refresca el estado actual + transiciones disponibles de cada bug en la cola
+async function refrescarCardsEnCola() {
+  for (const key of queue) {
+    try {
+      const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${key}?fields=status,issuelinks&expand=transitions`, {
+        headers: { Accept: 'application/json' }
+      });
+      if (!r.ok) continue;
+      const data = await r.json();
+      const item = colaItems[key];
+      if (!item) continue;
+
+      const estadoActual = data.fields?.status?.name || null;
+      const transitions  = data.transitions || [];
+
+      item.bgCurrentStatus = estadoActual;
+      item.bgTransitions   = transitions;
+
+      const sel = document.getElementById(`bg-transition-${key}`);
+      if (sel && !item.bgTransitionAplicada) {
+        const valActual = sel.value;
+        sel.innerHTML = '<option value="">— No cambiar —</option>' +
+          transitions.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
+        if (valActual && transitions.some(t => t.id === valActual)) sel.value = valActual;
+        sel.disabled = transitions.length === 0;
+      }
+
+      const lbl = document.querySelector(`#drop-zone .bug-card[data-key="${key}"] .estado-row-label`);
+      if (lbl && estadoActual && !item.bgTransitionAplicada) {
+        lbl.textContent = `BG (${estadoActual}):`;
+      }
+    } catch {}
   }
 }
 
@@ -1253,7 +1529,7 @@ function makePendingCard(issue) {
 
   card.innerHTML = `
     <div class="card-top">
-      <span class="badge-key">${issue.key}</span>
+      <a class="badge-key" href="https://liceopinoverde.atlassian.net/browse/${esc(issue.key)}" target="_blank" rel="noopener noreferrer" title="Abrir ${esc(issue.key)} en Jira" onclick="event.stopPropagation()" draggable="false">${esc(issue.key)}</a>
       <span class="badge-priority ${priorityClass(priority)}">${priority}</span>
     </div>
     <div class="card-summary">${esc(f.summary || '—')}</div>
@@ -1381,7 +1657,7 @@ function makeQueueCard(issue) {
     <div class="queue-card">
       <div class="queue-card-info">
         <div class="card-top" id="card-top-${key}">
-          <span class="badge-key">${key}</span>
+          <a class="badge-key" href="https://liceopinoverde.atlassian.net/browse/${esc(key)}" target="_blank" rel="noopener noreferrer" title="Abrir ${esc(key)} en Jira" onclick="event.stopPropagation()">${esc(key)}</a>
           <span class="badge-priority ${priorityClass(priority)}">${priority}</span>
         </div>
         <div class="card-summary">${esc(f.summary || '—')}</div>
@@ -1556,7 +1832,43 @@ function makeQueueCard(issue) {
   selBG.id        = `bg-transition-${key}`;
   selBG.disabled  = true;
   selBG.innerHTML = '<option value="">Cargando estados...</option>';
-  selBG.addEventListener('change', () => { item.selectedBgTransition = selBG.value; });
+  const bgLabelBase = () => {
+    const cur = item.bgCurrentStatus;
+    return cur ? `BG (${cur}):` : 'BG:';
+  };
+  selBG.addEventListener('change', async () => {
+    const transitionId = selBG.value;
+    if (!transitionId) {
+      item.selectedBgTransition = '';
+      lblBG.textContent = bgLabelBase();
+      lblBG.style.color = '';
+      return;
+    }
+    const estadoNombre = selBG.options[selBG.selectedIndex]?.textContent || 'estado';
+    selBG.disabled    = true;
+    lblBG.textContent = `${bgLabelBase()} Aplicando...`;
+    lblBG.style.color = '';
+    try {
+      const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${issue.key}/transitions`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body:    JSON.stringify({ transition: { id: transitionId } })
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      item.bgTransitionAplicada = true;
+      item.selectedBgTransition = '';
+      item.bgCurrentStatus      = estadoNombre;
+      lblBG.textContent = `BG (${estadoNombre}) ✓`;
+      lblBG.style.color = '#059669';
+    } catch (e) {
+      item.selectedBgTransition = '';
+      selBG.value       = '';
+      lblBG.textContent = `${bgLabelBase()} Error — ${e.message}`;
+      lblBG.style.color = 'var(--red)';
+    } finally {
+      selBG.disabled = false;
+    }
+  });
   rowBG.appendChild(lblBG);
   rowBG.appendChild(selBG);
   secEstado.appendChild(rowBG);
@@ -1897,13 +2209,15 @@ function addToQueue(key) {
   queue.push(key);
 
   colaItems[key] = {
-    resultadosObtenidos:   '',
-    adjuntosNuevos:        [],
-    bgTransitions:         [],
-    selectedBgTransition:  '',
-    resultadoVerificacion: '',
-    marcarFinalizada:      false,
-    agregarAlEpic:         false
+    resultadosObtenidos:    '',
+    adjuntosNuevos:         [],
+    bgTransitions:          [],
+    selectedBgTransition:   '',
+    bgTransitionAplicada:   false,
+    bgCurrentStatus:        null,
+    resultadoVerificacion:  '',
+    marcarFinalizada:       false,
+    agregarAlEpic:          false
   };
 
   const pendingCard = document.querySelector(`#pending-body .bug-card[data-key="${key}"]`);
@@ -1915,38 +2229,57 @@ function addToQueue(key) {
   const issue = bugs[key];
   dz.appendChild(makeQueueCard(issue));
 
-  // Fetch transiciones BG + check de link al epic (en paralelo)
-  fetch(`${JIRA_BASE}/rest/api/3/issue/${key}/transitions`, {
+  // Fetch unificado: status actual + transiciones BG + check de link al epic
+  fetch(`${JIRA_BASE}/rest/api/3/issue/${key}?fields=status,issuelinks&expand=transitions`, {
     headers: { Accept: 'application/json' }
   }).then(r => r.ok ? r.json() : null).then(data => {
-    if (!data?.transitions?.length) return;
-    colaItems[key].bgTransitions = data.transitions;
+    if (!data) {
+      const sel = document.getElementById(`bg-transition-${key}`);
+      if (sel) { sel.innerHTML = '<option value="">— No disponible —</option>'; }
+      return;
+    }
+
+    // 1) Transiciones BG + estado actual
+    const transitions   = data.transitions || [];
+    const estadoActual  = data.fields?.status?.name || null;
+    colaItems[key].bgTransitions   = transitions;
+    colaItems[key].bgCurrentStatus = estadoActual;
+
     const sel = document.getElementById(`bg-transition-${key}`);
-    if (!sel) return;
-    sel.innerHTML = '<option value="">— No cambiar —</option>' +
-      data.transitions.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
-    sel.disabled = false;
+    if (sel) {
+      if (transitions.length) {
+        sel.innerHTML = '<option value="">— No cambiar —</option>' +
+          transitions.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
+        sel.disabled = false;
+      } else {
+        sel.innerHTML = '<option value="">— Sin transiciones —</option>';
+      }
+    }
+
+    const lbl = document.querySelector(`#drop-zone .bug-card[data-key="${key}"] .estado-row-label`);
+    if (lbl && estadoActual) {
+      lbl.textContent = `BG (${estadoActual}):`;
+    }
+
+    // 2) Check de link al Epic
+    const issuelinks = data.fields?.issuelinks || [];
+    const yaEnlazado = issuelinks.some(l =>
+      l.inwardIssue?.key === QAA_PARENT || l.outwardIssue?.key === QAA_PARENT
+    );
+    if (yaEnlazado) {
+      colaItems[key].agregarAlEpic = true;
+      const chk = document.getElementById(`epic-link-${key}`);
+      if (chk) {
+        chk.checked  = true;
+        chk.disabled = true;
+        const epicLbl = chk.nextElementSibling;
+        if (epicLbl) { epicLbl.textContent = 'Ya enlazado al Epic ✓'; epicLbl.style.color = '#059669'; }
+      }
+    }
   }).catch(() => {
     const sel = document.getElementById(`bg-transition-${key}`);
     if (sel) { sel.innerHTML = '<option value="">— No disponible —</option>'; }
   });
-
-  fetch(`${JIRA_BASE}/rest/api/3/issue/${key}?fields=issuelinks`, {
-    headers: { Accept: 'application/json' }
-  }).then(r => r.ok ? r.json() : null).then(data => {
-    if (!data?.fields?.issuelinks) return;
-    const yaEnlazado = data.fields.issuelinks.some(l =>
-      l.inwardIssue?.key === QAA_PARENT || l.outwardIssue?.key === QAA_PARENT
-    );
-    if (!yaEnlazado) return;
-    colaItems[key].agregarAlEpic = true;
-    const chk = document.getElementById(`epic-link-${key}`);
-    if (!chk) return;
-    chk.checked  = true;
-    chk.disabled = true;
-    const lbl = chk.nextElementSibling;
-    if (lbl) { lbl.textContent = 'Ya enlazado al Epic ✓'; lbl.style.color = '#059669'; }
-  }).catch(() => {});
 
   updatePendingCount();
   updateQueueCount();
@@ -2069,7 +2402,7 @@ function agregarTareaBGPendiente(issue, container) {
               mkH('Notas'),
               mkP(tarea.notas.trim()),
               mkRule(),
-              mkB('Vinculada a: ' + issue.key),
+              mkIssueRef('Vinculada a: ', issue.key),
             ])
           ]}} : {})
         }
@@ -2179,6 +2512,17 @@ function mkH(text, level=2)   { return { type:'heading', attrs:{level}, content:
 function mkP(text)             { return { type:'paragraph', content:[{type:'text',text:text||'—'}] }; }
 function mkB(text)             { return { type:'paragraph', content:[{type:'text',text,marks:[{type:'strong'}]}] }; }
 function mkRule()              { return { type:'rule' }; }
+// Nodo de texto con la key del issue como link clickeable a Jira
+function mkIssueLink(key) {
+  return { type:'text', text:String(key), marks:[{ type:'link', attrs:{ href:`https://liceopinoverde.atlassian.net/browse/${key}` } }] };
+}
+// Párrafo "label KEY" donde KEY es un link clickeable
+function mkIssueRef(label, key) {
+  return { type:'paragraph', content:[
+    { type:'text', text:label, marks:[{type:'strong'}] },
+    mkIssueLink(key),
+  ]};
+}
 function mkPanel(panelType, content) { return { type:'panel', attrs:{panelType}, content }; }
 function mkOrderedList(items) {
   return { type:'orderedList', content: items.map(i => ({
@@ -2255,15 +2599,16 @@ async function subirTodoAQAA() {
   const banner = document.getElementById('summary-banner');
   banner.className = 'summary-banner';
 
-  let ok   = 0;
-  let fail = 0;
+  let creadas      = 0;
+  let actualizadas = 0;
+  let fail         = 0;
   const total = queue.length;
 
   for (let i = 0; i < queue.length; i++) {
     const key   = queue[i];
     const issue = bugs[key];
     const finalizar = colaItems[key]?.marcarFinalizada === true;
-    progEl.textContent = `${i + 1}/${total} ${finalizar ? 'creando y finalizando' : 'creando'}...`;
+    progEl.textContent = `${i + 1}/${total} sincronizando${finalizar ? ' y finalizando' : ''}...`;
 
     const resultArea = document.getElementById(`result-${key}`);
     if (resultArea) {
@@ -2271,16 +2616,23 @@ async function subirTodoAQAA() {
     }
 
     try {
-      const createdKey = await crearSubtareaEnQAA(issue, finalizar);
+      const result   = await sincronizarSubtareaQAA(issue, finalizar);
+      const createdKey = result.key;
       const esFalla    = colaItems[key]?.resultadoVerificacion === 'falla';
 
-      ok++;
+      if (result.mode === 'updated') actualizadas++; else creadas++;
+
       if (resultArea) {
         const retestLink = esFalla
           ? ` <button onclick="abrirRetest('${esc(createdKey)}')"
                 style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:2px 8px;border-radius:5px;background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">↩ Retest</button>`
           : '';
-        resultArea.innerHTML = `<span class="card-result-badge badge-ok"><a href="https://liceopinoverde.atlassian.net/browse/${esc(createdKey)}" target="_blank" style="color:inherit;text-decoration:underline;">${esc(createdKey)}</a> ✓${retestLink}</span>`;
+        const badgeClass = result.mode === 'updated' ? 'badge-updated' : 'badge-ok';
+        const icon       = result.mode === 'updated' ? '↻' : '✓';
+        const detalle    = result.changes.length
+          ? ` title="${esc(result.changes.join(', '))}"`
+          : '';
+        resultArea.innerHTML = `<span class="card-result-badge ${badgeClass}"${detalle}><a href="https://liceopinoverde.atlassian.net/browse/${esc(createdKey)}" target="_blank" style="color:inherit;text-decoration:underline;">${esc(createdKey)}</a> ${icon}${retestLink}</span>`;
       }
       const removeBtn = document.querySelector(`#drop-zone .bug-card[data-key="${key}"] .btn-remove-queue`);
       if (removeBtn) removeBtn.disabled = true;
@@ -2295,9 +2647,15 @@ async function subirTodoAQAA() {
   progEl.textContent = '';
   submitting = false;
 
+  const ok = creadas + actualizadas;
+  const partes = [];
+  if (creadas)      partes.push(`${creadas} creada${creadas !== 1 ? 's' : ''}`);
+  if (actualizadas) partes.push(`${actualizadas} actualizada${actualizadas !== 1 ? 's' : ''}`);
+  if (fail)         partes.push(`${fail} fallida${fail !== 1 ? 's' : ''}`);
+
   if (fail === 0) {
     banner.className   = 'summary-banner show ok';
-    banner.textContent = `${ok} subtarea${ok !== 1 ? 's' : ''} creada${ok !== 1 ? 's' : ''} correctamente en QAA.`;
+    banner.textContent = partes.join(' · ') + ' en QAA.';
     const failKeys = queue.filter(k => {
       const ra = document.getElementById(`result-${k}`);
       return ra && ra.querySelector('.badge-fail');
@@ -2306,14 +2664,109 @@ async function subirTodoAQAA() {
     failKeys.forEach(k => queue.push(k));
   } else {
     banner.className   = 'summary-banner show warn';
-    banner.textContent = `${ok} OK · ${fail} fallido${fail !== 1 ? 's' : ''}. Las cards con error quedan en la cola.`;
+    banner.textContent = partes.join(' · ') + '. Las cards con error quedan en la cola.';
   }
 
   updateQueueCount();
   updateSubmitBtn();
 }
 
-async function crearSubtareaEnQAA(issue, finalizar = false) {
+// ── Búsqueda de subtarea QAA existente para un BG dado ───────────────────────
+// Estrategia: JQL por label `bg-{bgkey}`. Fallback: scan de issuelinks del BG.
+async function buscarSubtareaQAAExistente(bgKey) {
+  const labelKey = 'bg-' + bgKey.toLowerCase();
+  const fields   = 'summary,description,priority,fixVersions,labels,status,attachment,issuelinks';
+
+  // 1) Intento por label
+  try {
+    const jql = encodeURIComponent(`project = QAA AND labels = "${labelKey}"`);
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/search/jql?jql=${jql}&fields=${fields}&maxResults=1`, {
+      headers: { Accept: 'application/json' }
+    });
+    if (r.ok) {
+      const data = await r.json();
+      const issues = data.issues || [];
+      if (issues.length) return issues[0];
+    }
+  } catch {}
+
+  // 2) Fallback por issuelinks del BG
+  try {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${bgKey}?fields=issuelinks`, {
+      headers: { Accept: 'application/json' }
+    });
+    if (r.ok) {
+      const data = await r.json();
+      const links = data.fields?.issuelinks || [];
+      const qaaKey = links
+        .flatMap(l => [l.inwardIssue?.key, l.outwardIssue?.key])
+        .filter(Boolean)
+        .find(k => k.startsWith('QAA-') && k !== QAA_PARENT);
+      if (qaaKey) {
+        const r2 = await fetch(`${JIRA_BASE}/rest/api/3/issue/${qaaKey}?fields=${fields}`, {
+          headers: { Accept: 'application/json' }
+        });
+        if (r2.ok) return await r2.json();
+      }
+    }
+  } catch {}
+
+  return null;
+}
+
+// ── Helpers de diff e idempotencia ───────────────────────────────────────────
+function _parseJiraError(errBody, status) {
+  let errMsg = `HTTP ${status}`;
+  try {
+    const errData = JSON.parse(errBody);
+    const msgs = [...(errData.errorMessages || [])];
+    Object.values(errData.errors || {}).forEach(v => { if (!msgs.includes(v)) msgs.push(v); });
+    if (msgs.length) errMsg = msgs.join(' · ');
+  } catch {}
+  return errMsg;
+}
+
+function _eqLabels(a, b) {
+  const sa = new Set(a || []); const sb = new Set(b || []);
+  if (sa.size !== sb.size) return false;
+  for (const v of sa) if (!sb.has(v)) return false;
+  return true;
+}
+
+function _eqFixVersions(a, b) {
+  const sa = new Set((a || []).map(v => v.name));
+  const sb = new Set((b || []).map(v => v.name));
+  if (sa.size !== sb.size) return false;
+  for (const v of sa) if (!sb.has(v)) return false;
+  return true;
+}
+
+function _adfContieneKey(adf, key) {
+  if (!adf || !key) return false;
+  let found = false;
+  const target = key.toUpperCase();
+  function walk(node) {
+    if (found || !node) return;
+    if (node.type === 'inlineCard' && node.attrs?.url?.toUpperCase().includes(target)) { found = true; return; }
+    if (node.type === 'text' && (node.text || '').toUpperCase().includes(target)) {
+      const marks = node.marks || [];
+      if (marks.some(m => m.type === 'link') || /[A-Z]+-\d+/.test(node.text)) { found = true; return; }
+    }
+    (node.content || []).forEach(walk);
+  }
+  (adf.content || []).forEach(walk);
+  return found;
+}
+
+function _existeLink(links, keyA, keyB) {
+  return (links || []).some(l => {
+    const i = l.inwardIssue?.key, o = l.outwardIssue?.key;
+    return (i === keyA && o === keyB) || (i === keyB && o === keyA);
+  });
+}
+
+// ── Función principal: sincroniza (crea o actualiza) subtarea QAA ────────────
+async function sincronizarSubtareaQAA(issue, finalizar = false) {
   const f      = issue.fields;
   const bgKey  = issue.key.toLowerCase();
   const item   = colaItems[issue.key];
@@ -2322,194 +2775,298 @@ async function crearSubtareaEnQAA(issue, finalizar = false) {
   const baseLabels = ['verificacion-bg', 'bg-' + bgKey];
   if (resultado === 'falla') baseLabels.push('retest');
 
-  const payload = {
-    fields: {
-      project:           { key: 'QAA' },
-      parent:            { key: QAA_PARENT },
-      customfield_10014: QAA_PARENT,
-      summary:           f.summary || issue.key,
-      issuetype:         { name: 'Tarea' },
-      priority:          { name: f.priority?.name || 'Medium' },
-      labels:            baseLabels,
-      description:       buildDescription(issue),
-      ...(versionActual ? { fixVersions: [{ name: versionActual }] } : {})
-    }
+  const expectedFields = {
+    summary:     f.summary || issue.key,
+    priority:    { name: f.priority?.name || 'Medium' },
+    labels:      baseLabels,
+    description: buildDescription(issue),
+    ...(versionActual ? { fixVersions: [{ name: versionActual }] } : {})
   };
 
-  console.log(`[QAA] Payload → ${issue.key}:`, JSON.stringify(payload, null, 2));
+  const existing = await buscarSubtareaQAAExistente(bgKey);
+  const changes  = [];
+  let qaaKey, mode;
 
-  const r = await fetch(`${JIRA_BASE}/rest/api/3/issue`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body:    JSON.stringify(payload)
-  });
+  // ── A) UPDATE: ya existe la subtarea QAA ───────────────────────────────────
+  if (existing) {
+    qaaKey = existing.key;
+    mode   = 'updated';
+    const ex = existing.fields || {};
 
-  if (!r.ok) {
-    const errBody = await r.text();
-    console.error(`[QAA ERROR ${r.status}] ${issue.key}:`, errBody);
-    let errMsg = `HTTP ${r.status}`;
-    try {
-      const errData = JSON.parse(errBody);
-      const msgs = [...(errData.errorMessages || [])];
-      Object.values(errData.errors || {}).forEach(v => { if (!msgs.includes(v)) msgs.push(v); });
-      if (msgs.length) errMsg = msgs.join(' · ');
-    } catch {}
-    throw new Error(errMsg);
+    const diff = {};
+    if ((ex.summary || '') !== expectedFields.summary) {
+      diff.summary = expectedFields.summary; changes.push('summary');
+    }
+    if ((ex.priority?.name || '') !== expectedFields.priority.name) {
+      diff.priority = expectedFields.priority; changes.push('priority');
+    }
+    if (!_eqLabels(ex.labels, expectedFields.labels)) {
+      diff.labels = expectedFields.labels; changes.push('labels');
+    }
+    if (expectedFields.fixVersions && !_eqFixVersions(ex.fixVersions, expectedFields.fixVersions)) {
+      diff.fixVersions = expectedFields.fixVersions; changes.push('fixVersions');
+    }
+    if (JSON.stringify(ex.description || null) !== JSON.stringify(expectedFields.description)) {
+      diff.description = expectedFields.description; changes.push('description');
+    }
+
+    if (Object.keys(diff).length) {
+      console.log(`[QAA] PUT diff → ${qaaKey}:`, JSON.stringify(diff, null, 2));
+
+      const intentarPut = async (fields) => {
+        const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${qaaKey}`, {
+          method:  'PUT',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body:    JSON.stringify({ fields })
+        });
+        return { ok: r.ok, status: r.status, errBody: r.ok ? '' : await r.text() };
+      };
+
+      let res = await intentarPut(diff);
+
+      // Retry sin priority si falló (priority suele estar restringido en edit screen)
+      if (!res.ok && res.status === 400 && diff.priority) {
+        console.warn(`[QAA] PUT falló (${res.status}) con priority → reintentando sin priority`);
+        const { priority, ...rest } = diff;
+        if (Object.keys(rest).length) {
+          res = await intentarPut(rest);
+          if (res.ok) changes.push('skipped:priority');
+        }
+      }
+
+      // Retry sin fixVersions si todavía falla
+      if (!res.ok && res.status === 400 && diff.fixVersions) {
+        console.warn(`[QAA] PUT falló (${res.status}) con fixVersions → reintentando sin fixVersions`);
+        const { priority, fixVersions, ...rest } = diff;
+        if (Object.keys(rest).length) {
+          res = await intentarPut(rest);
+          if (res.ok) changes.push('skipped:priority+fixVersions');
+        }
+      }
+
+      if (!res.ok) {
+        console.error(`[QAA] PUT ${qaaKey} falló definitivo:`, res.errBody);
+        throw new Error(_parseJiraError(res.errBody, res.status));
+      }
+    }
+
+  // ── B) CREATE: no existe, la creamos ──────────────────────────────────────
+  } else {
+    mode = 'created';
+    const payload = {
+      fields: {
+        project:           { key: 'QAA' },
+        parent:            { key: QAA_PARENT },
+        customfield_10014: QAA_PARENT,
+        issuetype:         { name: 'Tarea' },
+        ...expectedFields
+      }
+    };
+    console.log(`[QAA] POST create → ${issue.key}`);
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body:    JSON.stringify(payload)
+    });
+    if (!r.ok) throw new Error(_parseJiraError(await r.text(), r.status));
+    qaaKey = (await r.json()).key;
+    changes.push('creada');
   }
 
-  const created = await r.json();
-  const newKey  = created.key;
-  console.log(`[QAA] Issue creado: ${newKey}`);
-
-  // Copiar adjuntos originales del bug BG + traer descripción actual
-  let attachments  = [];
+  // ── Sync adjuntos: comparar por filename y subir solo los faltantes ───────
+  let bgAttachments = [];
   let bgCurrentDesc = null;
+  let bgLabels      = [];
   try {
-    const attRes = await fetch(`${JIRA_BASE}/rest/api/3/issue/${issue.key}?fields=attachment,description`, {
+    const attRes = await fetch(`${JIRA_BASE}/rest/api/3/issue/${issue.key}?fields=attachment,description,labels`, {
       headers: { Accept: 'application/json' }
     });
     if (attRes.ok) {
       const attData  = await attRes.json();
-      attachments    = attData.fields?.attachment  || [];
-      bgCurrentDesc  = attData.fields?.description || null;
+      bgAttachments  = attData.fields?.attachment   || [];
+      bgCurrentDesc  = attData.fields?.description  || null;
+      bgLabels       = attData.fields?.labels       || [];
     }
   } catch {}
 
-  for (const att of attachments) {
+  let qaaAttachments = existing?.fields?.attachment || [];
+  if (existing && !qaaAttachments.length) {
+    try {
+      const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${qaaKey}?fields=attachment`, { headers: { Accept: 'application/json' } });
+      if (r.ok) qaaAttachments = (await r.json()).fields?.attachment || [];
+    } catch {}
+  }
+  const qaaFilenames = new Set(qaaAttachments.map(a => a.filename));
+
+  for (const att of bgAttachments) {
+    if (qaaFilenames.has(att.filename)) continue;
     try {
       const blob = await fetch(`${JIRA_BASE}/rest/api/3/attachment/content/${att.id}`)
         .then(res => { if (!res.ok) throw new Error(); return res.blob(); });
       const fd = new FormData();
       fd.append('file', blob, att.filename);
-      await fetch(`${JIRA_BASE}/rest/api/3/issue/${newKey}/attachments`, {
+      await fetch(`${JIRA_BASE}/rest/api/3/issue/${qaaKey}/attachments`, {
         method:  'POST',
         headers: { 'X-Atlassian-Token': 'no-check' },
         body:    fd
       });
-    } catch {
-      // adjunto fallido no interrumpe el flujo
-    }
-  }
-
-  // Subir adjuntos nuevos del usuario → QAA y BG
-  if (item?.adjuntosNuevos?.length) {
-    for (const file of item.adjuntosNuevos) {
-      try {
-        const fd = new FormData();
-        fd.append('file', file, file.name);
-        await fetch(`${JIRA_BASE}/rest/api/3/issue/${newKey}/attachments`, {
-          method:  'POST',
-          headers: { 'X-Atlassian-Token': 'no-check' },
-          body:    fd
-        });
-      } catch {}
-      try {
-        const fd2 = new FormData();
-        fd2.append('file', file, file.name);
-        await fetch(`${JIRA_BASE}/rest/api/3/issue/${issue.key}/attachments`, {
-          method:  'POST',
-          headers: { 'X-Atlassian-Token': 'no-check' },
-          body:    fd2
-        });
-      } catch {}
-    }
-  }
-
-  // Actualizar descripción BG directamente (sin comentario)
-  const resultados = item?.resultadosObtenidos?.trim();
-  const resultLabel = resultado === 'pasa'
-    ? '✓ Verificación QA: PASA'
-    : resultado === 'falla'
-      ? '✗ Verificación QA: FALLA — requiere retest'
-      : 'Verificación QA';
-  try {
-    const appendNodes = [
-      mkRule(),
-      mkH(resultLabel),
-      ...(resultados ? [mkH('Resultado obtenido'), mkP(resultados)] : []),
-      mkH('Subtarea QAA vinculada'),
-      mkP(newKey)
-    ];
-    const newDesc = bgCurrentDesc
-      ? { ...bgCurrentDesc, content: [...(bgCurrentDesc.content || []), ...appendNodes] }
-      : { type: 'doc', version: 1, content: appendNodes };
-    await fetch(`${JIRA_BASE}/rest/api/3/issue/${issue.key}`, {
-      method:  'PUT',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body:    JSON.stringify({ fields: { description: newDesc } })
-    });
-  } catch {}
-
-  // Crear issueLink QAA ↔ BG
-  try {
-    const lp1 = { type: { name: 'Relates' }, inwardIssue: { key: newKey }, outwardIssue: { key: issue.key } };
-    console.log(`[LINK] ${newKey} ↔ ${issue.key}:`, JSON.stringify(lp1));
-    const lr1 = await fetch(`${JIRA_BASE}/rest/api/3/issueLink`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body:    JSON.stringify(lp1)
-    });
-    console.log(`[LINK] ${newKey} ↔ ${issue.key} → ${lr1.status}`);
-  } catch (e) { console.error('[LINK ERROR]', e); }
-
-  // Link QAA nueva tarea ↔ QAA-172 (permite filtrar con linkedIssues() en history.html)
-  try {
-    const lpEpic = { type: { name: 'Relates' }, inwardIssue: { key: newKey }, outwardIssue: { key: QAA_PARENT } };
-    const lrEpic = await fetch(`${JIRA_BASE}/rest/api/3/issueLink`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body:    JSON.stringify(lpEpic)
-    });
-    console.log(`[LINK] ${newKey} ↔ ${QAA_PARENT} → ${lrEpic.status}`);
-  } catch (e) { console.error('[LINK QAA→PARENT ERROR]', e); }
-
-  // Link directo Epic QAA-172 ↔ BG bug (si el checkbox "Agregar al Epic" está activo)
-  if (item?.agregarAlEpic) {
-    try {
-      const lp2 = { type: { name: 'Relates' }, inwardIssue: { key: QAA_PARENT }, outwardIssue: { key: issue.key } };
-      console.log(`[LINK] ${QAA_PARENT} ↔ ${issue.key}:`, JSON.stringify(lp2));
-      const lr2 = await fetch(`${JIRA_BASE}/rest/api/3/issueLink`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body:    JSON.stringify(lp2)
-      });
-      console.log(`[LINK] ${QAA_PARENT} ↔ ${issue.key} → ${lr2.status}`);
-    } catch (e) { console.error('[LINK ERROR]', e); }
-  }
-
-  // Transicionar subtarea QAA si se pidió finalizar
-  if (finalizar) {
-    try {
-      const tRes = await fetch(`${JIRA_BASE}/rest/api/3/issue/${newKey}/transitions`, {
-        headers: { Accept: 'application/json' }
-      });
-      if (tRes.ok) {
-        const transitions = (await tRes.json()).transitions || [];
-        const target = transitions.find(t => /done|terminad|listo|cerrad|resuelto|complete|finish/i.test(t.name))
-                    || transitions.find(t => t.to?.statusCategory?.key === 'done');
-        if (target) {
-          await fetch(`${JIRA_BASE}/rest/api/3/issue/${newKey}/transitions`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body:    JSON.stringify({ transition: { id: target.id } })
-          });
-        }
-      }
+      qaaFilenames.add(att.filename);
+      changes.push(`adj:${att.filename}`);
     } catch {}
   }
 
-  // Transicionar BG al estado elegido
-  if (item?.selectedBgTransition) {
+  const bgFilenames = new Set(bgAttachments.map(a => a.filename));
+  if (item?.adjuntosNuevos?.length) {
+    for (const file of item.adjuntosNuevos) {
+      if (!qaaFilenames.has(file.name)) {
+        try {
+          const fd = new FormData();
+          fd.append('file', file, file.name);
+          await fetch(`${JIRA_BASE}/rest/api/3/issue/${qaaKey}/attachments`, {
+            method:  'POST',
+            headers: { 'X-Atlassian-Token': 'no-check' },
+            body:    fd
+          });
+          qaaFilenames.add(file.name);
+          changes.push(`adj-nuevo:${file.name}`);
+        } catch {}
+      }
+      if (!bgFilenames.has(file.name)) {
+        try {
+          const fd2 = new FormData();
+          fd2.append('file', file, file.name);
+          await fetch(`${JIRA_BASE}/rest/api/3/issue/${issue.key}/attachments`, {
+            method:  'POST',
+            headers: { 'X-Atlassian-Token': 'no-check' },
+            body:    fd2
+          });
+          bgFilenames.add(file.name);
+        } catch {}
+      }
+    }
+  }
+
+  // ── Sync descripción BG: solo append si la key QAA no está ya en la desc ──
+  if (!_adfContieneKey(bgCurrentDesc, qaaKey)) {
+    const resultados = item?.resultadosObtenidos?.trim();
+    const resultLabel = resultado === 'pasa'
+      ? '✓ Verificación QA: PASA'
+      : resultado === 'falla'
+        ? '✗ Verificación QA: FALLA — requiere retest'
+        : 'Verificación QA';
+    try {
+      const appendNodes = [
+        mkRule(),
+        mkH(resultLabel),
+        ...(resultados ? [mkH('Resultado obtenido'), mkP(resultados)] : []),
+        mkH('Subtarea QAA vinculada'),
+        { type:'paragraph', content:[ mkIssueLink(qaaKey) ] }
+      ];
+      const newDesc = bgCurrentDesc
+        ? { ...bgCurrentDesc, content: [...(bgCurrentDesc.content || []), ...appendNodes] }
+        : { type: 'doc', version: 1, content: appendNodes };
+      await fetch(`${JIRA_BASE}/rest/api/3/issue/${issue.key}`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body:    JSON.stringify({ fields: { description: newDesc } })
+      });
+      changes.push('bg-desc');
+    } catch {}
+  }
+
+  // ── Sync label de versión en el BG ────────────────────────────────────────
+  // El proyecto BG no tiene versions definidas (no son globales en Jira),
+  // así que usamos un label igual al nombre de la versión (ej. "test-v003").
+  // Eso permite filtrar/agrupar BGs por versión en history.html y en el reporte
+  // Confluence sin necesidad de admin para crear la versión en BG.
+  if (versionActual && !bgLabels.includes(versionActual)) {
+    try {
+      const newLabels = [...new Set([...bgLabels, versionActual])];
+      const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${issue.key}`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body:    JSON.stringify({ fields: { labels: newLabels } })
+      });
+      if (r.ok) {
+        changes.push(`bg-label:${versionActual}`);
+      } else {
+        console.warn(`[BG label versión] PUT ${issue.key} HTTP ${r.status}`);
+      }
+    } catch (e) { console.warn(`[BG label versión] error:`, e.message); }
+  }
+
+  // ── Sync issueLinks: comparar y crear solo los faltantes ──────────────────
+  let qaaLinks = existing?.fields?.issuelinks || [];
+  if (existing && !qaaLinks.length) {
+    try {
+      const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${qaaKey}?fields=issuelinks`, { headers: { Accept: 'application/json' } });
+      if (r.ok) qaaLinks = (await r.json()).fields?.issuelinks || [];
+    } catch {}
+  }
+  const bgLinks = (await fetch(`${JIRA_BASE}/rest/api/3/issue/${issue.key}?fields=issuelinks`, { headers: { Accept: 'application/json' } })
+    .then(r => r.ok ? r.json() : null).catch(() => null))?.fields?.issuelinks || [];
+
+  async function crearLink(keyA, keyB) {
+    try {
+      const r = await fetch(`${JIRA_BASE}/rest/api/3/issueLink`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body:    JSON.stringify({ type: { name: 'Relates' }, inwardIssue: { key: keyA }, outwardIssue: { key: keyB } })
+      });
+      console.log(`[LINK] ${keyA} ↔ ${keyB} → ${r.status}`);
+      return r.ok;
+    } catch (e) { console.error('[LINK ERROR]', e); return false; }
+  }
+
+  if (!_existeLink(qaaLinks, qaaKey, issue.key)) {
+    if (await crearLink(qaaKey, issue.key)) changes.push('link:qaa-bg');
+  }
+  if (!_existeLink(qaaLinks, qaaKey, QAA_PARENT)) {
+    if (await crearLink(qaaKey, QAA_PARENT)) changes.push('link:qaa-parent');
+  }
+  if (item?.agregarAlEpic && !_existeLink(bgLinks, QAA_PARENT, issue.key)) {
+    if (await crearLink(QAA_PARENT, issue.key)) changes.push('link:parent-bg');
+  }
+
+  // ── Transicionar QAA a Done si finalizar (solo si no está ya en Done) ─────
+  if (finalizar) {
+    const yaDone = existing?.fields?.status?.statusCategory?.key === 'done';
+    if (!yaDone) {
+      try {
+        const tRes = await fetch(`${JIRA_BASE}/rest/api/3/issue/${qaaKey}/transitions`, {
+          headers: { Accept: 'application/json' }
+        });
+        if (tRes.ok) {
+          const transitions = (await tRes.json()).transitions || [];
+          const target = transitions.find(t => /done|terminad|listo|cerrad|resuelto|complete|finish/i.test(t.name))
+                      || transitions.find(t => t.to?.statusCategory?.key === 'done');
+          if (target) {
+            await fetch(`${JIRA_BASE}/rest/api/3/issue/${qaaKey}/transitions`, {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body:    JSON.stringify({ transition: { id: target.id } })
+            });
+            changes.push('finalizada');
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // ── Transicionar BG (si no se aplicó en tiempo real) ──────────────────────
+  if (item?.selectedBgTransition && !item?.bgTransitionAplicada) {
     try {
       await fetch(`${JIRA_BASE}/rest/api/3/issue/${issue.key}/transitions`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body:    JSON.stringify({ transition: { id: item.selectedBgTransition } })
       });
+      item.bgTransitionAplicada = true;
+      changes.push('bg-transition');
     } catch {}
   }
 
-  return newKey;
+  return { key: qaaKey, mode, changes };
 }
 
 // ── Lightbox ──────────────────────────────────────────────────────────────────
@@ -2580,6 +3137,15 @@ function esc(str) {
     .replace(/"/g, '&quot;');
 }
 
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+
+function cambiarTab(name) {
+  document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === name));
+  try { localStorage.setItem('bg-verif:tab', name); } catch {}
+  if (name === 'bulk' && !bulkState.cargado) cargarBulkEpics();
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 cargarVersionActual();
@@ -2592,6 +3158,12 @@ EpicFilter.init({
 EpicFilter.loadEpicsFromJira(JIRA_BASE);
 
 cargarJqlDesdeEpic().then(cargarPendientes);
+
+// Restaurar tab seleccionada del localStorage
+try {
+  const tabGuardada = localStorage.getItem('bg-verif:tab');
+  if (tabGuardada === 'bulk') cambiarTab('bulk');
+} catch {}
 </script>
 </body>
 </html>

@@ -652,37 +652,49 @@ async function onEnlazadasChange() {
 }
 
 async function fetchEnlazadasKeys() {
-  // Consultamos desde BG: traemos sus issuelinks y extraemos las keys QAA.
-  // Es más confiable que buscar desde QAA porque el link se crea en BG
-  // y Jira no siempre devuelve issuelinks en búsquedas del lado inverso.
-  const qaaKeys = new Set();
+  // Trae TODAS las keys de la sección "Actividades vinculadas" del Epic QAA-172,
+  // sin filtrar por proyecto. En este Jira son típicamente BG-XXX (por el flag
+  // "Agregar al Epic" del bg_verificacion), pero en general pueden ser de cualquier
+  // proyecto (QAA, BG, u otro).
+  const keys = new Set();
   try {
-    let nextToken = null;
-    while (true) {
-      let url = `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent('project = BG ORDER BY created DESC')}&fields=issuelinks&maxResults=100`;
-      if (nextToken) url += `&nextPageToken=${encodeURIComponent(nextToken)}`;
-      const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
-      if (!r.ok) { console.warn('[enlazadas] HTTP', r.status); break; }
-      const d = await r.json();
-      (d.issues || []).forEach(issue => {
-        (issue.fields.issuelinks || []).forEach(link => {
-          const key = link.inwardIssue?.key || link.outwardIssue?.key;
-          if (key?.startsWith('QAA-')) qaaKeys.add(key);
-        });
-      });
-      if (d.isLast || !d.nextPageToken) break;
-      nextToken = d.nextPageToken;
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/QAA-172?fields=issuelinks`, {
+      headers: { Accept: 'application/json' }
+    });
+    if (!r.ok) { console.warn('[enlazadas] GET QAA-172 HTTP', r.status); return []; }
+    const data  = await r.json();
+    const links = data.fields?.issuelinks || [];
+    console.log('[enlazadas] QAA-172 tiene', links.length, 'issuelinks');
+
+    for (const link of links) {
+      const k = link.outwardIssue?.key || link.inwardIssue?.key;
+      if (k && k !== 'QAA-172') keys.add(k);
     }
-    console.log('[enlazadas] QAA keys con link BG:', [...qaaKeys]);
+    console.log('[enlazadas] Keys vinculadas:', keys.size, [...keys]);
   } catch(e) {
     console.error('[enlazadas]', e);
   }
-  return [...qaaKeys];
+  return [...keys];
 }
 
 // ── JQL ───────────────────────────────────────────────────────────────────────
 function buildJQL() {
   const g = id => document.getElementById(id);
+
+  // ── Modo especial: "Enlazadas a BG" activo ──────────────────────────────
+  // Cuando este filtro está activo, mostramos las keys vinculadas al Epic
+  // QAA-172. Las Actividades vinculadas suelen ser BGs (de otros proyectos)
+  // que no matchean filtros QAA-específicos (project=QAA, parent, estado-*),
+  // así que los ignoramos. PERO sí combinamos con `f-version` porque la
+  // versión en BG se maneja como LABEL (ej. "test-v003"), no fixVersion.
+  if (g('f-enlazadas').checked) {
+    if (enlazadasKeys === null || enlazadasKeys.length === 0) return 'key = "NONE-0"';
+    const cond = [`key in (${enlazadasKeys.join(',')})`];
+    // f-version actúa como label (en BG no hay fixVersions definidas)
+    if (g('f-version').value) cond.push(`labels = "${g('f-version').value}"`);
+    return cond.join(' AND ') + ' ORDER BY created DESC';
+  }
+
   const parts = ['project = QAA', 'issuetype != Epic'];
   if (g('f-version').value)   parts.push(`fixVersion = "${g('f-version').value}"`);
   if (g('f-epic').value)      parts.push(`parent = "${g('f-epic').value}"`);
@@ -699,12 +711,6 @@ function buildJQL() {
   }
   if (g('f-config').checked)  parts.push('labels = "requiere-config"');
   if (g('f-retest').checked)  parts.push('labels = "retest"');
-  if (g('f-enlazadas').checked) {
-    if (enlazadasKeys && enlazadasKeys.length > 0)
-      parts.push(`key in (${enlazadasKeys.join(',')})`);
-    else if (enlazadasKeys !== null)
-      parts.push('key = "NONE-0"');
-  }
   const retestEstado = g('f-retest-estado').value;
   if (retestEstado === 'fail-pendiente') {
     parts.push('labels = "estado-fail"');

@@ -142,22 +142,22 @@ async function promptAvanzarVersion() {
 // ── Jira: datos de versión ────────────────────────────────────────────────────
 
 async function obtenerDatosVersion(nombreVersion) {
-  // Fetch all QAA issues paginated — full fields
+  // Fetch all QAA issues paginated. La API nueva de Jira Cloud ignora `startAt`
+  // y NO devuelve `total` — solo `nextPageToken` + `isLast`.
   const allIssues = [];
-  let startAt = 0;
+  let nextPageToken = null;
+  const jql = encodeURIComponent(
+    `project = QAA AND fixVersion = "${nombreVersion}" AND issuetype != Epic ORDER BY created ASC`
+  );
   while (true) {
-    const jql = encodeURIComponent(
-      `project = QAA AND fixVersion = "${nombreVersion}" AND issuetype != Epic ORDER BY created ASC`
-    );
-    const r = await fetch(
-      `/jira/rest/api/3/search/jql?jql=${jql}&fields=summary,status,priority,labels,parent,assignee,created,issuelinks,issuetype,subtasks&maxResults=100&startAt=${startAt}`,
-      { headers: { 'Authorization': AUTH, 'Accept': 'application/json' } }
-    );
+    let url = `/jira/rest/api/3/search/jql?jql=${jql}&fields=summary,status,priority,labels,parent,assignee,created,issuelinks,issuetype,subtasks&maxResults=100`;
+    if (nextPageToken) url += `&nextPageToken=${encodeURIComponent(nextPageToken)}`;
+    const r = await fetch(url, { headers: { 'Authorization': AUTH, 'Accept': 'application/json' } });
     if (!r.ok) throw new Error(`Jira search: HTTP ${r.status}`);
     const d = await r.json();
     allIssues.push(...(d.issues || []));
-    if (allIssues.length >= (d.total || 0) || !(d.issues?.length)) break;
-    startAt += 100;
+    if (d.isLast || !d.nextPageToken || !(d.issues?.length)) break;
+    nextPageToken = d.nextPageToken;
   }
 
   // Extract BG bug keys from issuelinks and build QAA→BG map
@@ -186,11 +186,38 @@ async function obtenerDatosVersion(nombreVersion) {
   const lbls   = i => i.fields.labels || [];
   const hasLbl = (i, l) => lbls(i).includes(l);
 
-  const passIssues    = allIssues.filter(i => hasLbl(i, 'estado-pass'));
-  const failIssues    = allIssues.filter(i => hasLbl(i, 'estado-fail'));
-  const blockedIssues = allIssues.filter(i => hasLbl(i, 'estado-blocked'));
-  const retestIssues  = allIssues.filter(i => hasLbl(i, 'retest'));
-  const configIssues  = allIssues.filter(i => hasLbl(i, 'requiere-config'));
+  const passIssues       = allIssues.filter(i => hasLbl(i, 'estado-pass'));
+  const failIssues       = allIssues.filter(i => hasLbl(i, 'estado-fail'));
+  const blockedIssues    = allIssues.filter(i => hasLbl(i, 'estado-blocked'));
+  const retestIssues     = allIssues.filter(i => hasLbl(i, 'retest'));
+  const configIssues     = allIssues.filter(i => hasLbl(i, 'requiere-config'));
+  // Actividades: issues hijos del Epic QAA-179 (creadas por actividades.html)
+  const actividadIssues  = allIssues.filter(i => i.fields.parent?.key === 'QAA-179');
+
+  // Vinculados: BGs enlazados a QAA-172 (vía issuelinks) que pertenecen a esta versión
+  // El proyecto BG no tiene fixVersions definidas, así que se filtran por label de versión.
+  let vinculadosKeys = [];
+  try {
+    const r = await fetch(`/jira/rest/api/3/issue/QAA-172?fields=issuelinks`, {
+      headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
+    });
+    if (r.ok) {
+      const d = await r.json();
+      const bgLinkedKeys = (d.fields?.issuelinks || [])
+        .map(l => l.outwardIssue?.key || l.inwardIssue?.key)
+        .filter(k => k && k.startsWith('BG-'));
+      if (bgLinkedKeys.length) {
+        const jql = `key in (${bgLinkedKeys.join(',')}) AND labels = "${nombreVersion}"`;
+        const r2 = await fetch(`/jira/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=key&maxResults=100`, {
+          headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
+        });
+        if (r2.ok) {
+          const d2 = await r2.json();
+          vinculadosKeys = (d2.issues || []).map(i => i.key);
+        }
+      }
+    }
+  } catch(e) { console.warn('[vinculados] error:', e.message); }
 
   // Group by parent module
   const byModule = {};
@@ -213,12 +240,15 @@ async function obtenerDatosVersion(nombreVersion) {
     allIssues, bgIssues, bgBySeverity, byModule, qaaToBg,
     passIssues, failIssues, blockedIssues, retestIssues, configIssues,
     stats: {
-      total:   allIssues.length,
-      pass:    passIssues.length,
-      fail:    failIssues.length,
-      blocked: blockedIssues.length,
-      retest:  retestIssues.length,
-      config:  configIssues.length,
+      total:        allIssues.length,
+      pass:         passIssues.length,
+      fail:         failIssues.length,
+      blocked:      blockedIssues.length,
+      retest:       retestIssues.length,
+      config:       configIssues.length,
+      actividades:  actividadIssues.length,
+      vinculados:   vinculadosKeys.length,
+      vinculadosKeys,
     },
     // Backward compat for abrirModalPublicar
     requiereConfig: configIssues.length > 0,
@@ -327,35 +357,52 @@ async function agregarAlHistorialConfluence({ version, motivo, observaciones, da
     .map(([s, v]) => `${v.length} ${bgSevMeta[s]?.label || s}`)
     .join(' · ');
 
+  // URL a la página de Releases del proyecto QAA (donde vive la versión)
+  const releasesUrl = `${JIRA_UI}/projects/QAA?selectedItem=com.atlassian.jira.jira-projects-plugin%3Arelease-page&status=no-filter`;
+  const versionLink = `<a href="${releasesUrl}">${version}</a>`;
+  // URL JQL para todos los BG bugs reportados en esta sesión
+  const bgBugsJqlUrl = bgIssues.length
+    ? `${JIRA_UI}/issues/?jql=${encodeURIComponent(`key in (${bgIssues.map(b => b.key).join(',')})`)}`
+    : '#';
+  const bgBugsLink = bgIssues.length
+    ? `<a href="${bgBugsJqlUrl}">${bgIssues.length}</a>`
+    : '0';
+
   const resumen = macro('info',
     `${version} — Sesion QA`,
-    `<p><strong>Fecha:</strong> ${fecha} &nbsp;|&nbsp; <strong>Modulos cubiertos:</strong> ${Object.keys(byModule).length} &nbsp;|&nbsp; <strong>Pass rate:</strong> <strong>${tasa}</strong></p>
+    `<p><strong>Versión:</strong> ${versionLink} &nbsp;|&nbsp; <strong>Fecha:</strong> ${fecha} &nbsp;|&nbsp; <strong>Modulos cubiertos:</strong> ${Object.keys(byModule).length} &nbsp;|&nbsp; <strong>Pass rate:</strong> <strong>${tasa}</strong></p>
      <p><strong>Motivo de cierre:</strong> ${motivo}</p>
      ${bgIssues.length
-       ? `<p><strong>BG Bugs reportados:</strong> ${bgIssues.length} &nbsp;(${sevResumen})</p>`
+       ? `<p><strong>BG Bugs reportados:</strong> ${bgBugsLink} &nbsp;(${sevResumen})</p>`
        : `<p><strong>BG Bugs:</strong> Ninguno en esta sesion.</p>`}`
   );
 
   // ── 2. Tabla de métricas con links JQL ───────────────────────────────────
+  // URL para JQL de vinculados — usa key in (...) para mostrar exactamente los BGs computados
+  const vinculadosJqlUrl = stats.vinculadosKeys?.length
+    ? `${JIRA_UI}/issues/?jql=${encodeURIComponent(`key in (${stats.vinculadosKeys.join(',')})`)}`
+    : `${JIRA_UI}/browse/QAA-172`;
+
+  // Quitamos Version y Fecha porque ya están en el header del resumen
   const metricasTable = `<table><tbody>
     <tr>
-      <th>Version</th>
-      <th>Fecha</th>
       <th>Total</th>
       <th>Pass</th>
       <th>Fail</th>
       <th>Blocked</th>
       <th>Retest</th>
+      <th>Actividades</th>
+      <th>Vinculados</th>
       <th>Tasa</th>
     </tr>
     <tr>
-      <td><strong>${version}</strong></td>
-      <td style="white-space:nowrap">${fecha}</td>
       <td style="text-align:center"><strong><a href="${jqlUrl()}">${stats.total}</a></strong></td>
       <td style="text-align:center;color:#15803d"><strong><a href="${jqlUrl('labels = "estado-pass"')}" style="color:inherit">${stats.pass}</a></strong></td>
       <td style="text-align:center;color:#991b1b"><strong><a href="${jqlUrl('labels = "estado-fail"')}" style="color:inherit">${stats.fail}</a></strong></td>
       <td style="text-align:center;color:#92400e"><strong><a href="${jqlUrl('labels = "estado-blocked"')}" style="color:inherit">${stats.blocked}</a></strong></td>
       <td style="text-align:center;color:#6d28d9"><strong><a href="${jqlUrl('labels = "retest"')}" style="color:inherit">${stats.retest}</a></strong></td>
+      <td style="text-align:center;color:#0369a1"><strong><a href="${jqlUrl('parent = QAA-179')}" style="color:inherit">${stats.actividades}</a></strong></td>
+      <td style="text-align:center;color:#7c3aed"><strong><a href="${vinculadosJqlUrl}" style="color:inherit">${stats.vinculados}</a></strong></td>
       <td style="text-align:center"><strong>${tasa}</strong></td>
     </tr>
   </tbody></table>`;
