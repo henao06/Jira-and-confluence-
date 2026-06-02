@@ -73,7 +73,7 @@ async function calcularSiguienteVersion() {
   return `test-v${String(maxNum + 1).padStart(3, '0')}`;
 }
 
-async function iniciarSesion(motivo = 'Nueva sesión') {
+async function iniciarSesion(motivo = 'New session') {
   const projectId = await resolverProjectId();
 
   const rAll = await fetch(`/jira/rest/api/3/project/QAA/versions`, {
@@ -131,7 +131,7 @@ async function promptAvanzarVersion() {
   const btn = document.getElementById('btn-avanzar-version');
   if (btn) btn.disabled = true;
   try {
-    await iniciarSesion(motivo.trim() || 'Nueva sesión');
+    await iniciarSesion(motivo.trim() || 'New session');
   } catch(e) {
     alert(`Error: ${e.message}`);
   } finally {
@@ -309,7 +309,8 @@ async function completarIssuesDeVersion(allIssues) {
 
 async function agregarAlHistorialConfluence({ version, motivo, observaciones, datos }) {
   const { stats, byModule, bgIssues, bgBySeverity, retestIssues, configIssues, qaaToBg } = datos;
-  const fecha   = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+  // Todo el contenido enviado a Confluence se genera en INGLÉS (request del usuario).
+  const fecha   = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const tasa    = stats.total > 0 ? `${Math.round((stats.pass / stats.total) * 100)}%` : '—';
   const JIRA_UI = 'https://liceopinoverde.atlassian.net';
   const WIKI_V1 = window.location.origin + '/wiki/rest/api';
@@ -325,7 +326,7 @@ async function agregarAlHistorialConfluence({ version, motivo, observaciones, da
     if (l.includes('estado-fail'))    return `<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">Fail</span>`;
     if (l.includes('estado-blocked')) return `<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">Blocked</span>`;
     if (l.includes('retest'))         return `<span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">Retest</span>`;
-    return `<span style="background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:4px;font-size:11px">Pendiente</span>`;
+    return `<span style="background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:4px;font-size:11px">Pending</span>`;
   };
 
   const prioBadge = issue => {
@@ -341,26 +342,26 @@ async function agregarAlHistorialConfluence({ version, motivo, observaciones, da
   };
 
   const bgSevMeta = {
-    critico: { panel: 'error',   label: 'Critico' },
-    mayor:   { panel: 'warning', label: 'Mayor'   },
-    medio:   { panel: 'note',    label: 'Medio'   },
-    menor:   { panel: 'info',    label: 'Menor'   },
-    bajo:    { panel: 'tip',     label: 'Bajo'    },
+    critico: { panel: 'error',   label: 'Critical' },
+    mayor:   { panel: 'warning', label: 'Major'    },
+    medio:   { panel: 'note',    label: 'Medium'   },
+    menor:   { panel: 'info',    label: 'Minor'    },
+    bajo:    { panel: 'tip',     label: 'Low'      },
   };
 
   const macro = (name, title, body) =>
     `<ac:structured-macro ac:name="${name}"><ac:parameter ac:name="title">${title}</ac:parameter><ac:rich-text-body>${body}</ac:rich-text-body></ac:structured-macro>`;
 
-  // ── 1. Resumen ejecutivo ──────────────────────────────────────────────────
+  // ── 1. Executive summary ──────────────────────────────────────────────────
   const sevResumen = Object.entries(bgBySeverity)
     .filter(([, v]) => v.length)
     .map(([s, v]) => `${v.length} ${bgSevMeta[s]?.label || s}`)
     .join(' · ');
 
-  // URL a la página de Releases del proyecto QAA (donde vive la versión)
+  // URL to the Releases page of the QAA project
   const releasesUrl = `${JIRA_UI}/projects/QAA?selectedItem=com.atlassian.jira.jira-projects-plugin%3Arelease-page&status=no-filter`;
   const versionLink = `<a href="${releasesUrl}">${version}</a>`;
-  // URL JQL para todos los BG bugs reportados en esta sesión
+  // JQL URL for all BG bugs reported in this session
   const bgBugsJqlUrl = bgIssues.length
     ? `${JIRA_UI}/issues/?jql=${encodeURIComponent(`key in (${bgIssues.map(b => b.key).join(',')})`)}`
     : '#';
@@ -369,21 +370,21 @@ async function agregarAlHistorialConfluence({ version, motivo, observaciones, da
     : '0';
 
   const resumen = macro('info',
-    `${version} — Sesion QA`,
-    `<p><strong>Versión:</strong> ${versionLink} &nbsp;|&nbsp; <strong>Fecha:</strong> ${fecha} &nbsp;|&nbsp; <strong>Modulos cubiertos:</strong> ${Object.keys(byModule).length} &nbsp;|&nbsp; <strong>Pass rate:</strong> <strong>${tasa}</strong></p>
-     <p><strong>Motivo de cierre:</strong> ${motivo}</p>
+    `${version} — QA Session`,
+    `<p><strong>Version:</strong> ${versionLink} &nbsp;|&nbsp; <strong>Date:</strong> ${fecha} &nbsp;|&nbsp; <strong>Modules covered:</strong> ${Object.keys(byModule).length} &nbsp;|&nbsp; <strong>Pass rate:</strong> <strong>${tasa}</strong></p>
+     <p><strong>Closing reason:</strong> ${motivo}</p>
      ${bgIssues.length
-       ? `<p><strong>BG Bugs reportados:</strong> ${bgBugsLink} &nbsp;(${sevResumen})</p>`
-       : `<p><strong>BG Bugs:</strong> Ninguno en esta sesion.</p>`}`
+       ? `<p><strong>BG Bugs reported:</strong> ${bgBugsLink} &nbsp;(${sevResumen})</p>`
+       : `<p><strong>BG Bugs:</strong> None in this session.</p>`}`
   );
 
-  // ── 2. Tabla de métricas con links JQL ───────────────────────────────────
-  // URL para JQL de vinculados — usa key in (...) para mostrar exactamente los BGs computados
+  // ── 2. Metrics table with JQL links ──────────────────────────────────────
+  // URL for the "Linked" JQL — uses key in (...) to show exactly the computed BGs
   const vinculadosJqlUrl = stats.vinculadosKeys?.length
     ? `${JIRA_UI}/issues/?jql=${encodeURIComponent(`key in (${stats.vinculadosKeys.join(',')})`)}`
     : `${JIRA_UI}/browse/QAA-172`;
 
-  // Quitamos Version y Fecha porque ya están en el header del resumen
+  // Version and Date removed — already shown in the summary header.
   const metricasTable = `<table><tbody>
     <tr>
       <th>Total</th>
@@ -391,9 +392,9 @@ async function agregarAlHistorialConfluence({ version, motivo, observaciones, da
       <th>Fail</th>
       <th>Blocked</th>
       <th>Retest</th>
-      <th>Actividades</th>
-      <th>Vinculados</th>
-      <th>Tasa</th>
+      <th>Activities</th>
+      <th>Linked</th>
+      <th>Rate</th>
     </tr>
     <tr>
       <td style="text-align:center"><strong><a href="${jqlUrl()}">${stats.total}</a></strong></td>
@@ -407,10 +408,10 @@ async function agregarAlHistorialConfluence({ version, motivo, observaciones, da
     </tr>
   </tbody></table>`;
 
-  // ── 3. Desglose por módulo (expandibles) ──────────────────────────────────
+  // ── 3. Module breakdown (expandable) ──────────────────────────────────────
   const EPIC_LABELS = {
-    'QAA-172': 'Verificacion BG',
-    'QAA-179': 'Actividades y Sugerencias',
+    'QAA-172': 'BG Verification',
+    'QAA-179': 'Activities and Suggestions',
   };
 
   const buildModuleRows = mod => {
@@ -438,58 +439,58 @@ async function agregarAlHistorialConfluence({ version, motivo, observaciones, da
 
     const label = EPIC_LABELS[mod.key] || mod.name;
     const title = mod.key === 'sin-modulo'
-      ? `Sin modulo | ${mod.issues.length} issues`
+      ? `No module | ${mod.issues.length} issues`
       : `${mod.key} — ${label} | ${mod.issues.length} issues | ${summary}`;
 
     return { title, rows, summary, passC, failC, blockedC, modTasa };
   };
 
-  // Epics conocidos primero (QAA-172 y QAA-179), luego el resto
+  // Known Epics first (QAA-172 and QAA-179), then the rest
   const EPIC_ORDER = ['QAA-172', 'QAA-179'];
   const sortedModules = [
     ...EPIC_ORDER.filter(k => byModule[k]).map(k => byModule[k]),
     ...Object.values(byModule).filter(m => !EPIC_ORDER.includes(m.key)),
   ];
 
-  // Expand por modulo: cada version queda compacta en Confluence.
-  // El diagnostico, resumen y metricas siempre son visibles;
-  // las tablas de issues se despliegan solo cuando se necesitan.
+  // Expand per module: each version stays compact in Confluence.
+  // Diagnostic, summary and metrics are always visible;
+  // issue tables expand only when needed.
   const modulosHtml = sortedModules.map(mod => {
     const { title, rows } = buildModuleRows(mod);
     return macro('expand', title, `
       <table><tbody>
-        <tr><th>Issue</th><th>Resumen</th><th>Estado</th><th>Prioridad</th><th>Asignado</th><th>BG Bugs</th></tr>
+        <tr><th>Issue</th><th>Summary</th><th>Status</th><th>Priority</th><th>Assignee</th><th>BG Bugs</th></tr>
         ${rows}
       </tbody></table>`);
   }).join('\n');
 
   const desglose = modulosHtml
-    ? `<h3>Desglose por Modulo</h3>\n${modulosHtml}`
+    ? `<h3>Module Breakdown</h3>\n${modulosHtml}`
     : '';
 
-  // ── 4. Cadena de re-tests ────────────────────────────────────────────────
+  // ── 4. Re-test chain ─────────────────────────────────────────────────────
   const retestHtml = retestIssues.length
     ? macro('info',
-        `Cadena de Re-tests (${retestIssues.length})`,
-        `<p><a href="${jqlUrl('labels = "retest"')}">Ver todos en Jira →</a></p>` +
+        `Re-test Chain (${retestIssues.length})`,
+        `<p><a href="${jqlUrl('labels = "retest"')}">View all in Jira →</a></p>` +
         `<ol>${retestIssues.map(i => `<li>${link(i.key)}: ${i.fields.summary} &nbsp;${statusBadge(i)}</li>`).join('')}</ol>`
       )
     : '';
 
-  // ── 6. Configuración de servidor ─────────────────────────────────────────
+  // ── 6. Server configuration ──────────────────────────────────────────────
   const configHtml = configIssues.length
     ? macro('note',
-        `Requiere Configuracion de Servidor (${configIssues.length})`,
-        `<p><a href="${jqlUrl('labels = "requiere-config"')}">Ver todos en Jira →</a></p>` +
+        `Server Configuration Required (${configIssues.length})`,
+        `<p><a href="${jqlUrl('labels = "requiere-config"')}">View all in Jira →</a></p>` +
         `<ol>${configIssues.map(i => `<li>${link(i.key)}: ${i.fields.summary}</li>`).join('')}</ol>` +
-        `<p><em>Coordinar con infraestructura antes del despliegue.</em></p>`
+        `<p><em>Coordinate with infrastructure before deployment.</em></p>`
       )
-    : macro('tip', 'Sin cambios de configuracion',
-        '<p>El servidor no requiere ajustes adicionales para esta version.</p>');
+    : macro('tip', 'No configuration changes',
+        '<p>The server requires no additional adjustments for this version.</p>');
 
-  // ── 7. Observaciones ─────────────────────────────────────────────────────
+  // ── 7. Observations ──────────────────────────────────────────────────────
   const obsHtml = observaciones
-    ? macro('warning', 'Observaciones del QA Senior', `<p>${observaciones}</p>`)
+    ? macro('warning', 'Senior QA Observations', `<p>${observaciones}</p>`)
     : '';
 
   // ── Entrada final ─────────────────────────────────────────────────────────
@@ -538,7 +539,7 @@ async function agregarAlHistorialConfluence({ version, motivo, observaciones, da
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     body: JSON.stringify({
       version: { number: verNum + 1 },
-      title:   'Historial de Versiones Publicadas',
+      title:   'Published Versions History',
       type:    'page',
       body:    { storage: { value: nuevoContenido, representation: 'storage' } }
     })
@@ -658,9 +659,9 @@ function abrirModalPublicar(publicada, siguiente, datos) {
 }
 
 async function ejecutarPublicacion(publicada, siguiente) {
-  const motivo        = document.getElementById('pub-motivo').value.trim() || 'Sin motivo';
+  const motivo        = document.getElementById('pub-motivo').value.trim() || 'No reason provided';
   const observaciones = document.getElementById('pub-obs').value.trim();
-  const motivoSig     = document.getElementById('pub-siguiente-motivo').value.trim() || 'Nueva sesión';
+  const motivoSig     = document.getElementById('pub-siguiente-motivo').value.trim() || 'New session';
 
   closeModal();
   setLoading(true);

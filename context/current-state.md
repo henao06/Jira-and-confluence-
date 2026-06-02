@@ -10,6 +10,89 @@
 
 ## Cambios recientes (orden cronológico inverso)
 
+### 2026-06-02 — MCP server INSTALADO y funcional (Python)
+- `pip install -e .` ejecutado en `/home/sebastian/QA/mcp-confluence/.venv/`
+- Dependencias instaladas: mcp 1.27.2, httpx 0.28.1, python-dotenv 1.2.2 + transitivos (pydantic, starlette, uvicorn, jsonschema, etc.)
+- Comando `confluence-mcp` disponible en `.venv/bin/confluence-mcp`
+- 29 tools verificadas (FastMCP las registró correctamente al importar el módulo)
+- Falta para que funcione: crear `.env` con CONFLUENCE_TOKEN real (el usuario lo debe completar manualmente — el archivo .env está protegido por permisos de Claude)
+
+### 2026-06-02 — MCP server de Confluence (Python, standalone)
+- Nuevo directorio `/home/sebastian/QA/mcp-confluence/`
+- Archivos:
+  - `pyproject.toml` — dependencias (mcp, httpx, python-dotenv) + entry point `confluence-mcp`
+  - `env.example.txt` — template de .env (renombrar a .env y completar token)
+  - `confluence_mcp/__init__.py` — package init
+  - `confluence_mcp/client.py` — HTTP client con Basic auth, soporta v1 (/wiki/rest/api) y v2 (/wiki/api/v2)
+  - `confluence_mcp/server.py` — MCP server con 25+ tools (FastMCP)
+  - `README.md` — instalación, config para Claude Desktop / Claude Code / Cursor / Cline
+- Tools incluidas:
+  - **Pages** (9): search_pages, get_page, get_page_by_title, create_page, update_page, append_to_page, delete_page, list_page_versions, get_page_children
+  - **Spaces** (4): list_spaces, get_space, list_space_content, get_space_id_from_key
+  - **Attachments** (3): list_attachments, upload_attachment, delete_attachment
+  - **Comments** (3): list_comments, add_comment, delete_comment
+  - **Labels** (3): get_page_labels, add_page_labels, remove_page_label
+  - **Whiteboards** (4): list_whiteboards, get_whiteboard, create_whiteboard, delete_whiteboard (v2 API)
+  - **Users** (2): get_current_user, search_users
+  - **CQL** (1): cql_search (raw CQL)
+- Limitaciones documentadas: contenido INTERNO de whiteboards (formas, sticky notes) no editable vía REST pública — solo se crea/elimina el contenedor
+
+### 2026-06-01 — history.html: editar issuetype inline
+- Agregada capacidad de cambiar el tipo de tarea (issuetype) directamente desde la tabla del historial
+- Cambios:
+  - `issuetype` agregado al fetch de fields en los 3 lugares de JQL (search principal + paginaciones)
+  - En cada fila Issue cell: pill compacto con el nombre del issuetype (Tarea/Subtarea/Historia/Error/Epic) + botón `↕` debajo del key
+  - Nueva función `openIssuetypePicker(event, key)` con 4 opciones (Tarea, Historia, Error, Subtarea) — patrón clonado de `openEstadoPicker`
+  - Nueva función `applyIssuetypeChange(key, name)` que hace PUT `/issue/{key}` con `fields: { issuetype: { name } }`
+  - Manejo de error con alert si Jira rechaza (ej. cambiar a Subtarea sin parent válido)
+- CSS nuevo: `.p-it-tarea`, `.p-it-subtarea`, `.p-it-historia`, `.p-it-error`, `.p-it-epic` con paleta del proyecto
+
+### 2026-05-28 — Defaults de motivo/sesión que van a Confluence (parche)
+- Encontré 3 strings en español que NO había traducido en la primera pasada porque eran VALORES por defecto (no labels):
+  - `iniciarSesion(motivo = 'Nueva sesión')` → `'New session'` — usado si el flow llama sin argumento
+  - `iniciarSesion(motivo.trim() || 'Nueva sesión')` → `'New session'` — fallback del prompt
+  - `ejecutarPublicacion`: `'Sin motivo'` → `'No reason provided'` (motivo) y `'Nueva sesión'` → `'New session'` (motivoSig)
+- Estos defaults se propagan a la página de Confluence cuando el usuario no escribe nada en el modal
+- Ahora el reporte sale 100% en inglés salvo lo que el usuario tipea (motivo/observaciones) y los summaries originales de los issues (data Jira)
+
+### 2026-05-28 — Confluence content traducido a inglés
+- Todo el texto que `releases.js` genera para Confluence quedó en inglés
+- Mantuve en español: nombres de funciones internas, comentarios de código, modal de publicación local (UI app)
+- Cambios principales:
+  - Date format: `'es-CO'` → `'en-US'`
+  - Info macro title: `Sesion QA` → `QA Session`
+  - Labels: `Versión/Fecha/Modulos cubiertos/Motivo de cierre/BG Bugs reportados` → `Version/Date/Modules covered/Closing reason/BG Bugs reported`
+  - `Ninguno en esta sesion` → `None in this session`
+  - Status badge fallback: `Pendiente` → `Pending`
+  - Severity labels (Critico/Mayor/Medio/Menor/Bajo) → `Critical/Major/Medium/Minor/Low`
+  - Column headers: `Actividades/Vinculados/Tasa` → `Activities/Linked/Rate`
+  - Module table headers: `Resumen/Estado/Prioridad/Asignado` → `Summary/Status/Priority/Assignee`
+  - `EPIC_LABELS`: `Verificacion BG` → `BG Verification`, `Actividades y Sugerencias` → `Activities and Suggestions`
+  - `Sin modulo` → `No module`
+  - Section titles: `Desglose por Modulo` → `Module Breakdown`, `Cadena de Re-tests` → `Re-test Chain`, `Requiere Configuracion de Servidor` → `Server Configuration Required`, `Sin cambios de configuracion` → `No configuration changes`, `Observaciones del QA Senior` → `Senior QA Observations`
+  - Inline messages: `Ver todos en Jira` → `View all in Jira`, `Coordinar con infraestructura antes del despliegue` → `Coordinate with infrastructure before deployment`, `El servidor no requiere ajustes adicionales para esta version` → `The server requires no additional adjustments for this version`
+  - Page title: `Historial de Versiones Publicadas` → `Published Versions History`
+- IMPORTANTE: Cambiar el `title` en el PUT a Confluence **renombra** la página existente (la próxima publicación). Si querés mantener el title viejo por compat, hay que revertir solo esa línea.
+
+### 2026-05-27 — onTestCaseChange: auto-fill completo + reset residual
+- En `Qa_form.html` función `onTestCaseChange()`:
+  - Agregado bloque de RESET al inicio que limpia todo lo residual del TC anterior:
+    - estado / severidad / frecuencia (vars + botones .e-btn/.sev-btn)
+    - row-severity, row-frecuencia (visibility)
+    - checkboxes: reportar-bug, requiere-config, registrarEnBG, registrarEnQAAFinalizada
+    - bg-assignee-wrap (visibility)
+    - uploadedFiles + configFiles (con re-render)
+    - obtenido-wrap, soluc-wrap, sugg-wrap (rebuild a una fila vacía)
+  - Agregado `setVal('url-pantalla', tc.urlPantalla)` que faltaba — ya está documentado en el schema (jira_editor.html)
+- Preserva: módulo, tester, fecha, versión (cosas globales que no cambian entre TCs)
+- Trigger: al seleccionar otro TC del select, no quedan rastros del anterior
+
+### 2026-05-27 — Auditoría schema QA_STRUCTURE + fix doc
+- Verificación: cada campo del ejemplo en jira_editor.html (schema hint) SÍ se usa en el código
+- Encontrado UN campo usado pero no documentado: `tc.urlPantalla` (lo lee bulk-epic.js:_buildTCDescription → row "URL / Pantalla")
+- Fix: agregado a jira_editor.html schema hint con comentario "opcional → URL clickeable en la tabla de identificación"
+- Resto del schema confirmado correcto
+
 ### 2026-05-26 — Resumen Confluence: links + quitar columnas duplicadas
 - En `agregarAlHistorialConfluence`:
   - Removida la columna **Version** del cuadro métrica (ya está en el título de la macro y en la 1ra línea del body)

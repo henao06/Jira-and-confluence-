@@ -1417,6 +1417,32 @@ function onTestCaseChange() {
   const tc = testCases.find(t => t.id === tcId);
   if (!tc) return;
 
+  // ── Reset de campos residuales del TC anterior ─────────────────────────
+  // Limpia user-input que NO viene del JSON del TC. Preserva módulo, tester,
+  // fecha y versión (cosas globales que no cambian entre TCs).
+  estado = ''; severidad = ''; frecuencia = '';
+  document.querySelectorAll('.e-btn, .sev-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('row-severity').style.display   = 'none';
+  document.getElementById('row-frecuencia').style.display = 'none';
+  const bugChk   = document.getElementById('reportar-bug');
+  const bugLabel = document.getElementById('bug-check-label');
+  bugChk.checked = false; bugChk.disabled = true;
+  if (bugLabel) { bugLabel.style.opacity = '.4'; bugLabel.style.cursor = 'not-allowed'; }
+  document.getElementById('bg-assignee-wrap').style.display = 'none';
+  document.getElementById('requiere-config').checked = false;
+  document.getElementById('config-section').style.display = 'none';
+  const fnBG = document.getElementById('registrarEnBG');
+  if (fnBG) fnBG.checked = false;
+  const fnQAA = document.getElementById('registrarEnQAAFinalizada');
+  if (fnQAA) fnQAA.checked = false;
+  uploadedFiles = []; renderPreviews();
+  if (typeof configFiles !== 'undefined') { configFiles = []; renderConfigPreviews(); }
+  const emptyRow = [''];
+  rebuildList('obtenido-wrap', emptyRow, '¿Qué pasó realmente?', 'removeObtenido');
+  rebuildList('soluc-wrap',    emptyRow, 'Solución 1...',         'removeSoluc');
+  rebuildList('sugg-wrap',     emptyRow, 'Sugerencia 1...',        'removeSugg');
+
+  // ── Helpers de carga ──────────────────────────────────────────────────
   const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
 
   // Mostrar el ID del TC seleccionado en el campo tc-id
@@ -1442,13 +1468,15 @@ function onTestCaseChange() {
     document.getElementById('retest-tc').value = '';
   }
 
-  setVal('descripcion', tc.titulo);
-  setVal('historia',    tc.historia);
-  setVal('prioridad',   tc.prioridad);
-  setVal('navegador',   tc.navegador);
-  setVal('sistema-op',  tc.sistemaOp);
-  setVal('rol-usuario', tc.rolUsuario);
-  setVal('impacto',     tc.impacto);
+  // ── Carga automática de TODOS los campos del TC ───────────────────────
+  setVal('descripcion',  tc.titulo);
+  setVal('historia',     tc.historia);
+  setVal('url-pantalla', tc.urlPantalla);
+  setVal('prioridad',    tc.prioridad);
+  setVal('navegador',    tc.navegador);
+  setVal('sistema-op',   tc.sistemaOp);
+  setVal('rol-usuario',  tc.rolUsuario);
+  setVal('impacto',      tc.impacto);
 
   const tipSel = document.getElementById('tipo-prueba');
   if (tipSel) {
@@ -1466,7 +1494,6 @@ function onTestCaseChange() {
     }
   }
 
-  const emptyRow = [''];
   rebuildList('precon-wrap',  tc.precondiciones?.length  ? tc.precondiciones  : emptyRow, 'Precondición', 'removePrecon');
   rebuildList('steps-wrap',   tc.pasos?.length            ? tc.pasos           : emptyRow, 'Paso',         'removeStep');
   rebuildList('datos-wrap',   tc.datos?.length            ? tc.datos           : emptyRow, 'Dato',         'removeDatos');

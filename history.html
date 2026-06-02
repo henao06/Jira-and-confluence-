@@ -183,6 +183,11 @@
 .p-sev-mayor   { background:#fff7ed; color:#c2410c; }
 .p-sev-medio   { background:#fefce8; color:#a16207; }
 .p-sev-bajo    { background:#f0fdf4; color:#16a34a; }
+.p-it-tarea    { background:#eff6ff; color:#1e40af; }
+.p-it-subtarea { background:#f5f3ff; color:#6d28d9; }
+.p-it-historia { background:#ecfdf5; color:#047857; }
+.p-it-error    { background:#fef2f2; color:#b91c1c; }
+.p-it-epic     { background:#fff7ed; color:#c2410c; }
 
 .jira-link {
   display:inline-flex; align-items:center; gap:4px; color:#2563eb;
@@ -839,8 +844,24 @@ function renderIssues(issues) {
     const fecha   = f.created ? f.created.split('T')[0] : '—';
     const jiraUrl = `https://${JIRA_HOST}/browse/${issue.key}`;
 
+    // Tipo de issue (Tarea/Subtarea/Historia/Error) — editable inline
+    const itName = f.issuetype?.name || '—';
+    const itCls  = ({
+      'Tarea':    'p-it-tarea',
+      'Subtarea': 'p-it-subtarea',
+      'Historia': 'p-it-historia',
+      'Error':    'p-it-error',
+      'Epic':     'p-it-epic',
+    })[itName] || '';
+
     return `<tr>
-      <td><a class="jira-link" href="${jiraUrl}" target="_blank">↗ ${issue.key}</a></td>
+      <td>
+        <a class="jira-link" href="${jiraUrl}" target="_blank">↗ ${issue.key}</a>
+        <div class="jira-cell" style="margin-top:3px;gap:4px">
+          <span class="pill ${itCls}" id="it-${issue.key}" style="font-size:9px;padding:1px 6px">${itName}</span>
+          <button class="btn-change" id="btn-it-${issue.key}" onclick="openIssuetypePicker(event,'${issue.key}')" title="Cambiar tipo de tarea">↕</button>
+        </div>
+      </td>
       <td class="wrap">${f.summary||'—'}</td>
       <td style="font-size:12px;color:var(--g5);max-width:130px;overflow:hidden;text-overflow:ellipsis">${modulo}</td>
       <td>${eCell}</td>
@@ -866,7 +887,7 @@ async function loadPage(jql, page) {
   document.getElementById('history-body').innerHTML =
     `<tr class="state-row"><td colspan="12">Cargando...</td></tr>`;
 
-  let url = `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=summary,labels,status,fixVersions,parent,created,priority&maxResults=${PAGE_SIZE}`;
+  let url = `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=summary,labels,status,fixVersions,parent,created,priority,issuetype&maxResults=${PAGE_SIZE}`;
   if (page > 0 && pageTokens[page - 1]) url += `&nextPageToken=${encodeURIComponent(pageTokens[page - 1])}`;
 
   try {
@@ -985,7 +1006,7 @@ async function exportCSV() {
   try {
     let all = [], nextToken = null, isLast = false;
     while (!isLast) {
-      let url = `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(currentJQL)}&fields=summary,labels,status,fixVersions,parent,created,priority&maxResults=100`;
+      let url = `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(currentJQL)}&fields=summary,labels,status,fixVersions,parent,created,priority,issuetype&maxResults=100`;
       if (nextToken) url += `&nextPageToken=${encodeURIComponent(nextToken)}`;
       const r      = await fetch(url, { headers:{ 'Accept':'application/json' } });
       const d      = await r.json();
@@ -1141,6 +1162,62 @@ async function applyLabelChange(key, prefix, newLabel) {
       if (pill) { pill.className=`pill p-sev-${sKey}`; pill.textContent=sKey.charAt(0).toUpperCase()+sKey.slice(1); pill.style.color=''; }
     }
   } catch { if (pill) pill.textContent = prevText || 'Error'; }
+  if (btn) btn.disabled = false;
+}
+
+// ── Issuetype picker (Tarea/Subtarea/Historia/Error) ───────────────────────
+function openIssuetypePicker(event, key) {
+  event.stopPropagation();
+  const pid = `it-${key}`;
+  const isToggle = activePopover?.key === pid;
+  closePopover();
+  if (isToggle) return;
+  activePopover = { key: pid };
+  const btn = document.getElementById(`btn-it-${key}`);
+  showPopover(btn, 'Cambiar tipo de tarea', [
+    { label: 'Tarea',    onclick: `applyIssuetypeChange('${key}','Tarea')` },
+    { label: 'Historia', onclick: `applyIssuetypeChange('${key}','Historia')` },
+    { label: 'Error',    onclick: `applyIssuetypeChange('${key}','Error')` },
+    { label: 'Subtarea', onclick: `applyIssuetypeChange('${key}','Subtarea')` },
+  ]);
+}
+
+async function applyIssuetypeChange(key, name) {
+  closePopover();
+  const btn  = document.getElementById(`btn-it-${key}`);
+  const pill = document.getElementById(`it-${key}`);
+  const prevText = pill?.textContent;
+  const prevCls  = pill?.className;
+  if (btn)  btn.disabled = true;
+  if (pill) pill.textContent = '...';
+  try {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${key}`, {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body:    JSON.stringify({ fields: { issuetype: { name } } })
+    });
+    if (!r.ok) {
+      const errBody = await r.text().catch(() => '');
+      console.error(`[issuetype] PUT ${key} → ${r.status}:`, errBody);
+      throw new Error(`HTTP ${r.status}`);
+    }
+    if (pill) {
+      const cls = ({
+        'Tarea':    'p-it-tarea',
+        'Subtarea': 'p-it-subtarea',
+        'Historia': 'p-it-historia',
+        'Error':    'p-it-error',
+        'Epic':     'p-it-epic',
+      })[name] || '';
+      pill.className   = `pill ${cls}`;
+      pill.textContent = name;
+      pill.style.fontSize = '9px';
+      pill.style.padding  = '1px 6px';
+    }
+  } catch (e) {
+    if (pill) { pill.textContent = prevText || 'Error'; pill.className = prevCls || ''; }
+    alert(`No se pudo cambiar el tipo: ${e.message}\n\nAlgunos cambios (ej. Subtarea sin parent válido) son rechazados por Jira.`);
+  }
   if (btn) btn.disabled = false;
 }
 
