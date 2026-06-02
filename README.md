@@ -1,3 +1,1 @@
-# testin_QA
-cd testin_QA && 
-node Server.JS# Jira-and-confluence-
+# Jira-and-confluence-
