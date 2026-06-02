@@ -1,15 +1,52 @@
+# ─── Directorios del sistema operativo (NUNCA deben ir al repo) ───
+sys/
+etc/
+boot/
+
+# ─── Secretos / entorno ───
+.env
+.env.local
+.env.*.local
+chatkit_uploads/
+
+# ─── Node ───
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+
+# ─── Python (MCP confluence) ───
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# ─── Logs y temporales ───
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+
+# ─── Metadata del SO ───
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Documentación auxiliar / borradores (no parte del código) ───
 QA_GUIDE.md
 RESUMEN_CHATKIT_SETUP.md
 QA_Documentacion_Completa.txt
 Casos_Prueba_Moodle_QA_Completo.txt
 Casos_Prueba_ModernUX_QA.md
 IMPLEMENTATION.md
+IMPLEMENTATION(1).md
 SISTEMA_QA_COMPLETO.md
 Guia_API_Sistema_QA.md
 Guia_Formulario_QA_Inteligente.md
-solu.txt
 Arquitectura_Autodescubrible_QA.md
+solu.txt
 solu.md
-.env
-chatkit_uploads
-IMPLEMENTATION(1).md
