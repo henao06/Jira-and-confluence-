@@ -1,1 +1,47 @@
 cd /home/sebastian/Jira-and-confluence-/responsive-proxy && ./tablet.sh
+
+
+
+para la primera ves === 
+cd /home/sebastian/Jira-and-confluence-/responsive-proxy && ./tablet.sh pair
+ 
+
+
+solo correr : ./tablet.sh
+vincular una nueva : ./tablet.sh pair  
+
+ Ver estado sin tocar nada │ ./tablet.sh status    
+
+  Cada dispositivo se vincula por separado. En el nuevo dispositivo:
+
+  1. Tablet nueva → Depuración inalámbrica → ON → "Vincular con código".
+  2. En la PC:
+  ./tablet.sh pair
+  3. Le metés los datos de ESA tablet (IP:puerto de vincular + código + IP:puerto de conectar).
+
+  Listo, queda vinculada igual que la primera. Podés tener varias.
+
+  ▎ ⚠️  Ojo si conectás VARIAS a la vez: adb reverse se confunde con más de un dispositivo ("more than one device"). Si vas a usar varias en simultáneo, avisame y le 
+  ▎ agrego al script el -s para elegir cuál. Para una sola por vez, no hay drama.
+
+  Caso B — Olvidar / desvincular
+
+  Dos pasos:
+
+  1. En la tablet: Depuración inalámbrica → "Dispositivos vinculados" → tocás tu PC → "Olvidar".
+  2. En la PC (para cerrar la conexión):
+  adb disconnect
+
+  Y si después la querés volver a usar, arrancás de cero con ./tablet.sh pair (código nuevo y todo).
+
+  Resumen rápido
+
+  ┌────────────────────────────┬─────────────────────────────────────────┐
+  │         Querés...          │                Hacés...                 │
+  ├────────────────────────────┼─────────────────────────────────────────┤
+  │ Usar la de siempre         │ ./tablet.sh                             │
+  ├────────────────────────────┼─────────────────────────────────────────┤
+  │ Sumar un dispositivo nuevo │ ./tablet.sh pair (en el nuevo)          │
+  ├────────────────────────────┼─────────────────────────────────────────┤
+  │ Desvincular uno            │ "Olvidar" en la tablet + adb disconnect │
+  └────────────────────────────┴─────────────────────────────────────────┘

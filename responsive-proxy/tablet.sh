@@ -1,85 +1,148 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# tablet.sh — Ver la app LOCAL en la tablet (Android) por WiFi.
+# tablet.sh — Ver la app LOCAL en una o VARIAS tablets (Android) por WiFi.
 #
-# Hace TODO de una:
-#   1) Levanta el proxy (:8090) si no esta corriendo.
-#   2) Conecta la tablet por adb (WiFi) — reconecta solo si ya vinculaste.
-#   3) Reenvia el puerto del proxy -> la tablet lo ve como localhost.
-#   => En la tablet:  http://localhost:8090/App/#/login
-#      (la tablet ES "localhost": no redirige, Moodle anda y el chat carga)
+# Fuente de verdad: devices.env  (whitelist:  nombre | serial | ip:puerto)
 #
-# USO:
-#   ./tablet.sh          -> dia a dia (reconecta + arma todo)
-#   ./tablet.sh pair     -> PRIMERA VEZ (vincular con codigo de la tablet)
-#   ./tablet.sh IP:PUERTO-> conectar a un endpoint concreto
+#   ./tablet.sh         -> levanta proxy, RECONECTA solo los del env, arma el
+#                          reverse, y DESCONECTA los que borraste del archivo.
+#   ./tablet.sh pair    -> vincula uno NUEVO y lo agrega solo a devices.env.
+#   ./tablet.sh status  -> muestra estado sin tocar nada.
+#
+# Reconexion: reusa el endpoint guardado (sin codigo). Si el puerto cambio
+# (reinicio de la tablet), te pide el nuevo IP:PUERTO UNA vez y actualiza el env.
+#
+# En cada tablet:  http://localhost:8090/App/#/login
 # ==========================================================================
 set -uo pipefail
 cd "$(dirname "$0")"
 PORT=8090
+ENVF="devices.env"
 
 command -v adb >/dev/null 2>&1 || { echo "  [x] Falta adb: sudo apt install -y android-tools-adb"; exit 1; }
+[ -f "$ENVF" ] || printf '# nombre | serial | ip:puerto\n' > "$ENVF"
 
-# --- 1) proxy arriba? ------------------------------------------------------
-if ! curl -s -o /dev/null --max-time 3 "http://localhost:$PORT/App/"; then
-  echo "  Levantando el proxy (:$PORT)..."
-  nohup node proxy.js >/tmp/responsive-proxy.log 2>&1 &
-  sleep 1
-fi
-if curl -s -o /dev/null --max-time 3 "http://localhost:$PORT/App/"; then
-  echo "  Proxy OK (:$PORT)"
-else
-  echo "  [!] El proxy no responde. Revisa: tail /tmp/responsive-proxy.log"
-fi
+# ---------- helpers del env ----------
+env_lines()    { grep -vE '^[[:space:]]*#|^[[:space:]]*$' "$ENVF"; }
+trim()         { echo "$1" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g'; }
+hw_serial()    { adb -s "$1" shell getprop ro.serialno 2>/dev/null | tr -d '\r\n'; }
 
-# chequeo de backends que el proxy necesita
-A="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:80/App/    --max-time 4)"
-C="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/chatkit --max-time 4)"
-[ "$A" = "200" ] || echo "  [!] App(:80) no responde 200 — levantala."
-case "$C" in 000|"") echo "  [!] chatkit(:8000) caido — levantalo o el chat no carga.";; esac
+# adb-serial (ip:puerto) de un device CONECTADO cuyo serial de hardware sea $1
+connected_ep_for() {
+  local d state _ hw
+  while read -r d state _; do
+    [ "$state" = "device" ] || continue
+    hw="$(hw_serial "$d")"
+    [ "$hw" = "$1" ] && { echo "$d"; return 0; }
+  done < <(adb devices | tail -n +2)
+  return 1
+}
 
-# --- 2) conexion adb -------------------------------------------------------
-connected() { adb get-state >/dev/null 2>&1; }
+# reescribe el endpoint guardado de un serial
+update_endpoint() {  # $1=serial  $2=nuevo_ip:puerto
+  local tmp; tmp="$(mktemp)"
+  awk -F'|' -v s="$1" -v e="$2" '
+    /^[[:space:]]*#/ || /^[[:space:]]*$/ { print; next }
+    { ser=$2; gsub(/[[:space:]]/,"",ser)
+      if (ser==s) { nm=$1; gsub(/^[[:space:]]+|[[:space:]]+$/,"",nm); printf "%s | %s | %s\n", nm, s, e }
+      else print }' "$ENVF" > "$tmp" && mv "$tmp" "$ENVF"
+}
 
-do_reverse_and_url() {
-  adb reverse tcp:$PORT tcp:$PORT >/dev/null 2>&1 && echo "  reverse $PORT OK" || echo "  [x] fallo reverse $PORT"
+# ---------- proxy ----------
+ensure_proxy() {
+  if ! curl -s -o /dev/null --max-time 3 "http://localhost:$PORT/App/"; then
+    echo "  Levantando el proxy (:$PORT)..."
+    nohup node proxy.js >/tmp/responsive-proxy.log 2>&1 &
+    sleep 1
+  fi
+  curl -s -o /dev/null --max-time 3 "http://localhost:$PORT/App/" \
+    && echo "  Proxy OK (:$PORT)" || echo "  [!] proxy no responde (tail /tmp/responsive-proxy.log)"
+}
+
+# ---------- reconectar los del env que esten caidos ----------
+reconnect_all() {
+  local name serial ep curep
+  while IFS='|' read -r name serial ep; do
+    name="$(trim "$name")"; serial="$(trim "$serial")"; ep="$(trim "$ep")"
+    [ -z "$serial" ] && continue
+    if connected_ep_for "$serial" >/dev/null; then continue; fi   # ya conectado
+    echo "  Reconectando $name ($serial) -> $ep ..."
+    if adb connect "$ep" >/dev/null 2>&1 && sleep 1 && connected_ep_for "$serial" >/dev/null; then
+      echo "   conectado."
+    else
+      echo "   [!] el puerto de $name cambio (reinicio?). En la tablet:"
+      echo "       Depuracion inalambrica -> 'Direccion IP y puerto' (arriba)."
+      read -rp "       Nuevo IP:PUERTO de $name (vacio = saltar): " NEW
+      [ -z "${NEW:-}" ] && { echo "   saltado."; continue; }
+      if adb connect "$NEW" >/dev/null 2>&1 && sleep 1 && connected_ep_for "$serial" >/dev/null; then
+        update_endpoint "$serial" "$NEW"; echo "   conectado y devices.env actualizado."
+      else
+        echo "   [x] no conecto a $NEW (si sigue, re-vincula: ./tablet.sh pair)."
+      fi
+    fi
+  done < <(env_lines)
+}
+
+# ---------- activar (reverse) y limpiar no-autorizados ----------
+sync_devices() {
+  local any=0 d state _ hw matched name ep
+  while read -r d state _; do
+    [ "$state" = "device" ] || continue
+    hw="$(hw_serial "$d")"
+    matched=""; name=""
+    while IFS='|' read -r n s e; do
+      [ "$(trim "$s")" = "$hw" ] && { matched=1; name="$(trim "$n")"; ep="$(trim "$e")"; break; }
+    done < <(env_lines)
+    if [ -n "$matched" ]; then
+      if adb -s "$d" reverse tcp:$PORT tcp:$PORT >/dev/null 2>&1; then
+        echo "   [OK] ${name:-?} ($hw) -> activo"; any=1
+        [ "$ep" != "$d" ] && update_endpoint "$hw" "$d"   # guardar endpoint actual
+      else
+        echo "   [x] fallo reverse en ${name:-$hw}"
+      fi
+    else
+      adb disconnect "$d" >/dev/null 2>&1
+      echo "   [--] $hw no esta en $ENVF -> DESCONECTADO"
+    fi
+  done < <(adb devices | tail -n +2)
+  [ "$any" = "1" ] || echo "   (ningun dispositivo autorizado conectado)"
+}
+
+print_url() {
   echo ""
   echo "  =================================================================="
-  echo "    En la tablet (Chrome) abri:"
-  echo "        http://localhost:$PORT/App/#/login"
+  echo "    En cada tablet (Chrome):  http://localhost:$PORT/App/#/login"
   echo "  =================================================================="
 }
 
-if connected; then
-  echo "  Tablet ya conectada ($(adb devices | awk 'NR==2{print $1}'))."
-  do_reverse_and_url; exit 0
-fi
-
 case "${1:-}" in
   pair)
-    echo "  -- PRIMERA VEZ: vincular --"
-    echo "  Tablet: Depuracion inalambrica -> 'Vincular dispositivo con codigo'."
+    echo "  -- Vincular dispositivo NUEVO --"
     read -rp "  1) IP:PUERTO del cartel de vincular: " PAIR_EP
     read -rp "  2) Codigo de 6 digitos: " CODE
-    adb pair "$PAIR_EP" "$CODE" || { echo "  [x] Pairing fallo (el codigo expira en ~1 min, reintenta)."; exit 1; }
-    read -rp "  3) IP:PUERTO de la PANTALLA PRINCIPAL (puerto DISTINTO, con ':' no '.'): " CONN_EP
-    adb connect "$CONN_EP" || { echo "  [x] No conecto."; exit 1; }
-    sleep 1; do_reverse_and_url
+    adb pair "$PAIR_EP" "$CODE" || { echo "  [x] pairing fallo (el codigo expira en ~1 min)."; exit 1; }
+    read -rp "  3) IP:PUERTO de la PANTALLA PRINCIPAL (con ':' no '.'): " CONN_EP
+    adb connect "$CONN_EP" || { echo "  [x] no conecto a $CONN_EP"; exit 1; }
+    sleep 1
+    HW="$(hw_serial "$CONN_EP")"
+    read -rp "  Nombre para este dispositivo (ej tablet-grande): " NAME
+    [ -z "${NAME:-}" ] && NAME="device-$HW"
+    if env_lines | awk -F'|' -v s="$HW" '{gsub(/[[:space:]]/,"",$2)} $2==s{f=1} END{exit !f}'; then
+      echo "  Ya estaba en $ENVF; actualizo su endpoint."; update_endpoint "$HW" "$CONN_EP"
+    else
+      echo "$NAME | $HW | $CONN_EP" >> "$ENVF"; echo "  Agregado: $NAME | $HW | $CONN_EP"
+    fi
+    ensure_proxy; sync_devices; print_url
+    ;;
+  status)
+    echo "  --- Autorizados en $ENVF ---"; env_lines || echo "  (vacio)"
+    echo "  --- Conectados ahora ---"; adb devices | tail -n +2
     ;;
   "")
-    echo "  Buscando la tablet (mDNS)..."
-    EP="$(adb mdns services 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+' | head -1)"
-    if [ -n "$EP" ] && adb connect "$EP" >/dev/null 2>&1 && sleep 1 && connected; then
-      do_reverse_and_url
-    else
-      echo "  No la encontre sola."
-      echo "    Primera vez:        ./tablet.sh pair"
-      echo "    Ya vinculada antes: ./tablet.sh IP:PUERTO   (la de la pantalla principal)"
-      exit 1
-    fi
+    ensure_proxy; reconnect_all; sync_devices; print_url
     ;;
   *)
-    adb connect "$1" || { echo "  [x] No conecto a $1"; exit 1; }
-    sleep 1; do_reverse_and_url
+    adb connect "$1" >/dev/null 2>&1 && sleep 1
+    ensure_proxy; reconnect_all; sync_devices; print_url
     ;;
 esac
