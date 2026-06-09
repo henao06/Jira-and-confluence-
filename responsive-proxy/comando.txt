@@ -1,0 +1,1 @@
+cd /home/sebastian/Jira-and-confluence-/responsive-proxy && ./tablet.sh

@@ -126,7 +126,7 @@ async function cerrarSesion() {
 }
 
 async function promptAvanzarVersion() {
-  const motivo = prompt(`Versión actual: ${window.versionActual || 'ninguna'}\n\nMotivo:`, '');
+  const motivo = prompt(`Versió n actual: ${window.versionActual || 'ninguna'}\n\nMotivo:`, '');
   if (motivo === null) return;
   const btn = document.getElementById('btn-avanzar-version');
   if (btn) btn.disabled = true;
