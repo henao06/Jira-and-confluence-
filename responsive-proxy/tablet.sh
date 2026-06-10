@@ -9,8 +9,11 @@
 #   ./tablet.sh pair    -> vincula uno NUEVO y lo agrega solo a devices.env.
 #   ./tablet.sh status  -> muestra estado sin tocar nada.
 #
-# Reconexion: reusa el endpoint guardado (sin codigo). Si el puerto cambio
-# (reinicio de la tablet), te pide el nuevo IP:PUERTO UNA vez y actualiza el env.
+# Reconexion AUTOMATICA:
+#   1) reusa el endpoint guardado (sin codigo).
+#   2) si el puerto rotó (reinicio), ESCANEA la IP con nmap y encuentra el
+#      puerto nuevo solo, se conecta y actualiza el env.
+#   3) si ni asi (IP cambio / nmap no esta), te pide el IP:PUERTO una vez.
 #
 # En cada tablet:  http://localhost:8090/App/#/login
 # ==========================================================================
@@ -18,6 +21,7 @@ set -uo pipefail
 cd "$(dirname "$0")"
 PORT=8090
 ENVF="devices.env"
+SCAN_RANGE="${SCAN_RANGE:-30000-65535}"   # rango de puertos a escanear con nmap
 
 command -v adb >/dev/null 2>&1 || { echo "  [x] Falta adb: sudo apt install -y android-tools-adb"; exit 1; }
 [ -f "$ENVF" ] || printf '# nombre | serial | ip:puerto\n' > "$ENVF"
@@ -27,8 +31,7 @@ env_lines()    { grep -vE '^[[:space:]]*#|^[[:space:]]*$' "$ENVF"; }
 trim()         { echo "$1" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g'; }
 hw_serial()    { adb -s "$1" shell getprop ro.serialno 2>/dev/null | tr -d '\r\n'; }
 
-# adb-serial (ip:puerto) de un device CONECTADO cuyo serial de hardware sea $1
-connected_ep_for() {
+connected_ep_for() {  # adb-serial (ip:puerto) de un device CONECTADO con serial hw $1
   local d state _ hw
   while read -r d state _; do
     [ "$state" = "device" ] || continue
@@ -38,7 +41,6 @@ connected_ep_for() {
   return 1
 }
 
-# reescribe el endpoint guardado de un serial
 update_endpoint() {  # $1=serial  $2=nuevo_ip:puerto
   local tmp; tmp="$(mktemp)"
   awk -F'|' -v s="$1" -v e="$2" '
@@ -46,6 +48,19 @@ update_endpoint() {  # $1=serial  $2=nuevo_ip:puerto
     { ser=$2; gsub(/[[:space:]]/,"",ser)
       if (ser==s) { nm=$1; gsub(/^[[:space:]]+|[[:space:]]+$/,"",nm); printf "%s | %s | %s\n", nm, s, e }
       else print }' "$ENVF" > "$tmp" && mv "$tmp" "$ENVF"
+}
+
+# escanea la IP buscando el puerto de adb del dispositivo con serial $1; conecta y echo del endpoint
+scan_connect() {  # $1=serial  $2=ip
+  command -v nmap >/dev/null 2>&1 || return 1
+  local ip="$2" port ep
+  for port in $(nmap -Pn -p "$SCAN_RANGE" --open -T4 -n "$ip" 2>/dev/null | grep -oE '^[0-9]+/tcp' | cut -d/ -f1); do
+    ep="$ip:$port"
+    adb connect "$ep" >/dev/null 2>&1; sleep 1
+    if [ "$(hw_serial "$ep")" = "$1" ]; then echo "$ep"; return 0; fi
+    adb disconnect "$ep" >/dev/null 2>&1
+  done
+  return 1
 }
 
 # ---------- proxy ----------
@@ -61,24 +76,34 @@ ensure_proxy() {
 
 # ---------- reconectar los del env que esten caidos ----------
 reconnect_all() {
-  local name serial ep curep
+  local name serial ep ip newep
   while IFS='|' read -r name serial ep; do
     name="$(trim "$name")"; serial="$(trim "$serial")"; ep="$(trim "$ep")"
     [ -z "$serial" ] && continue
-    if connected_ep_for "$serial" >/dev/null; then continue; fi   # ya conectado
+    connected_ep_for "$serial" >/dev/null && continue   # ya conectado
+    ip="${ep%%:*}"
     echo "  Reconectando $name ($serial) -> $ep ..."
     if adb connect "$ep" >/dev/null 2>&1 && sleep 1 && connected_ep_for "$serial" >/dev/null; then
       echo "   conectado."
+      continue
+    fi
+    # puerto rotó -> escaneo automatico
+    echo "   endpoint guardado no responde. Escaneando $ip (puede tardar unos segundos)..."
+    newep="$(scan_connect "$serial" "$ip")"
+    if [ -n "$newep" ]; then
+      update_endpoint "$serial" "$newep"
+      echo "   reconectado por escaneo: $newep  (devices.env actualizado)"
+      continue
+    fi
+    # ni asi -> pedir manual (IP cambio, o nmap no esta)
+    echo "   [!] no lo encontre por escaneo (cambio la IP?). En la tablet:"
+    echo "       Depuracion inalambrica -> 'Direccion IP y puerto'."
+    read -rp "       Nuevo IP:PUERTO de $name (vacio = saltar): " NEW
+    [ -z "${NEW:-}" ] && { echo "   saltado."; continue; }
+    if adb connect "$NEW" >/dev/null 2>&1 && sleep 1 && connected_ep_for "$serial" >/dev/null; then
+      update_endpoint "$serial" "$NEW"; echo "   conectado y devices.env actualizado."
     else
-      echo "   [!] el puerto de $name cambio (reinicio?). En la tablet:"
-      echo "       Depuracion inalambrica -> 'Direccion IP y puerto' (arriba)."
-      read -rp "       Nuevo IP:PUERTO de $name (vacio = saltar): " NEW
-      [ -z "${NEW:-}" ] && { echo "   saltado."; continue; }
-      if adb connect "$NEW" >/dev/null 2>&1 && sleep 1 && connected_ep_for "$serial" >/dev/null; then
-        update_endpoint "$serial" "$NEW"; echo "   conectado y devices.env actualizado."
-      else
-        echo "   [x] no conecto a $NEW (si sigue, re-vincula: ./tablet.sh pair)."
-      fi
+      echo "   [x] no conecto a $NEW (si sigue, re-vincula: ./tablet.sh pair)."
     fi
   done < <(env_lines)
 }
@@ -89,14 +114,14 @@ sync_devices() {
   while read -r d state _; do
     [ "$state" = "device" ] || continue
     hw="$(hw_serial "$d")"
-    matched=""; name=""
+    matched=""; name=""; ep=""
     while IFS='|' read -r n s e; do
       [ "$(trim "$s")" = "$hw" ] && { matched=1; name="$(trim "$n")"; ep="$(trim "$e")"; break; }
     done < <(env_lines)
     if [ -n "$matched" ]; then
       if adb -s "$d" reverse tcp:$PORT tcp:$PORT >/dev/null 2>&1; then
         echo "   [OK] ${name:-?} ($hw) -> activo"; any=1
-        [ "$ep" != "$d" ] && update_endpoint "$hw" "$d"   # guardar endpoint actual
+        [ "$ep" != "$d" ] && update_endpoint "$hw" "$d"
       else
         echo "   [x] fallo reverse en ${name:-$hw}"
       fi
