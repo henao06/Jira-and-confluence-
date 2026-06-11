@@ -5,7 +5,8 @@
 set -e
 cd "$(dirname "$0")"
 
-PORT="${PROXY_PORT:-8090}"
+PORT="$(grep -E '^[[:space:]]*PORT[[:space:]]*=' proxy.env 2>/dev/null | head -1 | cut -d= -f2 | tr -d '[:space:]')"
+PORT="${PORT:-${PROXY_PORT:-8090}}"
 
 # IP de la LAN: la de la ruta por defecto (evita docker/vpn). Fallback: hostname -I
 IP="$(ip route get 1.1.1.1 2>/dev/null | grep -oE 'src [0-9.]+' | awk '{print $2}')"

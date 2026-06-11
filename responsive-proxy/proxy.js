@@ -1,62 +1,65 @@
 /**
- * Proxy de responsividad — Hybred
- * ------------------------------------------------------------------
- * Expone la app LOCAL bajo la IP de tu LAN para testear en tablets,
- * SIN que la app redirija al entorno por defecto (ClaseWeb) y SIN
- * tocar el codigo de la app, de Moodle ni del chatkit.
- * CORRE = cd /home/sebastian/Jira-and-confluence-/responsive-proxy
- * Como funciona (3 trucos):
- *  1. Host spoof: a Moodle/Apache les reenvia "Host: localhost", asi
- *     responden como si fuera acceso local -> no redirige, da JSON limpio.
- *  2. CORS: el proxy inyecta el header CORS en TODA respuesta -> el
- *     chatkit deja de bloquear (su CORS_ORIGINS pasa a ser irrelevante).
- *  3. Rewrite al vuelo: reescribe SOLO el bundle JS de la app para que,
- *     cuando el hostname no sea localhost, apunte Moodle y chatkit al
- *     MISMO origen del proxy (relativos) en vez de a localhost fijo.
+ * Proxy CONFIGURABLE — responsive-proxy
+ * --------------------------------------------------------------------------
+ * Expone uno o VARIOS backends locales bajo un solo puerto, con host-spoof y
+ * CORS. Todo se configura en proxy.env (PORT, HOST_SPOOF, CORS y las RUTAS).
+ * No requiere dependencias: solo Node.js.
  *
- * Todo es en memoria/al vuelo: NO modifica ningun archivo del sistema.
+ * Como funciona:
+ *   - Lee proxy.env: el puerto del proxy y las rutas (prefijo -> host:puerto).
+ *   - A cada pedido le elige el backend segun el prefijo (el mas largo gana).
+ *   - host-spoof: le reenvia "Host: <HOST_SPOOF>" al backend (ej localhost).
+ *   - CORS: inyecta los headers para que el navegador no bloquee.
+ *   - Reescritura Hybred (opcional/automatica): solo se aplica si aparece la
+ *     marca en el bundle /App/assets/*.js; para otras apps es inofensiva.
  *
- * Uso:
- *   node proxy.js            (o ./start.sh)
- *   En la tablet (misma WiFi):  http://<IP-de-tu-PC>:8090/App/#/login
- * 
- * 
- * 
- * 
- * 
- * 2. En la tablet Android:
-  - Ajustes → Acerca del dispositivo → tocá "Número de compilación" 7 veces (activa modo desarrollador).
-  - Ajustes → Opciones de desarrollador → Depuración USB: ON.
-  - Conectala por cable USB a la PC → aceptá el popup "¿Permitir depuración USB?".
-
- * 
- * 
+ * Uso:  node proxy.js   (o ./start.sh / ./tablet.sh)
  */
-
 const http = require('http');
+const fs   = require('fs');
+const path = require('path');
 
-const LISTEN_PORT  = parseInt(process.env.PROXY_PORT || '8090', 10);
-const BIND         = '0.0.0.0';        // escucha en todas las interfaces (LAN incluida)
+// ---------- cargar proxy.env ----------
+const cfg = {};
+const routes = [];
+const cfgPath = path.join(__dirname, 'proxy.env');
+if (fs.existsSync(cfgPath)) {
+  for (const raw of fs.readFileSync(cfgPath, 'utf8').split('\n')) {
+    const l = raw.trim();
+    if (!l || l.startsWith('#')) continue;
+    if (/^ROUTE\s+/i.test(l)) {
+      const p = l.split(/\s+/);                       // ROUTE <prefijo> <host:puerto>
+      if (p.length >= 3) routes.push({ prefix: p[1], target: p[2] });
+    } else {
+      const i = l.indexOf('=');
+      if (i > 0) cfg[l.slice(0, i).trim().toUpperCase()] = l.slice(i + 1).trim();
+    }
+  }
+}
+// default = comportamiento Hybred (si proxy.env no define rutas)
+if (!routes.length) {
+  routes.push({ prefix: '/chatkit', target: '127.0.0.1:8000' });
+  routes.push({ prefix: '/',        target: '127.0.0.1:80' });
+}
+routes.sort((a, b) => b.prefix.length - a.prefix.length);   // mas especifico primero
 
-// Backends locales que vamos a unificar bajo el origen del proxy
-const APP_PORT     = 80;               // App + Moodle + assets + pluginfile
-const CHATKIT_PORT = 8000;             // backend del chatkit
+const LISTEN_PORT = parseInt(cfg.PORT, 10) || 8090;
+const HOST_SPOOF  = (cfg.HOST_SPOOF === undefined) ? 'localhost' : cfg.HOST_SPOOF;  // '' = no spoof
+const CORS_ON     = String(cfg.CORS || 'on').toLowerCase() !== 'off';
 
-// Reescritura del bundle: en el fallback (hostname != localhost) la app se va
-// a ClaseWeb (xa.lpv). Lo cambiamos para que clone el entorno Local pero con
-// Moodle y chatkit apuntando al MISMO origen (el del proxy).
-// Forzamos a que la app SIEMPRE use su propio origen (el del proxy) para
-// Moodle y chatkit, sin importar el hostname. Asi, entrando por localhost:8090
-// (via adb reverse), el chatkit ve "localhost" y carga, y todo va por el proxy.
+// Reescritura Hybred: que la app apunte Moodle/chatkit al origen del proxy.
 const REWRITE_FROM = 'n==="localhost"||n==="127.0.0.1"?xa.localhost:xa.lpv}';
 const REWRITE_TO   =
   '{...xa.localhost,wwwroot:window.location.origin+"/moodle",' +
   'chatkitUrl:window.location.origin+"/chatkit"}}';
 
+function pickTarget(url) {
+  for (const r of routes) if (url.startsWith(r.prefix)) return r.target;
+  return routes[routes.length - 1].target;
+}
 function corsHeaders(req) {
-  const origin = req.headers.origin || '*';
   return {
-    'access-control-allow-origin':      origin,
+    'access-control-allow-origin':      req.headers.origin || '*',
     'access-control-allow-credentials': 'true',
     'access-control-allow-methods':     'GET,POST,PUT,DELETE,PATCH,OPTIONS',
     'access-control-allow-headers':
@@ -66,73 +69,56 @@ function corsHeaders(req) {
 }
 
 const server = http.createServer((req, res) => {
-  // Preflight CORS: lo contesta el proxy directo
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204, corsHeaders(req));
-    res.end();
-    return;
-  }
+  if (req.method === 'OPTIONS' && CORS_ON) { res.writeHead(204, corsHeaders(req)); res.end(); return; }
 
-  const toChatkit = req.url.startsWith('/chatkit');
-  const port      = toChatkit ? CHATKIT_PORT : APP_PORT;
-  const isBundle  = /^\/App\/assets\/.*\.js(\?|$)/.test(req.url);
+  const [thost, tport] = pickTarget(req.url).split(':');
+  const isBundle = /^\/App\/assets\/.*\.js(\?|$)/.test(req.url);
 
-  // Reenviamos los headers del cliente pero con Host=localhost (el truco clave)
-  // y sin gzip, para poder reescribir el bundle y simplificar el streaming.
-  const headers = { ...req.headers, host: 'localhost', 'accept-encoding': 'identity' };
+  const headers = { ...req.headers, 'accept-encoding': 'identity' };
+  if (HOST_SPOOF) headers.host = HOST_SPOOF;
 
   const chunks = [];
   req.on('data', c => chunks.push(c));
   req.on('end', () => {
     const body = Buffer.concat(chunks);
-    const opts = { hostname: '127.0.0.1', port, path: req.url, method: req.method, headers };
-
-    const up = http.request(opts, upRes => {
-      const cors = corsHeaders(req);
-
-      if (isBundle) {
-        // Bufferear -> reescribir -> enviar con el largo corregido
-        const buf = [];
-        upRes.on('data', c => buf.push(c));
-        upRes.on('end', () => {
-          let js = Buffer.concat(buf).toString('utf8');
-          if (js.includes(REWRITE_FROM)) js = js.replace(REWRITE_FROM, REWRITE_TO);
-          const out = Buffer.from(js, 'utf8');
-          const h = { ...upRes.headers };
-          delete h['content-encoding'];
-          delete h['transfer-encoding'];
-          delete h['access-control-allow-origin'];
-          delete h['access-control-allow-credentials'];
-          Object.assign(h, cors, { 'content-length': out.length, 'cache-control': 'no-store' });
-          res.writeHead(upRes.statusCode, h);
-          res.end(out);
-        });
-        return;
+    const up = http.request(
+      { hostname: thost, port: parseInt(tport || '80', 10), path: req.url, method: req.method, headers },
+      upRes => {
+        const cors = CORS_ON ? corsHeaders(req) : {};
+        if (isBundle) {
+          const buf = [];
+          upRes.on('data', c => buf.push(c));
+          upRes.on('end', () => {
+            let js = Buffer.concat(buf).toString('utf8');
+            if (js.includes(REWRITE_FROM)) js = js.replace(REWRITE_FROM, REWRITE_TO);
+            const out = Buffer.from(js, 'utf8');
+            const h = { ...upRes.headers };
+            delete h['content-encoding']; delete h['transfer-encoding'];
+            delete h['access-control-allow-origin']; delete h['access-control-allow-credentials'];
+            Object.assign(h, cors, { 'content-length': out.length, 'cache-control': 'no-store' });
+            res.writeHead(upRes.statusCode, h); res.end(out);
+          });
+          return;
+        }
+        const h = { ...upRes.headers };
+        delete h['access-control-allow-origin']; delete h['access-control-allow-credentials'];
+        Object.assign(h, cors);
+        res.writeHead(upRes.statusCode, h); upRes.pipe(res);
       }
-
-      // Passthrough (incluye streaming del chatkit) con CORS del proxy
-      const h = { ...upRes.headers };
-      delete h['access-control-allow-origin'];
-      delete h['access-control-allow-credentials'];
-      Object.assign(h, cors);
-      res.writeHead(upRes.statusCode, h);
-      upRes.pipe(res);
-    });
-
+    );
     up.on('error', err => {
-      if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain', ...corsHeaders(req) });
+      if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain', ...(CORS_ON ? corsHeaders(req) : {}) });
       res.end('Proxy error: ' + err.message);
     });
-
     if (body.length) up.write(body);
     up.end();
   });
 });
 
-server.listen(LISTEN_PORT, BIND, () => {
+server.listen(LISTEN_PORT, '0.0.0.0', () => {
   console.log('');
-  console.log('  Proxy de responsividad corriendo');
-  console.log(`  En esta PC:  http://localhost:${LISTEN_PORT}/App/#/login`);
-  console.log(`  En la tablet: http://<IP-de-tu-PC>:${LISTEN_PORT}/App/#/login`);
+  console.log(`  Proxy corriendo en :${LISTEN_PORT}` + (HOST_SPOOF ? `  (host-spoof: ${HOST_SPOOF})` : '  (sin host-spoof)') + `  CORS:${CORS_ON ? 'on' : 'off'}`);
+  routes.forEach(r => console.log(`    ${r.prefix.padEnd(12)} -> ${r.target}`));
+  console.log(`  App:  http://localhost:${LISTEN_PORT}/App/#/login`);
   console.log('');
 });
