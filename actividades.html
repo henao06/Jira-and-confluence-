@@ -193,8 +193,20 @@
     </div>
   </div>
 
-  <!-- BG fields (visible al marcar "Reportar como bug") -->
+  <!-- Campos de reporte (visible al marcar BG o TECH) -->
   <div id="bg-assignee-wrap" style="display:none;padding:10px 24px;gap:8px 20px;flex-wrap:wrap;align-items:center;background:var(--g0);border-top:1px solid var(--border)">
+    <label id="bg-tipo-wrap" style="display:none;align-items:center;gap:6px">
+      <span style="font-size:.8rem;color:var(--g4);white-space:nowrap">Tipo BG:</span>
+      <select id="bg-tipo" class="sel" style="padding:4px 10px;font-size:.82rem;height:32px;min-width:130px">
+        <option value="Error">Error</option>
+      </select>
+    </label>
+    <label id="tech-tipo-wrap" style="display:none;align-items:center;gap:6px">
+      <span style="font-size:.8rem;color:var(--g4);white-space:nowrap">Tipo SP:</span>
+      <select id="tech-tipo" class="sel" style="padding:4px 10px;font-size:.82rem;height:32px;min-width:130px">
+        <option value="Tech Task">Tech Task</option>
+      </select>
+    </label>
     <label style="display:flex;align-items:center;gap:6px">
       <span style="font-size:.8rem;color:var(--g4);white-space:nowrap">Asignar a:</span>
       <select id="bg-asignado" class="sel" style="padding:4px 10px;font-size:.82rem;height:32px;min-width:150px;max-width:240px">
@@ -222,8 +234,12 @@
   <div class="form-footer">
     <button class="btn-reset" onclick="resetForm()">Limpiar</button>
     <label class="config-check-label">
-      <input type="checkbox" id="reportar-bug" onchange="onBugToggle(this)">
-      <span>🐛 Reportar como bug en BG</span>
+      <input type="checkbox" id="reportar-bug" onchange="onReportToggle()">
+      <span>BG</span>
+    </label>
+    <label class="config-check-label">
+      <input type="checkbox" id="reportar-tech" onchange="onReportToggle()">
+      <span> TECH</span>
     </label>
     <label class="checkbox-label">
       <input type="checkbox" id="registrarEnQAAFinalizada"> FN QAA
@@ -283,9 +299,12 @@ function saveTextState() {
       texto:    document.getElementById('texto-desc').value,
       pasos,
       bug:      document.getElementById('reportar-bug').checked,
+      tech:     document.getElementById('reportar-tech')?.checked || false,
       fnqaa:    document.getElementById('registrarEnQAAFinalizada').checked,
       version:  document.getElementById('bg-version')?.value  || '',
       entorno:  document.getElementById('bg-entorno')?.value  || '',
+      tipoBg:   document.getElementById('bg-tipo')?.value   || '',
+      tipoTech: document.getElementById('tech-tipo')?.value || '',
     }));
   } catch {}
 }
@@ -311,10 +330,22 @@ async function restoreState() {
           `<button class="btn-rm" onclick="removePaso(this)">×</button></div>`
         ).join('');
       }
-      if (d.bug) {
-        const chk = document.getElementById('reportar-bug');
-        chk.checked = true;
-        toggleBgAssignee(chk);
+      if (d.bug)  document.getElementById('reportar-bug').checked  = true;
+      if (d.tech) document.getElementById('reportar-tech').checked = true;
+      if (d.bug || d.tech) {
+        toggleBgAssignee();
+        document.getElementById('bg-tipo-wrap').style.display   = d.bug  ? 'flex' : 'none';
+        document.getElementById('tech-tipo-wrap').style.display = d.tech ? 'flex' : 'none';
+        if (d.bug) {
+          await loadTiposProyecto('BG', 'bg-tipo', 'Error');
+          const s = document.getElementById('bg-tipo');
+          if (d.tipoBg && Array.from(s.options).some(o => o.value === d.tipoBg)) s.value = d.tipoBg;
+        }
+        if (d.tech) {
+          await loadTiposProyecto('SP', 'tech-tipo', 'Tech Task');
+          const s = document.getElementById('tech-tipo');
+          if (d.tipoTech && Array.from(s.options).some(o => o.value === d.tipoTech)) s.value = d.tipoTech;
+        }
         await loadBgVersions();
         if (d.version) document.getElementById('bg-version').value = d.version;
         if (d.entorno) document.getElementById('bg-entorno').value = d.entorno;
@@ -363,14 +394,16 @@ function mkTable(rows) {
   return { type:'table', attrs:{isNumberColumnEnabled:false, layout:'default'}, content:rows };
 }
 
-// ── Tipos de actividad (issuetypes del proyecto QAA) ──────────────────────────
-let tiposLoaded = false;
+// ── Tipos de issue por proyecto (cada tablero tiene su propio catálogo) ────────
+const tiposCargados = {};   // projectKey -> true cuando ya se pobló su selector
 
-async function loadTiposActividad() {
-  if (tiposLoaded) return;
-  const sel = document.getElementById('tipo-actividad');
+// Carga los issuetypes nivel 0 (no subtareas) de un proyecto en su <select>.
+async function loadTiposProyecto(projectKey, selId, preferido = 'Tarea') {
+  if (tiposCargados[projectKey]) return;
+  const sel = document.getElementById(selId);
+  if (!sel) return;
   try {
-    const r = await fetch(`${JIRA_BASE}/rest/api/3/project/QAA`, {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/project/${projectKey}`, {
       headers: { 'Accept': 'application/json' }
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -379,16 +412,21 @@ async function loadTiposActividad() {
     const tipos = (data.issueTypes || [])
       .filter(t => !t.subtask && t.hierarchyLevel === 0);
     if (!tipos.length) throw new Error('Sin tipos');
-    const prev = sel.value || 'Tarea';
+    const prev = sel.value || preferido;
     sel.innerHTML = tipos.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
-    sel.value = tipos.some(t => t.name === prev) ? prev
-              : tipos.some(t => t.name === 'Tarea') ? 'Tarea'
+    sel.value = tipos.some(t => t.name === prev)      ? prev
+              : tipos.some(t => t.name === preferido) ? preferido
               : tipos[0].name;
-    tiposLoaded = true;
+    tiposCargados[projectKey] = true;
   } catch(e) {
-    console.warn('[tipos actividad]', e.message);
-    tiposLoaded = true; // el HTML ya tiene "Tarea" como fallback
+    console.warn(`[tipos ${projectKey}]`, e.message);
+    tiposCargados[projectKey] = true; // el HTML ya tiene un fallback en el <select>
   }
+}
+
+// QAA es el tablero base de la actividad: siempre se carga.
+async function loadTiposActividad() {
+  return loadTiposProyecto('QAA', 'tipo-actividad', 'Tarea');
 }
 
 // ── BG: versiones y toggle ────────────────────────────────────────────────────
@@ -421,9 +459,15 @@ async function loadBgVersions() {
   }
 }
 
-function onBugToggle(chk) {
-  toggleBgAssignee(chk);
-  if (chk.checked) loadBgVersions();
+function onReportToggle() {
+  const bug  = document.getElementById('reportar-bug').checked;
+  const tech = document.getElementById('reportar-tech').checked;
+  toggleBgAssignee();
+  document.getElementById('bg-tipo-wrap').style.display   = bug  ? 'flex' : 'none';
+  document.getElementById('tech-tipo-wrap').style.display = tech ? 'flex' : 'none';
+  if (bug)  loadTiposProyecto('BG', 'bg-tipo', 'Error');
+  if (tech) loadTiposProyecto('SP', 'tech-tipo', 'Tech Task');
+  if (bug || tech) loadBgVersions();
   saveTextState();
 }
 
@@ -534,15 +578,17 @@ async function submitActividad() {
   btn.disabled = true;
 
   // Issues creados — usados para rollback si algo falla
-  let qaaKey = null;
-  let bgKey  = null;
+  let qaaKey  = null;
+  let bgKey   = null;
+  let techKey = null;
 
   async function rollback() {
-    if (!qaaKey && !bgKey) return;
+    if (!qaaKey && !bgKey && !techKey) return;
     btn.textContent = 'Revirtiendo…';
     await Promise.allSettled([
-      qaaKey ? fetch(`${JIRA_BASE}/rest/api/3/issue/${qaaKey}`, { method: 'DELETE' }) : null,
-      bgKey  ? fetch(`${JIRA_BASE}/rest/api/3/issue/${bgKey}`,  { method: 'DELETE' }) : null,
+      qaaKey  ? fetch(`${JIRA_BASE}/rest/api/3/issue/${qaaKey}`,  { method: 'DELETE' }) : null,
+      bgKey   ? fetch(`${JIRA_BASE}/rest/api/3/issue/${bgKey}`,   { method: 'DELETE' }) : null,
+      techKey ? fetch(`${JIRA_BASE}/rest/api/3/issue/${techKey}`, { method: 'DELETE' }) : null,
     ].filter(Boolean));
   }
 
@@ -585,44 +631,63 @@ async function submitActividad() {
       if (!ar.ok) throw new Error(`Error subiendo "${file.name}" a ${qaaKey}`);
     }
 
-    // ── 3. Bug en BG ──
-    if (document.getElementById('reportar-bug')?.checked) {
-      btn.textContent = 'Creando bug en BG…';
-      const textoDesc     = document.getElementById('texto-desc').value.trim();
-      const versionParaBG = document.getElementById('bg-version').value;
-      const entornoParaBG = document.getElementById('bg-entorno').value;
-      const stepsParaBG   = modoActual === 'pasos'
+    // ── 3. Reportes (BG / TECH) ──
+    const reportarBug  = document.getElementById('reportar-bug')?.checked;
+    const reportarTech = document.getElementById('reportar-tech')?.checked;
+
+    if (reportarBug || reportarTech) {
+      const textoDesc   = document.getElementById('texto-desc').value.trim();
+      const versionRep  = document.getElementById('bg-version').value;
+      const entornoRep  = document.getElementById('bg-entorno').value;
+      const stepsRep    = modoActual === 'pasos'
         ? pasos
         : textoDesc ? textoDesc.split('\n').map(s => s.trim()).filter(Boolean) : [];
 
-      const bg = await crearBugBG({
+      // Datos compartidos por ambos reportes
+      const reporteBase = {
         tcId:          qaaKey,
         desc:          titulo,
         moduloNombre:  EPIC_KEY,
         moduloLabel:   EPIC_KEY,
-        versionActual: versionParaBG,
+        versionActual: versionRep,
         severidad:     'severity-medio',
         sevLbl:        'Medio',
-        entorno:       entornoParaBG,
-        steps:         stepsParaBG,
+        entorno:       entornoRep,
+        steps:         stepsRep,
         precon:        [],
         esperado:      [],
         obtenido:      [],
         impacto:       '',
         soluciones:    [],
         linkIssueKey:  qaaKey,
-        tipo:          document.getElementById('tipo-actividad').value || 'Tarea',
-      });
-      bgKey = bg.key;
+      };
 
-      // ── 4. Adjuntos a BG ──
-      for (const file of uploadedFiles) {
-        btn.textContent = `Subiendo ${file.name} → BG…`;
-        const fd = new FormData(); fd.append('file', file);
-        const ar = await fetch(`${JIRA_BASE}/rest/api/3/issue/${bgKey}/attachments`, {
-          method: 'POST', headers: { 'X-Atlassian-Token': 'no-check' }, body: fd,
-        });
-        if (!ar.ok) throw new Error(`Error subiendo "${file.name}" a ${bgKey}`);
+      // Sube los adjuntos al issue indicado
+      async function subirAdjuntos(issueKey, etiqueta) {
+        for (const file of uploadedFiles) {
+          btn.textContent = `Subiendo ${file.name} → ${etiqueta}…`;
+          const fd = new FormData(); fd.append('file', file);
+          const ar = await fetch(`${JIRA_BASE}/rest/api/3/issue/${issueKey}/attachments`, {
+            method: 'POST', headers: { 'X-Atlassian-Token': 'no-check' }, body: fd,
+          });
+          if (!ar.ok) throw new Error(`Error subiendo "${file.name}" a ${issueKey}`);
+        }
+      }
+
+      // ── BG ──
+      if (reportarBug) {
+        btn.textContent = 'Creando bug en BG…';
+        const bg = await crearBugBG({ ...reporteBase, tipo: document.getElementById('bg-tipo').value || 'Error' });
+        bgKey = bg.key;
+        await subirAdjuntos(bgKey, 'BG');
+      }
+
+      // ── TECH (SP) ──
+      if (reportarTech) {
+        btn.textContent = 'Creando tarea en SP…';
+        const tech = await crearTechSP({ ...reporteBase, tipo: document.getElementById('tech-tipo').value || 'Tech Task' });
+        techKey = tech.key;
+        await subirAdjuntos(techKey, 'SP');
       }
     }
 
@@ -640,14 +705,15 @@ async function submitActividad() {
     // ── Todo ok — mostrar resultado ──
     const msg = document.getElementById('result-msg');
     msg.innerHTML = `Actividad creada: <a href="${issueUrl}" target="_blank" style="color:#059669;font-weight:700">${qaaKey}</a>`
-      + (bgKey ? ` &nbsp;·&nbsp; Bug BG: <a href="https://${JIRA_HOST}/browse/${bgKey}" target="_blank" style="color:#dc2626;font-weight:700">${bgKey}</a>` : '');
+      + (bgKey   ? ` &nbsp;·&nbsp; Bug BG: <a href="https://${JIRA_HOST}/browse/${bgKey}" target="_blank" style="color:#dc2626;font-weight:700">${bgKey}</a>` : '')
+      + (techKey ? ` &nbsp;·&nbsp; Tech SP: <a href="https://${JIRA_HOST}/browse/${techKey}" target="_blank" style="color:#2563eb;font-weight:700">${techKey}</a>` : '');
     document.getElementById('result-box').classList.add('show');
     document.getElementById('result-box').scrollIntoView({ behavior: 'smooth' });
     clearDraft();
 
   } catch(e) {
     await rollback();
-    const eliminados = [qaaKey, bgKey].filter(Boolean);
+    const eliminados = [qaaKey, bgKey, techKey].filter(Boolean);
     alert(
       `Error — no se creó nada.\n\n${e.message}`
       + (eliminados.length ? `\n\nSe eliminó: ${eliminados.join(', ')}` : '')
@@ -671,8 +737,11 @@ function resetForm() {
       <button class="btn-rm" onclick="removePaso(this)">×</button>
     </div>`;
   document.getElementById('reportar-bug').checked              = false;
+  document.getElementById('reportar-tech').checked             = false;
   document.getElementById('registrarEnQAAFinalizada').checked  = false;
   document.getElementById('bg-assignee-wrap').style.display    = 'none';
+  document.getElementById('bg-tipo-wrap').style.display        = 'none';
+  document.getElementById('tech-tipo-wrap').style.display      = 'none';
   uploadedFiles = [];
   renderPreviews();
   setModo('texto');

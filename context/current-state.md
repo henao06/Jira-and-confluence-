@@ -1,6 +1,6 @@
 # Estado actual
 
-> Última actualización: 2026-05-26
+> Última actualización: 2026-06-17
 
 ## En qué estamos trabajando
 
@@ -9,6 +9,15 @@
 **Estado**: Funcional, probado parcialmente. Quedan pendientes algunos ajustes finos según uso real.
 
 ## Cambios recientes (orden cronológico inverso)
+
+### 2026-06-17 — actividades.html: reporte dual BG + TECH (SP)
+- Checkbox "🐛 Reportar como bug en BG" renombrado a "🐛 BG"; agregado nuevo checkbox "🛠️ TECH".
+- TECH crea una **Tech Task** en el proyecto **SP** (LPV Tech, id 10303, cloudId d4aeb06d-33c0-40d9-b9c1-ed860026cfcf), vinculada al QAA con link `Relates`, mismo panel/descripción estilo reporte que BG.
+- Se pueden marcar BG, TECH, ambos o ninguno. El `result-box` muestra los links según lo creado (QAA siempre · BG en rojo · Tech SP en azul).
+- Panel de campos (Asignar a / Versión / Entorno) **compartido**: aparece si BG o TECH está marcado. `bg_reporter.js` ahora carga asignables vía `user/assignable/multiProjectSearch?projectKeys=...` (intersección de los proyectos activos).
+- `bg_reporter.js`: lógica de creación generalizada en `_crearReporteIssue()`; `crearBugBG` (BG) y `crearTechSP` (SP) son envoltorios. `toggleBgAssignee()` ya no recibe `chk` (lee los checkboxes). Removido `bgUsersLoaded` → reemplazado por `_assigneeKey`.
+- **Tipo de issue por tablero**: cada proyecto tiene su propio catálogo de issuetypes (QAA/BG: Tarea·Historia·Error; SP: Tarea·Tech Task·Feature·Error). Antes un único selector servía a QAA+BG (bug latente: funcionaba sólo porque comparten catálogo). Ahora hay un selector por tablero activo: `tipo-actividad` (QAA, siempre), `bg-tipo` (aparece con BG, default `Error`), `tech-tipo` (aparece con TECH, default `Tech Task`). `loadTiposActividad` se generalizó en `loadTiposProyecto(projectKey, selId, preferido)` que filtra nivel 0 no-subtarea de `/project/{key}`. `crearTechSP` ahora respeta `opts.tipo`.
+- Archivos: `actividades.html`, `bg_reporter.js`.
 
 ### 2026-06-02 — MCP server INSTALADO y funcional (Python)
 - `pip install -e .` ejecutado en `/home/sebastian/QA/mcp-confluence/.venv/`
