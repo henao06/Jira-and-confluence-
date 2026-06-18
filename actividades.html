@@ -537,8 +537,11 @@ function renderPreviews(skipSave) {
   if (!skipSave) _saveFiles(uploadedFiles).catch(() => {});
   wrap.innerHTML = uploadedFiles.map((f, i) => {
     const isImg = f.type.startsWith('image/');
+    const isVid = f.type.startsWith('video/');
     const preview = isImg
       ? `<img src="${URL.createObjectURL(f)}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`
+      : isVid
+      ? `<video src="${URL.createObjectURL(f)}" controls muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:cover;border-radius:8px"></video>`
       : `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:4px;padding:8px">
            <svg width="20" height="20" fill="none" stroke="var(--g4)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
            <span style="font-size:10px;color:var(--g4);text-align:center;word-break:break-all;max-width:90px">${f.name}</span>

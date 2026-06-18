@@ -10,6 +10,40 @@
 
 ## Cambios recientes (orden cronológico inverso)
 
+### 2026-06-17 — Qa_form.html + actividades.html: preview de videos en adjuntos
+- Los inputs de adjuntos/evidencia ya tenían `accept="*/*"` (los videos siempre se pudieron SUBIR). El gap era el preview: un video se mostraba como ícono genérico.
+- Ahora los previews detectan `video/*` y renderizan un `<video controls muted playsinline preload="metadata">` (reproducible inline). Aplica a: subidas nuevas (`renderPreviews` en ambos) y adjuntos existentes al re-abrir (evidencia + BG vinculado en Qa_form).
+- `styles.css`: regla `.preview-item video` gemela a `.preview-item img` (90×72, fondo negro).
+- Qa_form paste handler: además de `image/*` ahora acepta `video/*` pegado (nombre `video-<ts>.<ext>`).
+- Caveat: Jira tiene límite de tamaño de adjunto (por defecto ~10MB, configurable por admin); videos grandes pueden ser rechazados por el server, no por el form.
+- Archivos: `Qa_form.html`, `actividades.html`, `styles.css`.
+
+### 2026-06-17 — bg_verificacion.html: auto-limpieza de la Cola al recargar
+- Al cambiar el estado de una tarjeta en la Cola (select de transición), el flag `item.bgTransitionAplicada` ya se seteaba. Ahora, en `cargarPendientes` (Recarga), las tarjetas de la Cola con `bgTransitionAplicada` que **ya no están en el resultado del filtro** se sacan solas — no reaparecen ni en Pendientes ni en Cola ("ya no son para mí").
+- `removeFromQueue(key, volverAPendientes = true)`: nuevo segundo parámetro. La limpieza usa `removeFromQueue(key, false)` para NO devolver el item a Pendientes.
+- Aplica a BG y SP. Edge conocido: el filtro trae `maxResults: 50`; si hubiera >50 matches, un item con estado cambiado más allá de la página 1 podría limpiarse aunque siguiera en el filtro (cola de verificación realista es chica).
+- Archivo: `bg_verificacion.html`.
+
+### 2026-06-17 — bg_verificacion.html: flujo de verificación generalizado a SP
+- El filtro "Mis tareas TECH" (SP) dejó de ser solo-lectura: ahora tiene el **flujo completo Pendientes → Cola → evidencia en QAA-172**, igual que BG (se revirtió la decisión de solo-lectura).
+- `proyectoFiltroActivo()` lee el proyecto destino de la JQL activa; `esModoVerificacion()` ahora habilita la Cola para **BG y SP** (cualquier otro filtro queda solo-lectura).
+- Labels de trazabilidad **derivados del proyecto origen** (no hardcodeados): `verificacion-<proj>` + `<proj>-<key>` (ej. `verificacion-sp`, `sp-sp-12`). Afecta `sincronizarSubtareaQAA` (baseLabels) y `buscarSubtareaQAAExistente` (labelKey).
+- `EpicFilter.getJqlClause()` (exclusión de módulos) solo se aplica si el filtro es BG.
+- Cosméticos generalizados al prefijo del proyecto: `buildDescription` ("Detalles del origen", "Estado" con status real en vez de "Under Review" fijo), modal preview, label de estado en la cola card ("SP (estado):").
+- `abrirRetest`: rutea a /bg-verificacion para cualquier label `verificacion-*` (antes solo `verificacion-bg`).
+- La sub-feature "Agregar tarea en BG" del queue card se **oculta** si el filtro no es BG.
+- `sincronizarSubtareaQAA` ya era casi genérica (usa `issue.key`); el resto del flujo (crear hijo QAA, links, adjuntos, transición) funciona igual para SP.
+- Archivo: `bg_verificacion.html`.
+
+### 2026-06-17 — bg_verificacion.html: selector multi-filtro desde el epic
+- La columna "Pendientes" ahora tiene un **selector de filtro** (`#filtro-selector`) que se puebla desde la descripción del epic QAA-172. Se oculta si hay un solo filtro.
+- El parser pasó de `extraerJqlDeADF` (primer bloque) a **`extraerFiltrosDeADF`**: toma cada code block con `project` cuyo **nodo ADF inmediatamente anterior es un heading**. El heading da el nombre del filtro. Así las JQL de la sección "Métricas" (precedidas por texto, no heading) quedan fuera del selector.
+- Estado: `filtros[]` + `filtroActivoIdx`; `jqlActivo()`; `esModoVerificacion()` = la JQL activa apunta a `project = BG`.
+- **Modo vista (filtro no-BG)**: `aplicarModoVista()` oculta la columna "Cola QAA" (`#cola-qaa-col`), la lista ocupa todo el ancho, y `makePendingCard` hace early-return (tarjeta de solo lectura: sin drag, sin "Cambiar estado"). La cláusula `EpicFilter.getJqlClause()` solo se aplica en modo BG.
+- **Epic QAA-172 (editado en vivo)**: en la descripción se renombró `### Filtro JQL:` → `### Verificación BG` y se agregó `### Mis tareas TECH` con `project = SP AND assignee = currentUser() ORDER BY cf[10019] ASC`. Convención: cada filtro del selector = heading `###` + code block inmediatamente debajo.
+- OJO: `currentUser()` resuelve al dueño del token que inyecta Server.JS. Si ese token no es la cuenta personal del usuario, el filtro TECH no mostrará "sus" tareas → en ese caso usar el accountId fijo.
+- Archivos: `bg_verificacion.html` + descripción de QAA-172 en Jira.
+
 ### 2026-06-17 — actividades.html: reporte dual BG + TECH (SP)
 - Checkbox "🐛 Reportar como bug en BG" renombrado a "🐛 BG"; agregado nuevo checkbox "🛠️ TECH".
 - TECH crea una **Tech Task** en el proyecto **SP** (LPV Tech, id 10303, cloudId d4aeb06d-33c0-40d9-b9c1-ed860026cfcf), vinculada al QAA con link `Relates`, mismo panel/descripción estilo reporte que BG.

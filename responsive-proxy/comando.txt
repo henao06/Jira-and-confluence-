@@ -1,47 +1,33 @@
-cd /home/sebastian/Jira-and-confluence-/responsive-proxy && ./tablet.sh
+================  tablet.sh — chuleta  ================
+cd /home/sebastian/Jira-and-confluence-/responsive-proxy
 
+  TRES MODOS (una tablet = UN solo transporte):
 
+  ./tablet.sh usb    [nombre]   cable permanente   -> runtime USB   (mas estable)
+  ./tablet.sh qr     [nombre]   pairing por QR     -> runtime WiFi
+  ./tablet.sh wifi   [nombre]   endpoint conocido  -> runtime WiFi
 
-para la primera ves === 
-cd /home/sebastian/Jira-and-confluence-/responsive-proxy && ./tablet.sh pair
- 
+  ./tablet.sh use      menu numerado: elegir tablet / cambiar tipo
+  ./tablet.sh status   ver cada tablet y por donde esta
+  ./tablet.sh cap      captura de pantalla -> /tmp/<tablet>-<fecha>.png
+  ./tablet.sh url      elegis URL(s) (ej 1 3 4) + tablet(s) (ej 1 2 o 'todos') -> Chrome
+  ./tablet.sh          reconecta TODAS segun su tipo guardado
 
+-------------------------------------------------------
+PRIMERA VEZ
+  USB : enchufa el cable  ->  ./tablet.sh usb
+  QR  : tablet -> Depuracion inalambrica -> "Vincular con QR"  ->  ./tablet.sh qr
 
-solo correr : ./tablet.sh
-vincular una nueva : ./tablet.sh pair  
+EN LA TABLET (Chrome): abri la MISMA url que en tu local
+  http://localhost:5173/#/login
+  http://localhost:5050
 
- Ver estado sin tocar nada │ ./tablet.sh status    
+DESVINCULAR / EMPEZAR DE CERO
+  borra la linea en devices.env  (o vacialo)  +  adb disconnect
 
-  Cada dispositivo se vincula por separado. En el nuevo dispositivo:
-
-  1. Tablet nueva → Depuración inalámbrica → ON → "Vincular con código".
-  2. En la PC:
-  ./tablet.sh pair
-  3. Le metés los datos de ESA tablet (IP:puerto de vincular + código + IP:puerto de conectar).
-
-  Listo, queda vinculada igual que la primera. Podés tener varias.
-
-  ▎ ⚠️  Ojo si conectás VARIAS a la vez: adb reverse se confunde con más de un dispositivo ("more than one device"). Si vas a usar varias en simultáneo, avisame y le 
-  ▎ agrego al script el -s para elegir cuál. Para una sola por vez, no hay drama.
-
-  Caso B — Olvidar / desvincular
-
-  Dos pasos:
-
-  1. En la tablet: Depuración inalámbrica → "Dispositivos vinculados" → tocás tu PC → "Olvidar".
-  2. En la PC (para cerrar la conexión):
-  adb disconnect
-
-  Y si después la querés volver a usar, arrancás de cero con ./tablet.sh pair (código nuevo y todo).
-
-  Resumen rápido
-
-  ┌────────────────────────────┬─────────────────────────────────────────┐
-  │         Querés...          │                Hacés...                 │
-  ├────────────────────────────┼─────────────────────────────────────────┤
-  │ Usar la de siempre         │ ./tablet.sh                             │
-  ├────────────────────────────┼─────────────────────────────────────────┤
-  │ Sumar un dispositivo nuevo │ ./tablet.sh pair (en el nuevo)          │
-  ├────────────────────────────┼─────────────────────────────────────────┤
-  │ Desvincular uno            │ "Olvidar" en la tablet + adb disconnect │
-  └────────────────────────────┴─────────────────────────────────────────┘
+-------------------------------------------------------
+NOTAS
+  - USB = cable puesto, el tunel viaja por el cable (no se cae por WiFi).
+  - WiFi = no dejes el cable enchufado o el tunel se pega al USB.
+  - devices.env -> fuente de verdad: nombre | serial | ip:puerto | tipo(usb|wifi)
+=======================================================

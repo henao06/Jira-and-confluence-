@@ -1127,6 +1127,11 @@ async function loadIssueForEdit(key, forceRetest = false) {
                      onerror="this.style.display='none'">
                 <button type="button" class="preview-remove" onclick="removeExistingBgAttachment(this,'${att.id}')">×</button>
                 <div class="preview-name" style="font-size:9px">[BG] ${shortName}</div>`;
+            } else if (att.mimeType?.startsWith('video/')) {
+              item.innerHTML = `
+                <video src="${proxyUrl}" title="${att.filename}" controls muted playsinline preload="metadata"></video>
+                <button type="button" class="preview-remove" onclick="removeExistingBgAttachment(this,'${att.id}')">×</button>
+                <div class="preview-name" style="font-size:9px">[BG] ${shortName}</div>`;
             } else {
               const ext = att.filename.split('.').pop().toUpperCase();
               item.innerHTML = `
@@ -1212,6 +1217,11 @@ async function loadIssueForEdit(key, forceRetest = false) {
           <img src="${proxyUrl}" title="${att.filename}"
                style="width:90px;height:72px;object-fit:cover;border-radius:8px;border:1.5px solid var(--border)"
                onerror="this.style.display='none'">
+          <button type="button" class="preview-remove" onclick="removeExistingAttachment(this,'${att.id}')">×</button>
+          <div class="preview-name">${shortName}</div>`;
+      } else if (att.mimeType?.startsWith('video/')) {
+        item.innerHTML = `
+          <video src="${proxyUrl}" title="${att.filename}" controls muted playsinline preload="metadata"></video>
           <button type="button" class="preview-remove" onclick="removeExistingAttachment(this,'${att.id}')">×</button>
           <div class="preview-name">${shortName}</div>`;
       } else {
@@ -1893,6 +1903,11 @@ function renderPreviews() {
           <div class="preview-name">${shortName}</div>`;
       };
       reader.readAsDataURL(file);
+    } else if (file.type.startsWith('video/')) {
+      item.innerHTML = `
+        <video src="${URL.createObjectURL(file)}" title="${file.name}" controls muted playsinline preload="metadata"></video>
+        <button type="button" class="preview-remove" onclick="removeImg(${i})" title="Quitar">×</button>
+        <div class="preview-name">${shortName}</div>`;
     } else {
       const ext = file.name.split('.').pop().toUpperCase();
       item.innerHTML = `
@@ -3014,11 +3029,14 @@ document.addEventListener('paste', e => {
   if (!items) return;
   let added = false;
   for (const item of items) {
-    if (!item.type.startsWith('image/')) continue;
+    const esImg   = item.type.startsWith('image/');
+    const esVideo = item.type.startsWith('video/');
+    if (!esImg && !esVideo) continue;
     const file = item.getAsFile();
     if (!file) continue;
-    const ext = item.type.split('/')[1] || 'png';
-    const named = new File([file], `captura-${Date.now()}.${ext}`, { type: item.type });
+    const ext   = item.type.split('/')[1] || (esVideo ? 'mp4' : 'png');
+    const base  = esVideo ? 'video' : 'captura';
+    const named = new File([file], `${base}-${Date.now()}.${ext}`, { type: item.type });
     uploadedFiles.push(named);
     added = true;
   }

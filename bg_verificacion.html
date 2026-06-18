@@ -1201,6 +1201,8 @@ a.badge-key:hover { color: #0052cc; border-color: #b3d4ff; background: #e9f2ff; 
     <div class="col-header">
       <div class="col-title">Pendientes</div>
       <span class="col-count zero" id="pending-count">0</span>
+      <select id="filtro-selector" onchange="seleccionarFiltro(this.value)" title="Filtro de la lista"
+              style="display:none;margin-left:8px;padding:3px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--white);color:var(--g7);cursor:pointer"></select>
       <button class="btn-reload" id="btn-reload" onclick="cargarPendientes()">
         <svg fill="none" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
         Recargar
@@ -1215,7 +1217,7 @@ a.badge-key:hover { color: #0052cc; border-color: #b3d4ff; background: #e9f2ff; 
   </div>
 
   <!-- COLA QAA -->
-  <div class="col-panel">
+  <div class="col-panel" id="cola-qaa-col">
     <div class="col-header">
       <div class="col-title">Cola QAA</div>
       <span class="col-count zero" id="queue-count">0</span>
@@ -1297,7 +1299,18 @@ const queue      = [];   // keys in queue order
 const colaItems  = {};   // key → { resultadosObtenidos: string, adjuntosNuevos: File[] }
 let   dragKey    = null;
 let   submitting = false;
-let   jql        = 'project = BG AND status = "Under Review" ORDER BY priority DESC, created DESC';
+// Filtros del selector — se pueblan desde la descripción del epic (heading → bloque JQL).
+// El primero es el fallback si el epic no carga. { name, jql }
+let filtros         = [{ name: 'Verificación BG', jql: 'project = BG AND status = 10261 ORDER BY priority DESC, created DESC' }];
+let filtroActivoIdx = 0;
+function jqlActivo()          { return filtros[filtroActivoIdx]?.jql || filtros[0].jql; }
+// Proyecto destino del filtro activo (BG, SP, …) leído de la JQL.
+function proyectoFiltroActivo() {
+  const m = jqlActivo().match(/project\s*=\s*([A-Za-z][A-Za-z0-9]+)/);
+  return m ? m[1].toUpperCase() : '';
+}
+// El flujo de verificación (Pendientes → Cola → evidencia en QAA) aplica a BG y SP.
+function esModoVerificacion() { return ['BG', 'SP'].includes(proyectoFiltroActivo()); }
 
 // ── Priority helpers ──────────────────────────────────────────────────────────
 
@@ -1339,20 +1352,30 @@ function extraerTextoADF(adf) {
 
 // ── JQL desde epic ────────────────────────────────────────────────────────────
 
-function extraerJqlDeADF(adf) {
-  if (!adf || !adf.content) return null;
-  function buscar(node) {
-    if (node.type === 'codeBlock') {
-      const text = (node.content || []).map(n => n.text || '').join('').trim();
-      if (text.toLowerCase().includes('project')) return text;
+// Texto plano de un nodo ADF (incluye descendientes).
+function _textoNodoADF(node) {
+  let s = '';
+  (function walk(n) { if (n.text) s += n.text; (n.content || []).forEach(walk); })(node);
+  return s.trim();
+}
+
+// Filtros del selector: cada codeBlock con "project" cuyo nodo inmediatamente
+// anterior es un heading. El heading da el nombre. Así las JQL de la sección
+// "Métricas" (precedidas por texto, no por heading) quedan fuera del selector.
+function extraerFiltrosDeADF(adf) {
+  const out = [];
+  if (!adf || !adf.content) return out;
+  const nodes = adf.content;
+  for (let i = 0; i < nodes.length; i++) {
+    if (nodes[i].type !== 'codeBlock') continue;
+    const code = _textoNodoADF(nodes[i]);
+    if (!/project/i.test(code)) continue;
+    const prev = nodes[i - 1];
+    if (prev && prev.type === 'heading') {
+      out.push({ name: _textoNodoADF(prev).replace(/:\s*$/, '').trim(), jql: code });
     }
-    for (const child of (node.content || [])) {
-      const found = buscar(child);
-      if (found) return found;
-    }
-    return null;
   }
-  return buscar(adf);
+  return out;
 }
 
 async function cargarJqlDesdeEpic() {
@@ -1360,11 +1383,40 @@ async function cargarJqlDesdeEpic() {
     const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${QAA_PARENT}?fields=description,customfield_10370`, {
       headers: { Accept: 'application/json' }
     });
-    if (!r.ok) return;
-    const data = await r.json();
-    const extraido = extraerJqlDeADF(data.fields?.description);
-    if (extraido) jql = extraido;
+    if (r.ok) {
+      const data = await r.json();
+      const encontrados = extraerFiltrosDeADF(data.fields?.description);
+      if (encontrados.length) { filtros = encontrados; filtroActivoIdx = 0; }
+    }
   } catch {}
+  renderFiltroSelector();
+  aplicarModoVista();
+}
+
+// ── Selector de filtro ─────────────────────────────────────────────────────────
+function renderFiltroSelector() {
+  const sel = document.getElementById('filtro-selector');
+  if (!sel) return;
+  sel.innerHTML = filtros.map((f, i) => `<option value="${i}">${esc(f.name)}</option>`).join('');
+  sel.value = String(filtroActivoIdx);
+  sel.style.display = filtros.length > 1 ? '' : 'none';   // si hay uno solo, no tiene sentido mostrarlo
+}
+
+function seleccionarFiltro(idx) {
+  filtroActivoIdx = Math.max(0, Math.min(filtros.length - 1, Number(idx) || 0));
+  aplicarModoVista();
+  cargarPendientes();
+}
+
+// En modo vista (filtro no-BG) se oculta la columna "Cola QAA" y la lista ocupa todo.
+function aplicarModoVista() {
+  const verif  = esModoVerificacion();
+  const cola   = document.getElementById('cola-qaa-col');
+  const twoCol = document.querySelector('.tab-panel[data-panel="verif"] .two-col');
+  const title  = document.querySelector('.tab-panel[data-panel="verif"] .col-title');
+  if (cola)   cola.style.display = verif ? '' : 'none';
+  if (twoCol) twoCol.style.gridTemplateColumns = verif ? '1fr 1fr' : '1fr';
+  if (title)  title.textContent = verif ? 'Pendientes' : (filtros[filtroActivoIdx]?.name || 'Tareas');
 }
 
 // ── Load pending ─────────────────────────────────────────────────────────────
@@ -1387,8 +1439,8 @@ async function cargarPendientes() {
     body.innerHTML = '';
     body.appendChild(_crearLoadingEl());
 
-    const epicClause = EpicFilter.getJqlClause();
-    let finalJql = jql;
+    const epicClause = (proyectoFiltroActivo() === 'BG') ? EpicFilter.getJqlClause() : '';
+    let finalJql = jqlActivo();
     if (epicClause) {
       const orderByIdx = finalJql.toLowerCase().indexOf(' order by');
       finalJql = orderByIdx >= 0
@@ -1408,10 +1460,20 @@ async function cargarPendientes() {
     const data = await r.json();
 
     const issues = data.issues || [];
+
+    // Limpiar de la Cola las tarjetas a las que ya se les cambió el estado y que
+    // salieron del filtro (ya no son del usuario) — no se devuelven a Pendientes.
+    const resultKeys = new Set(issues.map(i => i.key));
+    for (const key of [...queue]) {
+      if (colaItems[key]?.bgTransitionAplicada && !resultKeys.has(key)) {
+        removeFromQueue(key, false);
+      }
+    }
+
     body.innerHTML = '';
 
     if (issues.length === 0) {
-      body.appendChild(makeEmptyState('No hay bugs Under Review en BG'));
+      body.appendChild(makeEmptyState(esModoVerificacion() ? 'No hay items en la cola de verificación' : 'No hay tareas en este filtro'));
       updatePendingCount();
       return;
     }
@@ -1471,7 +1533,7 @@ async function refrescarCardsEnCola() {
 
       const lbl = document.querySelector(`#drop-zone .bug-card[data-key="${key}"] .estado-row-label`);
       if (lbl && estadoActual && !item.bgTransitionAplicada) {
-        lbl.textContent = `BG (${estadoActual}):`;
+        lbl.textContent = `${key.split('-')[0]} (${estadoActual}):`;
       }
     } catch {}
   }
@@ -1524,7 +1586,7 @@ function makePendingCard(issue) {
 
   const card = document.createElement('div');
   card.className   = 'bug-card';
-  card.draggable   = true;
+  card.draggable   = esModoVerificacion();
   card.dataset.key = issue.key;
 
   card.innerHTML = `
@@ -1546,6 +1608,9 @@ function makePendingCard(issue) {
 
   const retestBtn = makeRetestBadge(f.summary, issue.key);
   if (retestBtn) card.querySelector('.card-top').appendChild(retestBtn);
+
+  // Modo vista (filtro no-BG): solo lectura, sin acciones de verificación ni drag.
+  if (!esModoVerificacion()) return card;
 
   // ── Cambiar estado inline ──
   const statusSection = document.createElement('div');
@@ -1824,9 +1889,10 @@ function makeQueueCard(issue) {
   const rowBG = document.createElement('div');
   rowBG.className = 'estado-row';
   rowBG.style.marginTop = '4px';
+  const projLbl = key.split('-')[0];   // BG / SP — prefijo del proyecto origen
   const lblBG = document.createElement('span');
   lblBG.className   = 'estado-row-label';
-  lblBG.textContent = 'BG:';
+  lblBG.textContent = `${projLbl}:`;
   const selBG = document.createElement('select');
   selBG.className = 'estado-select';
   selBG.id        = `bg-transition-${key}`;
@@ -1834,7 +1900,7 @@ function makeQueueCard(issue) {
   selBG.innerHTML = '<option value="">Cargando estados...</option>';
   const bgLabelBase = () => {
     const cur = item.bgCurrentStatus;
-    return cur ? `BG (${cur}):` : 'BG:';
+    return cur ? `${projLbl} (${cur}):` : `${projLbl}:`;
   };
   selBG.addEventListener('change', async () => {
     const transitionId = selBG.value;
@@ -1858,7 +1924,7 @@ function makeQueueCard(issue) {
       item.bgTransitionAplicada = true;
       item.selectedBgTransition = '';
       item.bgCurrentStatus      = estadoNombre;
-      lblBG.textContent = `BG (${estadoNombre}) ✓`;
+      lblBG.textContent = `${projLbl} (${estadoNombre}) ✓`;
       lblBG.style.color = '#059669';
     } catch (e) {
       item.selectedBgTransition = '';
@@ -1882,19 +1948,21 @@ function makeQueueCard(issue) {
   btnPreview.addEventListener('click', () => abrirModalPreview(key));
   sections.appendChild(btnPreview);
 
-  // 5. Agregar tarea en BG
-  const secTareasBG = document.createElement('div');
-  secTareasBG.className = 'tarea-bg-section';
-  const btnAgregarBG = document.createElement('button');
-  btnAgregarBG.className = 'btn-agregar-bg';
-  btnAgregarBG.type      = 'button';
-  btnAgregarBG.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Agregar tarea en BG`;
-  btnAgregarBG.addEventListener('click', e => {
-    e.stopPropagation();
-    agregarTareaBGPendiente(issue, secTareasBG);
-  });
-  sections.appendChild(btnAgregarBG);
-  sections.appendChild(secTareasBG);
+  // 5. Agregar tarea en BG (sólo en el flujo BG; no aplica a otros proyectos)
+  if (proyectoFiltroActivo() === 'BG') {
+    const secTareasBG = document.createElement('div');
+    secTareasBG.className = 'tarea-bg-section';
+    const btnAgregarBG = document.createElement('button');
+    btnAgregarBG.className = 'btn-agregar-bg';
+    btnAgregarBG.type      = 'button';
+    btnAgregarBG.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Agregar tarea en BG`;
+    btnAgregarBG.addEventListener('click', e => {
+      e.stopPropagation();
+      agregarTareaBGPendiente(issue, secTareasBG);
+    });
+    sections.appendChild(btnAgregarBG);
+    sections.appendChild(secTareasBG);
+  }
 
   info.appendChild(sections);
 
@@ -2050,11 +2118,11 @@ function abrirModalPreview(key) {
   const table = document.createElement('table');
   table.className = 'modal-table';
   [
-    ['Bug original',  key],
+    ['Origen',        key],
     ['Prioridad',     priority],
     ['Reportado por', reporter],
     ['Asignado a',    assignee],
-    ['Estado BG',     'Under Review'],
+    ['Estado',        f.status?.name || '—'],
     ['Creado',        created],
     ['Labels',        labels],
   ].forEach(([label, value]) => {
@@ -2258,7 +2326,7 @@ function addToQueue(key) {
 
     const lbl = document.querySelector(`#drop-zone .bug-card[data-key="${key}"] .estado-row-label`);
     if (lbl && estadoActual) {
-      lbl.textContent = `BG (${estadoActual}):`;
+      lbl.textContent = `${key.split('-')[0]} (${estadoActual}):`;
     }
 
     // 2) Check de link al Epic
@@ -2286,7 +2354,7 @@ function addToQueue(key) {
   updateSubmitBtn();
 }
 
-function removeFromQueue(key) {
+function removeFromQueue(key, volverAPendientes = true) {
   const idx = queue.indexOf(key);
   if (idx === -1) return;
   queue.splice(idx, 1);
@@ -2308,12 +2376,14 @@ function removeFromQueue(key) {
     dz.setAttribute('ondrop', 'onDrop(event)');
   }
 
-  const issue = bugs[key];
-  if (issue) {
-    const body = document.getElementById('pending-body');
-    const emptyState = body.querySelector('.state-empty, .state-error');
-    if (emptyState) emptyState.remove();
-    body.appendChild(makePendingCard(issue));
+  if (volverAPendientes) {
+    const issue = bugs[key];
+    if (issue) {
+      const body = document.getElementById('pending-body');
+      const emptyState = body.querySelector('.state-empty, .state-error');
+      if (emptyState) emptyState.remove();
+      body.appendChild(makePendingCard(issue));
+    }
   }
 
   updatePendingCount();
@@ -2564,13 +2634,13 @@ function buildDescription(issue) {
     version: 1,
     content: [
       mkPanel('info', [
-        mkH('Detalles del Bug BG'),
+        mkH('Detalles del origen'),
         mkTable([
-          mkTableRow('Bug original',  issue.key),
+          mkTableRow('Origen',        issue.key),
           mkTableRow('Prioridad',     priority),
           mkTableRow('Reportado por', reporter),
           mkTableRow('Asignado a',    assignee),
-          mkTableRow('Estado BG',     'Under Review'),
+          mkTableRow('Estado',        f.status?.name || '—'),
           mkTableRow('Creado',        created),
           mkTableRow('Labels',        labels),
         ])
@@ -2674,7 +2744,8 @@ async function subirTodoAQAA() {
 // ── Búsqueda de subtarea QAA existente para un BG dado ───────────────────────
 // Estrategia: JQL por label `bg-{bgkey}`. Fallback: scan de issuelinks del BG.
 async function buscarSubtareaQAAExistente(bgKey) {
-  const labelKey = 'bg-' + bgKey.toLowerCase();
+  // bgKey ya viene en minúsculas (ej. "bg-146" / "sp-12"); el prefijo es su proyecto.
+  const labelKey = bgKey.split('-')[0] + '-' + bgKey.toLowerCase();
   const fields   = 'summary,description,priority,fixVersions,labels,status,attachment,issuelinks';
 
   // 1) Intento por label
@@ -2772,7 +2843,9 @@ async function sincronizarSubtareaQAA(issue, finalizar = false) {
   const item   = colaItems[issue.key];
 
   const resultado = item?.resultadoVerificacion || '';
-  const baseLabels = ['verificacion-bg', 'bg-' + bgKey];
+  // Prefijo de trazabilidad según el proyecto origen (bg / sp / …).
+  const proj = issue.key.split('-')[0].toLowerCase();
+  const baseLabels = ['verificacion-' + proj, proj + '-' + bgKey];
   if (resultado === 'falla') baseLabels.push('retest');
 
   const expectedFields = {
@@ -3118,7 +3191,8 @@ async function abrirRetest(qaaKey) {
     if (r.ok) {
       const data   = await r.json();
       const labels = data.fields?.labels || [];
-      if (labels.includes('verificacion-bg')) {
+      // Evidencia de verificación (BG o SP) → el retest vuelve a esta herramienta.
+      if (labels.some(l => l.startsWith('verificacion-'))) {
         window.open('/bg-verificacion', '_blank');
         return;
       }

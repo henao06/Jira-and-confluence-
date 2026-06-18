@@ -12,6 +12,11 @@ const fs    = require('fs');
 const path  = require('path');
 const url   = require('url');
 
+// Forzar IPv4 en todas las requests salientes: la red no tiene ruta IPv6 y Node
+// intenta la IPv6 de Jira primero → ETIMEDOUT → 502. curl no falla porque hace
+// Happy Eyeballs (IPv4+IPv6 en paralelo). family:4 evita el intento IPv6.
+https.globalAgent.options.family = 4;
+
 // Cargar .env sin dependencias externas
 const envPath = path.join(__dirname, '.env');
 if (fs.existsSync(envPath)) {
