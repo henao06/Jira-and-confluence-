@@ -11,7 +11,11 @@
 #   ./tablet.sh use              -> menu interactivo: elegis tablet y/o cambias su tipo
 #   ./tablet.sh status           -> muestra cada tablet y POR DONDE esta
 #   ./tablet.sh cap    [nombre]  -> captura de pantalla a /tmp con timestamp
-#   ./tablet.sh url              -> elegis URL + tablet y la abre en Chrome
+#   ./tablet.sh url              -> elegis URL(s) + tablet(s) y las abre en Chrome
+#   ./tablet.sh clear            -> limpia cache/cookies/service-worker de Chrome
+#   ./tablet.sh stop             -> cierra Chrome
+#   ./tablet.sh logs   [nombre]  -> logcat de Chromium en vivo
+#   ./tablet.sh rec    [nombre]  -> graba la pantalla a /tmp (Ctrl+C para parar)
 #   ./tablet.sh                  -> reconecta TODAS segun el tipo guardado
 #
 # Por que "un transporte a la vez": el tunel `adb reverse` se ATA a UN transporte.
@@ -31,6 +35,7 @@ URLF="urls.env"
 PROXY_PORT="$(grep -E '^[[:space:]]*PORT[[:space:]]*=' proxy.env 2>/dev/null | head -1 | cut -d= -f2 | tr -d '[:space:]')"
 PROXY_PORT="${PROXY_PORT:-8090}"
 SCAN_RANGE="${SCAN_RANGE:-30000-65535}"
+CHROME="${CHROME:-com.android.chrome}"
 
 command -v adb >/dev/null 2>&1 || { echo "  [x] Falta adb: sudo apt install -y android-tools-adb"; exit 1; }
 [ -f "$ENVF" ] || printf '# nombre | serial | ip:puerto | tipo (usb|wifi)\n' > "$ENVF"
@@ -518,6 +523,86 @@ mode_url() {
   echo "  Listo: $opened/$total abierta(s)."
 }
 
+resolve_transport() {  # $1=serial hw -> transporte conectado (usb o net), o vacio
+  local d; d="$(transport_for "$1" usb)"; [ -z "$d" ] && d="$(transport_for "$1" net)"; echo "$d"
+}
+# resuelve un registro por nombre (o menu si no se pasa nombre); imprime "name|serial|ep|tipo"
+one_device() {  # $1=nombre opcional
+  local rec
+  if [ -n "${1:-}" ]; then
+    rec="$(env_lines | awk -F'|' -v want="$1" '{n=$1;gsub(/^[[:space:]]+|[[:space:]]+$/,"",n)} n==want{print;exit}')"
+    [ -z "$rec" ] && { echo "  [x] no hay tablet '$1' en $ENVF" >&2; return 1; }
+    echo "$rec"
+  else
+    pick_device
+  fi
+}
+
+# =====================================================================
+#  CLEAR  -> limpia cache/cookies/service-worker de Chrome (uno o varios)
+# =====================================================================
+mode_clear() {
+  local -a recs=(); local rec name serial ep tipo d ok=0
+  while IFS= read -r rec; do [ -n "$rec" ] && recs+=("$rec"); done < <(pick_devices)
+  [ "${#recs[@]}" -eq 0 ] && { echo "  no elegiste dispositivo."; return 1; }
+  for rec in "${recs[@]}"; do
+    IFS='|' read -r name serial ep tipo <<<"$rec"; serial="$(trim "$serial")"
+    d="$(resolve_transport "$serial")"
+    [ -z "$d" ] && { echo "  [x] $name no conectada -> salteo"; continue; }
+    adb -s "$d" shell pm clear "$CHROME" >/dev/null 2>&1 \
+      && { echo "  $name: Chrome limpiado (cache + cookies + service worker)"; ok=$((ok+1)); } \
+      || echo "  $name: [x] no pude limpiar"
+  done
+  echo "  Listo: $ok limpiada(s)."
+}
+
+# =====================================================================
+#  STOP  -> cierra Chrome (uno o varios)
+# =====================================================================
+mode_stop() {
+  local -a recs=(); local rec name serial ep tipo d
+  while IFS= read -r rec; do [ -n "$rec" ] && recs+=("$rec"); done < <(pick_devices)
+  [ "${#recs[@]}" -eq 0 ] && { echo "  no elegiste dispositivo."; return 1; }
+  for rec in "${recs[@]}"; do
+    IFS='|' read -r name serial ep tipo <<<"$rec"; serial="$(trim "$serial")"
+    d="$(resolve_transport "$serial")"
+    [ -z "$d" ] && { echo "  [x] $name no conectada -> salteo"; continue; }
+    adb -s "$d" shell am force-stop "$CHROME" >/dev/null 2>&1 && echo "  $name: Chrome cerrado" || echo "  $name: [x] fallo"
+  done
+}
+
+# =====================================================================
+#  LOGS  -> logcat de Chromium en vivo (un dispositivo)
+# =====================================================================
+mode_logs() {  # $1=nombre opcional
+  local rec name serial ep tipo d
+  rec="$(one_device "${1:-}")" || return 1
+  IFS='|' read -r name serial ep tipo <<<"$rec"; name="$(trim "$name")"; serial="$(trim "$serial")"
+  d="$(resolve_transport "$serial")"
+  [ -z "$d" ] && { echo "  [x] $name no conectada."; return 1; }
+  echo "  Logs de Chromium en $name (Ctrl+C para salir)..."
+  adb -s "$d" logcat -v time | grep --line-buffered -iE 'chromium|console'
+}
+
+# =====================================================================
+#  REC  -> graba la pantalla; Ctrl+C para parar; baja el mp4 a /tmp
+# =====================================================================
+mode_rec() {  # $1=nombre opcional
+  local rec name serial ep tipo d ts remote out
+  rec="$(one_device "${1:-}")" || return 1
+  IFS='|' read -r name serial ep tipo <<<"$rec"; name="$(trim "$name")"; serial="$(trim "$serial")"
+  d="$(resolve_transport "$serial")"
+  [ -z "$d" ] && { echo "  [x] $name no conectada."; return 1; }
+  ts="$(date +%Y%m%d-%H%M%S)"; remote="/sdcard/rec-${ts}.mp4"; out="/tmp/${name}-${ts}.mp4"
+  echo "  Grabando $name ... (Ctrl+C para parar, max 180s)"
+  trap ':' INT                 # Ctrl+C corta la grabacion pero seguimos al pull
+  adb -s "$d" shell screenrecord "$remote"
+  trap - INT
+  sleep 2                      # que el device cierre bien el mp4
+  adb -s "$d" pull "$remote" "$out" >/dev/null 2>&1 && echo "  video -> $out" || echo "  [x] no pude bajar el video"
+  adb -s "$d" shell rm -f "$remote" >/dev/null 2>&1
+}
+
 # =====================================================================
 #  Dispatch
 # =====================================================================
@@ -529,11 +614,15 @@ case "${1:-}" in
   status) mode_status ;;
   cap)    mode_cap "${2:-}" ;;
   url)    mode_url ;;
+  clear)  mode_clear ;;
+  stop)   mode_stop ;;
+  logs)   mode_logs "${2:-}" ;;
+  rec)    mode_rec "${2:-}" ;;
   "")     ensure_proxy; reconnect_all; print_urls ;;
   -h|--help|help)
     grep -E '^#( |=)' "$0" | sed -E 's/^# ?//' | head -40 ;;
   *)
     echo "  [x] comando desconocido: '$1'"
-    echo "      uso: ./tablet.sh [ qr | usb | wifi | use | status | cap | url ]  (sin args = reconecta todas)"
+    echo "      uso: ./tablet.sh [ qr | usb | wifi | use | status | cap | url | clear | stop | logs | rec ]"
     exit 1 ;;
 esac
