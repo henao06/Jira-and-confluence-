@@ -1,89 +1,106 @@
-# QA Suite — Test Cases, Bugs y Releases sobre Jira
+# Jira & Confluence QA Toolkit
 
-Aplicación web liviana para gestionar el ciclo de QA directamente sobre **Jira Cloud**:
-ejecutar y documentar test cases, verificar bugs, seguir cobertura e historial, y publicar
-reportes de release en Confluence. Todo desde el navegador, sin frameworks ni build.
+A self-hosted QA management platform that integrates with Atlassian Jira and Confluence Cloud APIs. Built with vanilla Node.js (zero dependencies), it provides a complete workflow for creating, tracking, and reporting test cases directly from a local web interface.
 
-> **100% configurable.** No hay ningún identificador de organización hardcodeado en el código.
-> Apuntás el `.env` a **tu** instancia de Jira, con **tus** proyectos y campos, y funciona.
+## Features
 
----
+### QA Test Case Manager (`Qa_form.html`)
+- Create structured QA test cases as Jira issues with ADF (Atlassian Document Format) rich content
+- Auto-generated tables with test metadata, steps, expected vs actual results
+- Version management system tied to Jira releases
+- Edit existing test cases inline
+- Epic-based organization with persistent filters
 
-## Requisitos
+### Bug & Tech Task Reporter (`bg_reporter.js`)
+- Create linked bug reports (BG project) and technical tasks (SP project) from any test case
+- Cross-project assignee selection with intersection logic
+- Auto-linked issues with full traceability back to the originating test case
 
-- **Node.js** 18+ (sin dependencias externas — solo la librería estándar)
-- Una cuenta de **Jira Cloud** con un **API token**
-  (generalo en https://id.atlassian.com/manage-profile/security/api-tokens)
+### Bulk Test Case Generator (`bulk-epic.js`)
+- Scans Epic descriptions for `QA_STRUCTURE` JSON configuration
+- Detects missing test cases by cross-referencing configured vs executed tests
+- Batch-creates all missing test cases with proper ADF structure
 
-## Puesta en marcha (5 minutos)
+### QA History & Metrics (`history.html`)
+- Full execution history with filtering by Epic, version, and status
+- Missing test case panel per Epic
+- Direct links to Jira issues for quick navigation
+
+### Bug Verification Dashboard (`bg_verificacion.html`)
+- Review and verify reported bugs
+- Transition issues through Jira workflows
+- Filter by Epic with persistent preferences
+
+### Activities Tracker (`actividades.html`)
+- Step-by-step activity logging
+- Dual mode: simple text or structured steps
+- Linked to Jira issues with auto-generated ADF content
+
+### Jira JSON Editor (`jira_editor.html`)
+- Direct JSON editor for Epic `QA_STRUCTURE` descriptions
+- Syntax-highlighted code editor with validation
+- Schema hints and live status bar
+
+### Confluence MCP Server (`mcp-confluence/`)
+- Model Context Protocol server exposing 25+ Confluence operations as tools
+- Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client
+- Operations: pages, spaces, attachments, comments, labels, whiteboards, users, CQL queries
+- Built with Python, `mcp` SDK, and `httpx`
+
+### Responsive Proxy (`responsive-proxy/`)
+- LAN proxy for testing the app on tablets and mobile devices
+- Host spoofing, CORS injection, and JS bundle rewriting on the fly
+- Zero dependencies, pure Node.js
+
+## Tech Stack
+
+- **Backend**: Node.js (vanilla HTTP/HTTPS, zero dependencies)
+- **Frontend**: Vanilla HTML/CSS/JS with custom component architecture
+- **APIs**: Jira REST API v3, Confluence REST API v1/v2
+- **Auth**: Basic auth with Atlassian API tokens
+- **MCP Server**: Python 3, `mcp` SDK, `httpx`
+
+## Setup
 
 ```bash
-# 1. Copiá la plantilla de configuración
+# 1. Clone the repo
+git clone https://github.com/henao06/Jira-and-confluence-.git
+cd Jira-and-confluence-
+
+# 2. Create .env from template
 cp .env.example .env
 
-# 2. Editá .env con los datos de tu instancia (ver tabla abajo)
-#    Mínimo obligatorio: JIRA_HOST, JIRA_EMAIL, JIRA_TOKEN, PORT, QA_PROJECT
+# 3. Configure your Atlassian credentials
+#    - JIRA_HOST: your-domain.atlassian.net
+#    - JIRA_EMAIL: your email
+#    - JIRA_TOKEN: API token from https://id.atlassian.com/manage-profile/security/api-tokens
+#    - PORT: server port (e.g. 8080)
 
-# 3. Levantá el servidor
+# 4. Run the server
 node Server.JS
 
-# 4. Abrí el navegador
-#    http://localhost:8080   (o el PORT que hayas puesto)
+# 5. Open in browser
+open http://localhost:8080
 ```
 
-Si falta alguna variable obligatoria, el servidor muestra una página de error clara
-indicando exactamente cuál — no arranca a medias.
+## Project Structure
 
-## Configuración
+```
+Server.JS              # Local HTTP server with Jira API proxy
+Qa_form.html           # QA test case creation form
+history.html           # Test execution history & metrics
+bg_verificacion.html   # Bug verification dashboard
+actividades.html       # Activity tracker
+jira_editor.html       # JSON editor for Epic QA structures
+bulk-epic.js           # Bulk test case generator
+bg_reporter.js         # Bug & tech task reporter
+epic-filter.js         # Persistent Epic filter component
+releases.js            # Jira version management
+styles.css             # Shared styles
+mcp-confluence/        # Confluence MCP server (Python)
+responsive-proxy/      # LAN proxy for mobile testing
+```
 
-Toda la configuración vive en `.env` (gitignoreado, nunca se sube). El servidor la lee y la
-expone al front-end como `window.APP_CONFIG` vía `/config.js`. Detalle completo de cada
-variable en **[`context/config.md`](context/config.md)** y en `.env.example`.
+## License
 
-| Grupo        | Variables | Obligatorio |
-|--------------|-----------|-------------|
-| Conexión     | `JIRA_HOST`, `JIRA_EMAIL`, `JIRA_TOKEN`, `PORT` | Sí |
-| Proyecto QA  | `QA_PROJECT` | Sí |
-| Proyectos    | `BUG_PROJECT`, `TECH_PROJECT` | Opcional (según features) |
-| Custom fields| `FIELD_EPIC_LINK`, `FIELD_REPORTER_EMAIL`, `FIELD_REPORTER_NAME`, `FIELD_CATEGORY`, `FIELD_BG_DEPENDENCY` | Opcional (vacío = feature off) |
-| Epics padre  | `EPIC_VERIFICATION`, `EPIC_ACTIVITIES` | Opcional |
-| Workflow     | `TRANSITION_FINALIZE`, `STATUS_BUG_UNDER_REVIEW`, `VERSION_PREFIX` | Opcional |
-| Confluence   | `CONFLUENCE_HISTORY_PAGE_ID`, `CONFLUENCE_SPACE` | Opcional |
-| Branding     | `ORG_NAME`, `APP_NAME` | Opcional |
-
-> **¿No sabés el ID de un custom field?** Con el server corriendo, entrá a
-> `http://localhost:PORT/debug/campos-qaa` o consultá `{JIRA_HOST}/rest/api/3/field`.
-
-## Pantallas
-
-| Ruta               | Pantalla | Qué hace |
-|--------------------|----------|----------|
-| `/`                | Test Case | Ejecutar y documentar un test case → crea el issue en Jira |
-| `/bg-verificacion` | Verificación de bugs | Verificar bugs y generar sus subtareas de QA; generación masiva por Epic |
-| `/history`         | Historial | Historial de test cases, cobertura y panel de retest |
-| `/actividades`     | Actividades | Tablero de actividades + reporte dual de bug / tarea técnica |
-| `/jira-editor`     | Editor | Editor JSON crudo de la estructura QA de un Epic |
-
-## Cómo funciona (arquitectura)
-
-`Server.JS` es un servidor Node puro que hace tres cosas:
-
-1. **Sirve los archivos estáticos** (HTML/JS/CSS) y las rutas amigables de arriba.
-2. **Proxy autenticado** a Jira (`/jira/*`) y Confluence (`/wiki/*`): inyecta la auth
-   (`Basic email:token`) del lado del server, así el token **nunca** viaja al navegador.
-3. **Expone la config** (`/config.js` → `window.APP_CONFIG`) para que el front no tenga
-   ningún valor de instancia hardcodeado.
-
-Todos los llamados del cliente van por `window.location.origin + '/jira'`. Detalle técnico
-en **[`context/architecture.md`](context/architecture.md)** y **[`context/jira.md`](context/jira.md)**.
-
-## Seguridad
-
-- El API token y todo dato sensible viven solo en `.env` (gitignoreado). Nunca en el código.
-- La autenticación se inyecta en el proxy del servidor; el navegador nunca ve las credenciales.
-- Antes de publicar el repo, revisá que tu `.env` real no esté trackeado: `git status`.
-
-## Extras
-
-- **`mcp-confluence/`** — servidor MCP (Python) para operar Confluence desde clientes MCP.
-- **`responsive-proxy/`** — herramienta de desarrollo para probar la app en tablets de la LAN.
+MIT
