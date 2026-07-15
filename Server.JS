@@ -33,7 +33,10 @@ const CONFIG_PATH = path.join(__dirname, 'qa-config.json');
 // ── Secretos de conexión (mutables: el wizard los reescribe sin reiniciar) ──────
 // Solo esto vive en .env. La config estructural (tableros, campos, epics, branding)
 // vive en qa-config.json. El token NUNCA se serializa a /config.js.
-let PORT       = parseInt(process.env.PORT, 10);
+// Puerto por defecto: la app SIEMPRE debe arrancar (aunque falte .env) para poder
+// servir /connect y generar el .env desde la UX. Sin PORT válido → 8080.
+const DEFAULT_PORT = 8080;
+let PORT       = Number.isInteger(parseInt(process.env.PORT, 10)) ? parseInt(process.env.PORT, 10) : DEFAULT_PORT;
 let JIRA_HOST  = process.env.JIRA_HOST;
 let JIRA_EMAIL = process.env.JIRA_EMAIL;
 let JIRA_TOKEN = process.env.JIRA_TOKEN;
@@ -177,6 +180,17 @@ function resolveConfig(raw) {
     },
     branding: { orgName: b.orgName || 'QA Suite', appName: b.appName || 'QA Automation' },
     labels: resolveLabels(raw),
+    // Tipos de issue (dependen del esquema de la instancia Jira: "Tarea"/"Task"/etc).
+    // Default en español como el resto; cualquier org los pisa desde qa-config.json → issueTypes.
+    // - testCase/techTask: tipo por defecto al crear en el proyecto QA / técnico.
+    // - options: catálogo de tipos para menús y selects (ej. el cambio de tipo en /history).
+    issueTypes: {
+      testCase: (raw.issueTypes && raw.issueTypes.testCase) || 'Tarea',
+      techTask: (raw.issueTypes && raw.issueTypes.techTask) || 'Tech Task',
+      options:  (raw.issueTypes && Array.isArray(raw.issueTypes.options) && raw.issueTypes.options.length)
+                  ? raw.issueTypes.options.filter(t => typeof t === 'string' && t.trim())
+                  : ['Tarea', 'Subtarea', 'Historia', 'Error'],
+    },
     // Metadata de tableros para el selector (Fase 2). Solo nombres/ids, sin secretos.
     boards: {
       qa:   boardMeta(boards.qa),
@@ -244,7 +258,7 @@ function applySecretsToEnv(secrets) {
   if (setLine.JIRA_HOST  !== undefined) { JIRA_HOST  = setLine.JIRA_HOST;  process.env.JIRA_HOST  = JIRA_HOST; }
   if (setLine.JIRA_EMAIL !== undefined) { JIRA_EMAIL = setLine.JIRA_EMAIL; process.env.JIRA_EMAIL = JIRA_EMAIL; }
   if (setLine.JIRA_TOKEN !== undefined) { JIRA_TOKEN = setLine.JIRA_TOKEN; process.env.JIRA_TOKEN = JIRA_TOKEN; }
-  if (setLine.PORT       !== undefined) { PORT = parseInt(setLine.PORT, 10); process.env.PORT = setLine.PORT; }
+  if (setLine.PORT !== undefined && Number.isInteger(parseInt(setLine.PORT, 10))) { PORT = parseInt(setLine.PORT, 10); process.env.PORT = setLine.PORT; }
   AUTH = buildAuth();
   return { portChanged: setLine.PORT !== undefined && parseInt(setLine.PORT, 10) !== oldPort };
 }

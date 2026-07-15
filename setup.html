@@ -351,6 +351,56 @@ input.wz-err, select.wz-err { border-color: var(--red) !important; box-shadow: 0
           </div>
         </div>
       </div>
+
+      <!-- ── Tipos de issue (opcional) ── -->
+      <div class="wz-group">
+        <div class="wz-group-hdr">
+          <span class="wz-group-title">Tipos de issue</span><span class="wz-group-tag opt">Opcional</span>
+        </div>
+        <div class="wz-banner info">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span>Deben coincidir con los tipos de tu Jira (ej. "Task" si está en inglés). Vacío = valores por defecto.</span>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label class="lbl">Tipo por defecto (Test Case)</label>
+            <input type="text" data-itype="testCase" placeholder="Tarea">
+          </div>
+          <div class="field">
+            <label class="lbl">Tipo por defecto (Tarea técnica)</label>
+            <input type="text" data-itype="techTask" placeholder="Tech Task">
+          </div>
+        </div>
+        <div class="field">
+          <label class="lbl">Catálogo de tipos (separados por coma)</label>
+          <input type="text" data-itype="options" placeholder="Tarea, Subtarea, Historia, Error">
+        </div>
+      </div>
+
+      <!-- ── Tipos de issue (opcional) ── -->
+      <div class="wz-group">
+        <div class="wz-group-hdr">
+          <span class="wz-group-title">Tipos de issue</span><span class="wz-group-tag opt">Opcional</span>
+        </div>
+        <div class="wz-banner info">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span>Definí los tipos de issue de tu Jira. Dejalos vacíos para usar los valores por defecto.</span>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label class="lbl">Tipo por defecto (Test Case)</label>
+            <input type="text" data-itype="testCase" placeholder="Tarea">
+          </div>
+          <div class="field">
+            <label class="lbl">Tipo por defecto (Tarea técnica)</label>
+            <input type="text" data-itype="techTask" placeholder="Tech Task">
+          </div>
+        </div>
+        <div class="field">
+          <label class="lbl">Catálogo de tipos (separados por coma)</label>
+          <input type="text" data-itype="options" placeholder="Tarea, Subtarea, Historia, Error">
+        </div>
+      </div>
     </div>
   </section>
 
@@ -480,6 +530,13 @@ input.wz-err, select.wz-err { border-color: var(--red) !important; box-shadow: 0
       var input = _$('input[data-lbl="' + k + '"]');
       if (input && labels[k]) input.value = labels[k];
     });
+
+    // Tipos de issue — sólo pre-llenar si hay valor; vacío => usa default del server
+    var it = c.issueTypes || {};
+    var itTc = _$('input[data-itype="testCase"]'); if (itTc && it.testCase) itTc.value = it.testCase;
+    var itTt = _$('input[data-itype="techTask"]'); if (itTt && it.techTask) itTt.value = it.techTask;
+    var itOp = _$('input[data-itype="options"]');
+    if (itOp && Array.isArray(it.options) && it.options.length) itOp.value = it.options.join(', ');
   }
 
   // ── /setup/status ──────────────────────────────────────────────────────────
@@ -768,6 +825,10 @@ input.wz-err, select.wz-err { border-color: var(--red) !important; box-shadow: 0
     var labels = _buildLabels();
     if (Object.keys(labels).length) cfg.labels = labels;
 
+    // Tipos de issue — sólo se serializa lo que tenga valor; vacío => usa default del server
+    var itypes = _buildIssueTypes();
+    if (Object.keys(itypes).length) cfg.issueTypes = itypes;
+
     return cfg;
   }
 
@@ -778,6 +839,18 @@ input.wz-err, select.wz-err { border-color: var(--red) !important; box-shadow: 0
       var val = inp ? inp.value.trim() : '';
       if (val) out[k] = val;
     });
+    return out;
+  }
+
+  function _buildIssueTypes() {
+    var out = {};
+    var tc = _$('input[data-itype="testCase"]'); if (tc && tc.value.trim()) out.testCase = tc.value.trim();
+    var tt = _$('input[data-itype="techTask"]'); if (tt && tt.value.trim()) out.techTask = tt.value.trim();
+    var op = _$('input[data-itype="options"]');
+    if (op && op.value.trim()) {
+      var list = op.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      if (list.length) out.options = list;
+    }
     return out;
   }
 

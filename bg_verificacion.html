@@ -2514,7 +2514,7 @@ function agregarTareaBGPendiente(issue, container) {
         fields: {
           project:   { key: APP_CONFIG.projects.bug },
           summary:   tarea.titulo.trim(),
-          issuetype:   { name: 'Tarea' },
+          issuetype:   { name: APP_CONFIG.issueTypes.testCase },
           labels:      ['qa-reported'],
           ...(f.priority?.name      ? { priority: { name: f.priority.name } }             : {}),
           ...(f.assignee?.accountId ? { assignee: { accountId: f.assignee.accountId } }   : {}),
@@ -2982,7 +2982,7 @@ async function sincronizarSubtareaQAA(issue, finalizar = false) {
         project:                     { key: APP_CONFIG.projects.qa },
         parent:                      { key: QAA_PARENT },
         [APP_CONFIG.fields.epicLink]: QAA_PARENT,
-        issuetype:                   { name: 'Tarea' },
+        issuetype:                   { name: APP_CONFIG.issueTypes.testCase },
         ...expectedFields
       }
     };

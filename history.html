@@ -191,6 +191,7 @@
 .p-it-historia { background:#ecfdf5; color:#047857; }
 .p-it-error    { background:#fef2f2; color:#b91c1c; }
 .p-it-epic     { background:#fff7ed; color:#c2410c; }
+.p-it-default  { background:#f1f5f9; color:#334155; }
 
 .jira-link {
   display:inline-flex; align-items:center; gap:4px; color:#2563eb;
@@ -897,7 +898,7 @@ function renderIssues(issues) {
       'Historia': 'p-it-historia',
       'Error':    'p-it-error',
       'Epic':     'p-it-epic',
-    })[itName] || '';
+    })[itName] || 'p-it-default';
 
     return `<tr>
       <td>
@@ -1219,12 +1220,11 @@ function openIssuetypePicker(event, key) {
   if (isToggle) return;
   activePopover = { key: pid };
   const btn = document.getElementById(`btn-it-${key}`);
-  showPopover(btn, 'Cambiar tipo de tarea', [
-    { label: 'Tarea',    onclick: `applyIssuetypeChange('${key}','Tarea')` },
-    { label: 'Historia', onclick: `applyIssuetypeChange('${key}','Historia')` },
-    { label: 'Error',    onclick: `applyIssuetypeChange('${key}','Error')` },
-    { label: 'Subtarea', onclick: `applyIssuetypeChange('${key}','Subtarea')` },
-  ]);
+  // Catálogo de tipos configurable (APP_CONFIG.issueTypes.options); nada quemado.
+  const _tipos = (APP_CONFIG.issueTypes && APP_CONFIG.issueTypes.options) || [];
+  showPopover(btn, 'Cambiar tipo de tarea',
+    _tipos.map(t => ({ label: t, onclick: `applyIssuetypeChange('${key}','${t.replace(/'/g, "\\'")}')` }))
+  );
 }
 
 async function applyIssuetypeChange(key, name) {

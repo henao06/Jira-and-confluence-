@@ -46,6 +46,25 @@
   .msg.ok  { display: block; background: #05261a; border: 1px solid #14603f; color: var(--g2); }
   .msg.err { display: block; background: var(--rbg); border: 1px solid #7f1d1d; color: var(--r); }
   .foot { margin-top: 18px; font-size: 11.5px; color: var(--muted); text-align: center; line-height: 1.5; }
+
+  /* Overlay de carga: cubre la pantalla durante el guardado/arranque para que la
+     transición se sienta suave y no parezca que la app se buggeó. */
+  .loading-overlay {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    align-items: center; justify-content: center; flex-direction: column; gap: 18px;
+    background: rgba(15, 23, 42, .82); backdrop-filter: blur(4px);
+    opacity: 0; transition: opacity .25s ease;
+  }
+  .loading-overlay.show { display: flex; opacity: 1; }
+  .spinner {
+    width: 46px; height: 46px; border-radius: 50%;
+    border: 3px solid rgba(121, 209, 174, .25); border-top-color: var(--g2);
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 14px; font-weight: 600; color: var(--txt); }
+  .loading-sub  { font-size: 12px; color: var(--muted); margin-top: -8px; }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
 </style>
 </head>
 <body>
@@ -85,6 +104,12 @@
     <div class="foot">Una vez conectado, personalizás tableros, campos y textos desde el configurador.</div>
   </div>
 
+  <div class="loading-overlay" id="loading">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loading-text">Conectando…</div>
+    <div class="loading-sub" id="loading-sub">Guardando la configuración</div>
+  </div>
+
 <script>
 (() => {
   const $ = id => document.getElementById(id);
@@ -113,6 +138,12 @@
 
   function show(kind, text) { const m = $('msg'); m.className = 'msg ' + kind; m.textContent = text; }
   function busy(v) { $('btn-test').disabled = v; $('btn-save').disabled = v; }
+  function overlay(on, text, sub) {
+    const o = $('loading');
+    if (text) $('loading-text').textContent = text;
+    if (sub)  $('loading-sub').textContent  = sub;
+    o.classList.toggle('show', !!on);
+  }
 
   $('btn-test').addEventListener('click', async () => {
     const host = $('host').value.trim(), email = $('email').value.trim(), token = $('token').value;
@@ -133,19 +164,20 @@
   $('btn-save').addEventListener('click', async () => {
     const p = payload();
     if (!Object.keys(p).length) { show('err', 'Completá al menos lo que falta.'); return; }
-    busy(true); show('ok', 'Guardando…');
+    busy(true); overlay(true, 'Conectando…', 'Guardando la configuración');
     try {
       const r = await fetch('/setup/secrets', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(p),
       });
       const d = await r.json();
-      if (!d.ok) { show('err', '✗ ' + (d.error || d.message || 'No se pudo guardar')); busy(false); return; }
-      if (d.needsRestart) { show('ok', '✓ Guardado. Cambiaste el puerto → reiniciá el servidor.'); busy(false); return; }
-      if ((d.missingSecrets || []).length) { show('err', 'Todavía falta: ' + d.missingSecrets.join(', ')); busy(false); return; }
-      show('ok', '✓ Conexión lista. Entrando…');
-      setTimeout(() => { window.location = '/'; }, 700);
-    } catch (e) { show('err', '✗ ' + e.message); busy(false); }
+      if (!d.ok) { overlay(false); show('err', '✗ ' + (d.error || d.message || 'No se pudo guardar')); busy(false); return; }
+      if (d.needsRestart) { overlay(false); show('ok', '✓ Guardado. Cambiaste el puerto → reiniciá el servidor.'); busy(false); return; }
+      if ((d.missingSecrets || []).length) { overlay(false); show('err', 'Todavía falta: ' + d.missingSecrets.join(', ')); busy(false); return; }
+      // Éxito: mantenemos el overlay y actualizamos el texto hasta la redirección.
+      overlay(true, 'Iniciando la aplicación…', 'Un momento, preparando todo');
+      setTimeout(() => { window.location = '/'; }, 800);
+    } catch (e) { overlay(false); show('err', '✗ ' + e.message); busy(false); }
   });
 })();
 </script>

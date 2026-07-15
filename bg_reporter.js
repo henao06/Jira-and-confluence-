@@ -135,10 +135,10 @@ async function _crearReporteIssue({ projectKey, issuetype, heading, tcId, desc, 
 
 /** Crea un bug en BG. El issuetype sigue al tipo de la actividad QAA. */
 async function crearBugBG(opts) {
-  return _crearReporteIssue({ ...opts, projectKey: APP_CONFIG.projects.bug, issuetype: opts.tipo || 'Tarea', heading: 'Reporte de Bug' });
+  return _crearReporteIssue({ ...opts, projectKey: APP_CONFIG.projects.bug, issuetype: opts.tipo || APP_CONFIG.issueTypes.testCase, heading: 'Reporte de Bug' });
 }
 
 /** Crea una tarea en SP (LPV Tech). El issuetype se elige en el selector "Tipo SP". */
 async function crearTechSP(opts) {
-  return _crearReporteIssue({ ...opts, projectKey: APP_CONFIG.projects.tech, issuetype: opts.tipo || 'Tech Task', heading: 'Tarea técnica' });
+  return _crearReporteIssue({ ...opts, projectKey: APP_CONFIG.projects.tech, issuetype: opts.tipo || APP_CONFIG.issueTypes.techTask, heading: 'Tarea técnica' });
 }

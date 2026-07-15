@@ -1608,7 +1608,7 @@ async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual
       project:     { key: APP_CONFIG.projects.bug },
       summary:     `${tcId} — ${desc}`,
       description: bgDescription,
-      issuetype:   { name: 'Tarea' },
+      issuetype:   { name: APP_CONFIG.issueTypes.testCase },
       labels:      [ `severity-${sevSuffix}`, ...moduloLabel.split('+').map(s => s.trim()).filter(Boolean), 'qa-reported', ...(versionActual ? [versionActual] : []) ],
       ...(bgAsignadoId ? { assignee: { accountId: bgAsignadoId } } : {}),
     }})
@@ -2866,7 +2866,7 @@ async function submitForm() {
           project:           { key: APP_CONFIG.projects.qa },
           parent:            { key: epic.key },
           summary,
-          issuetype:         { name: 'Tarea' },
+          issuetype:         { name: APP_CONFIG.issueTypes.testCase },
           [APP_CONFIG.fields.epicLink]: epic.key,
           priority:          { name: requiereConfig ? 'High' : 'Medium' },
           labels,
@@ -2891,7 +2891,7 @@ async function submitForm() {
             project:     { key: APP_CONFIG.projects.bug },
             summary:     summary,
             description: description,
-            issuetype:   { name: 'Tarea' },
+            issuetype:   { name: APP_CONFIG.issueTypes.testCase },
             labels:      labels,
             ...(versionActual ? { fixVersions: [{ name: versionActual }] } : {}),
           }})

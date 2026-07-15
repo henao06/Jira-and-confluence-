@@ -445,7 +445,7 @@ async function agregarAlHistorialConfluence({ version, motivo, observaciones, da
     return { title, rows, summary, passC, failC, blockedC, modTasa };
   };
 
-  // Known Epics first (QAA-172 and QAA-179), then the rest
+  // Known Epics first (verification + activities, de APP_CONFIG.epics), then the rest
   const EPIC_ORDER = [APP_CONFIG.epics.verification, APP_CONFIG.epics.activities];
   const sortedModules = [
     ...EPIC_ORDER.filter(k => byModule[k]).map(k => byModule[k]),

@@ -2,8 +2,8 @@
  * epic-filter.js — Filtro persistente de Epics por página
  * Uso:
  *   EpicFilter.init({ pageKey: 'bg-verificacion', container: document.getElementById('...'), onUpdate: () => reload() })
- *   EpicFilter.setEpics([{ key: 'QAA-1', name: 'Epic name' }, ...])
- *   EpicFilter.getJqlClause()  → ' AND "Epic Link" not in ("QAA-1","QAA-2")' | ''
+ *   EpicFilter.setEpics([{ key: 'PROJ-1', name: 'Epic name' }, ...])
+ *   EpicFilter.getJqlClause()  → ' AND "Epic Link" not in ("PROJ-1","PROJ-2")' | ''
  */
 
 const EpicFilter = (() => {

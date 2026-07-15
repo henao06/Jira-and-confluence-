@@ -317,7 +317,7 @@ function saveTextState() {
   try {
     localStorage.setItem('act_draft', JSON.stringify({
       titulo:   document.getElementById('titulo').value,
-      tipo:     document.getElementById('tipo-actividad')?.value || 'Tarea',
+      tipo:     document.getElementById('tipo-actividad')?.value || APP_CONFIG.issueTypes.testCase,
       modo:     modoActual,
       texto:    document.getElementById('texto-desc').value,
       pasos,
@@ -365,7 +365,7 @@ async function restoreState() {
           if (d.tipoBg && Array.from(s.options).some(o => o.value === d.tipoBg)) s.value = d.tipoBg;
         }
         if (d.tech) {
-          await loadTiposProyecto(APP_CONFIG.projects.tech, 'tech-tipo', 'Tech Task');
+          await loadTiposProyecto(APP_CONFIG.projects.tech, 'tech-tipo', APP_CONFIG.issueTypes.techTask);
           const s = document.getElementById('tech-tipo');
           if (d.tipoTech && Array.from(s.options).some(o => o.value === d.tipoTech)) s.value = d.tipoTech;
         }
@@ -421,7 +421,7 @@ function mkTable(rows) {
 const tiposCargados = {};   // projectKey -> true cuando ya se pobló su selector
 
 // Carga los issuetypes nivel 0 (no subtareas) de un proyecto en su <select>.
-async function loadTiposProyecto(projectKey, selId, preferido = 'Tarea') {
+async function loadTiposProyecto(projectKey, selId, preferido = (window.APP_CONFIG && APP_CONFIG.issueTypes && APP_CONFIG.issueTypes.testCase) || 'Tarea') {
   if (tiposCargados[projectKey]) return;
   const sel = document.getElementById(selId);
   if (!sel) return;
@@ -449,7 +449,7 @@ async function loadTiposProyecto(projectKey, selId, preferido = 'Tarea') {
 
 // El proyecto QA es el tablero base de la actividad: siempre se carga.
 async function loadTiposActividad() {
-  return loadTiposProyecto(APP_CONFIG.projects.qa, 'tipo-actividad', 'Tarea');
+  return loadTiposProyecto(APP_CONFIG.projects.qa, 'tipo-actividad', APP_CONFIG.issueTypes.testCase);
 }
 
 // ── BG: versiones y toggle ────────────────────────────────────────────────────
@@ -489,7 +489,7 @@ function onReportToggle() {
   document.getElementById('bg-tipo-wrap').style.display   = bug  ? 'flex' : 'none';
   document.getElementById('tech-tipo-wrap').style.display = tech ? 'flex' : 'none';
   if (bug)  loadTiposProyecto(APP_CONFIG.projects.bug, 'bg-tipo', 'Error');
-  if (tech) loadTiposProyecto(APP_CONFIG.projects.tech, 'tech-tipo', 'Tech Task');
+  if (tech) loadTiposProyecto(APP_CONFIG.projects.tech, 'tech-tipo', APP_CONFIG.issueTypes.techTask);
   if (bug || tech) loadBgVersions();
   saveTextState();
 }
@@ -636,7 +636,7 @@ async function submitActividad() {
         parent:            { key: EPIC_KEY },
         [APP_CONFIG.fields.epicLink]: EPIC_KEY,
         summary:           titulo,
-        issuetype:         { name: document.getElementById('tipo-actividad').value || 'Tarea' },
+        issuetype:         { name: document.getElementById('tipo-actividad').value || APP_CONFIG.issueTypes.testCase },
         ...(window.versionActual ? { fixVersions: [{ name: window.versionActual }] } : {}),
         ...(description ? { description } : {}),
       }}),
@@ -713,7 +713,7 @@ async function submitActividad() {
       // ── TECH (SP) ──
       if (reportarTech) {
         btn.textContent = `Creando tarea en ${APP_CONFIG.projects.tech}…`;
-        const tech = await crearTechSP({ ...reporteBase, tipo: document.getElementById('tech-tipo').value || 'Tech Task' });
+        const tech = await crearTechSP({ ...reporteBase, tipo: document.getElementById('tech-tipo').value || APP_CONFIG.issueTypes.techTask });
         techKey = tech.key;
         await subirAdjuntos(techKey, APP_CONFIG.projects.tech);
       }
@@ -756,7 +756,8 @@ function resetForm() {
   clearDraft();
   document.getElementById('titulo').value      = '';
   const tipoSel = document.getElementById('tipo-actividad');
-  if (Array.from(tipoSel.options).some(o => o.value === 'Tarea')) tipoSel.value = 'Tarea';
+  var _prefTipo = APP_CONFIG.issueTypes.testCase;
+  if (Array.from(tipoSel.options).some(o => o.value === _prefTipo)) tipoSel.value = _prefTipo;
   document.getElementById('texto-desc').value  = '';
   document.getElementById('pasos-wrap').innerHTML = `
     <div class="step-row">

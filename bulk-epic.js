@@ -404,7 +404,7 @@ async function _generarTC(tc, epic, resultado, textoObtenido, numero) {
       parent:            { key: epic.key },
       [APP_CONFIG.fields.epicLink]: epic.key,
       summary,
-      issuetype:         { name: 'Tarea' },
+      issuetype:         { name: APP_CONFIG.issueTypes.testCase },
       priority:          { name: bulkState.prioridad || 'Medium' },
       labels,
       description,
