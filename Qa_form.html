@@ -7,6 +7,8 @@
 <title>QA Testing</title>
 <link rel="stylesheet" href="/styles.css">
 <script src="/epic-filter.js"></script>
+<script src="/board-switcher.js"></script>
+<script src="/labels.js"></script>
 <script>document.title = window.APP_CONFIG.branding.appName;</script>
 </head>
 <body>
@@ -24,6 +26,7 @@
     <p id="hdr-subtitle"></p>
   </div>
   <div class="hdr-right">
+    <div id="board-switcher-container"></div>
     <div class="hdr-badges">
       <a class="badge badge-version" id="version-actual" href="#" target="_blank" title="Ver publicaciones en Jira">...</a>
       <button class="btn-version-avanzar" id="btn-avanzar-version" onclick="promptAvanzarVersion()" title="Nueva versión">
@@ -425,17 +428,17 @@
     <button class="btn-reset" onclick="resetForm()">Limpiar formulario</button>
     <label class="config-check-label">
       <input type="checkbox" id="requiere-config" onchange="toggleConfigSection(this)">
-      <span>⚙️ Requiere configuración</span>
+      <span>⚙️ <span data-label="requiresConfig">Requiere configuración</span></span>
     </label>
     <label class="config-check-label" id="bug-check-label" style="opacity:.4;cursor:not-allowed" title="Solo disponible cuando el resultado es Fail">
       <input type="checkbox" id="reportar-bug" disabled onchange="toggleBgAssignee(this)">
-      <span>🐛 Reportar como bug</span>
+      <span>🐛 <span data-label="reportBug">Reportar como bug</span></span>
     </label>
     <label class="checkbox-label">
-      <input type="checkbox" id="registrarEnBG"> Finalizar bug
+      <input type="checkbox" id="registrarEnBG"> <span data-label="finalizeBug">Finalizar bug</span>
     </label>
     <label class="checkbox-label">
-      <input type="checkbox" id="registrarEnQAAFinalizada"> Finalizar TC
+      <input type="checkbox" id="registrarEnQAAFinalizada"> <span data-label="finalizeTestCase">Finalizar TC</span>
     </label>
     <button class="btn-submit" id="btn-submit" onclick="submitForm()">
       <svg id="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -3128,6 +3131,7 @@ EpicFilter.init({
   container: document.getElementById('epic-filter-container'),
   onUpdate:  filtrarModuloSelect
 });
+BoardSwitcher.init({ container: document.getElementById('board-switcher-container') });
 EpicFilter.loadEpicsFromJira(window.location.origin + '/jira');
 </script>
 <script src="/releases.js"></script>

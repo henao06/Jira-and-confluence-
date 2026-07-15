@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Configuración inicial · QA Suite</title>
+<!-- config.js PRIMERO: expone window.APP_CONFIG para prefill -->
+<script src="/config.js"></script>
+<link rel="stylesheet" href="/styles.css">
+<style>
+/* ── Wizard-only (scoped) ─────────────────────────────────────────────── */
+.wz-page { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+/* Stepper simple (sin barra de progreso) */
+.wz-stepper { display: flex; flex-wrap: wrap; gap: 8px; }
+.wz-stepper button {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--white); border: 1.5px solid var(--border);
+  border-radius: 100px; padding: 6px 13px 6px 6px;
+  font-family: inherit; font-size: 12px; font-weight: 600; color: var(--muted);
+  cursor: pointer; transition: all .15s;
+}
+.wz-stepper button .wz-dot {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--g1); color: var(--g7);
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.wz-stepper button.active { border-color: var(--g6); color: var(--g8); box-shadow: 0 0 0 3px rgba(29,158,117,.1); }
+.wz-stepper button.active .wz-dot { background: var(--g7); color: #fff; }
+.wz-stepper button.done .wz-dot { background: var(--g6); color: #fff; }
+.wz-stepper button.has-problem { border-color: var(--red-b); color: var(--red); }
+.wz-stepper button.has-problem .wz-dot { background: var(--red-bg); color: var(--red); }
+
+/* Banner informativo */
+.wz-banner {
+  display: flex; align-items: flex-start; gap: 10px;
+  border-radius: var(--r); padding: 11px 14px;
+  font-size: 12.5px; line-height: 1.5;
+}
+.wz-banner.info  { background: var(--g0); border: 1.5px solid var(--g1); color: var(--sub); }
+.wz-banner.warn  { background: var(--amber-bg); border: 1.5px solid var(--amber-b); color: var(--amber); }
+.wz-banner.ok    { background: rgba(16,185,129,.08); border: 1.5px solid #6ee7b7; color: #047857; }
+.wz-banner svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; }
+.wz-banner b { font-weight: 700; }
+
+/* Solo el paso activo visible */
+.wz-step { display: none; }
+.wz-step.active { display: block; }
+
+/* Input con error */
+input.wz-err, select.wz-err { border-color: var(--red) !important; box-shadow: 0 0 0 3px rgba(185,28,28,.1) !important; }
+.wz-field-msg { font-size: 10.5px; color: var(--red); font-weight: 600; margin-top: 3px; display: none; }
+.wz-field-msg.show { display: block; }
+
+/* Botón secundario dentro de fields (probar / detectar) */
+.wz-inline-btn {
+  align-self: flex-start;
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--white); border: 1.5px solid var(--g2);
+  border-radius: var(--r); padding: 9px 16px;
+  font-size: 12.5px; font-weight: 700; color: var(--g7);
+  cursor: pointer; font-family: inherit; transition: all .15s;
+}
+.wz-inline-btn:hover { background: var(--g0); border-color: var(--g4); }
+.wz-inline-btn:disabled { opacity: .55; cursor: not-allowed; }
+.wz-inline-btn .spinner { display: none; }
+.wz-inline-btn.loading .spinner { display: inline-block; border-top-color: var(--g7); border-color: rgba(15,110,86,.25); }
+
+/* Resultado de test/detect */
+.wz-result { font-size: 12.5px; font-weight: 600; display: none; align-items: center; gap: 7px; margin-top: 2px; }
+.wz-result.show { display: flex; }
+.wz-result.ok  { color: #047857; }
+.wz-result.bad { color: var(--red); }
+.wz-result svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+.wz-link { font-size: 11.5px; color: var(--g7); font-weight: 600; text-decoration: none; }
+.wz-link:hover { text-decoration: underline; }
+
+/* Tableros */
+.wz-group { border-top: 1px solid var(--border); padding-top: 16px; margin-top: 4px; }
+.wz-group:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+.wz-group-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.wz-group-title { font-size: 12px; font-weight: 700; color: var(--g9); text-transform: uppercase; letter-spacing: .05em; }
+.wz-group-tag {
+  font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  border-radius: 100px; padding: 2px 8px;
+}
+.wz-group-tag.req { background: var(--g1); color: var(--g8); }
+.wz-group-tag.opt { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+
+.wz-board {
+  border: 1.5px solid var(--border); border-radius: var(--rl);
+  padding: 14px 16px; margin-bottom: 10px; background: var(--g0);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.wz-board-top { display: flex; align-items: center; gap: 10px; }
+.wz-radio { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--sub); cursor: pointer; white-space: nowrap; }
+.wz-radio input { width: 15px; height: 15px; accent-color: var(--g7); cursor: pointer; }
+.wz-board-top .wz-brm { margin-left: auto; }
+
+.wz-brm {
+  width: 26px; height: 26px; flex-shrink: 0;
+  border-radius: 50%; border: 1.5px solid var(--border);
+  background: var(--white); color: var(--muted);
+  font-size: 16px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: all .15s;
+}
+.wz-brm:hover:not(:disabled) { border-color: var(--red-b); color: var(--red); background: var(--red-bg); }
+.wz-brm:disabled { opacity: .35; cursor: not-allowed; }
+
+/* Resumen (paso 4) */
+.wz-sum { display: flex; flex-direction: column; gap: 2px; }
+.wz-sum-block { padding: 12px 0; border-bottom: 1px dashed var(--border); }
+.wz-sum-block:last-child { border-bottom: none; }
+.wz-sum-h { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--g7); margin-bottom: 7px; }
+.wz-sum-row { display: flex; gap: 10px; font-size: 12.5px; padding: 2px 0; }
+.wz-sum-k { color: var(--muted); min-width: 150px; }
+.wz-sum-v { color: var(--text); font-weight: 600; word-break: break-word; }
+.wz-sum-v.mono { font-family: 'SF Mono','Fira Code',monospace; font-size: 12px; }
+
+/* Navegación */
+.wz-nav { padding: 16px 24px; background: linear-gradient(0deg, var(--g0), var(--white)); border-top: 1px solid var(--border); display: flex; gap: 10px; align-items: center; }
+.wz-nav .wz-spacer { flex: 1; }
+.wz-next {
+  background: linear-gradient(135deg, var(--g8) 0%, var(--g6) 100%);
+  color: #fff; border: none; border-radius: var(--r);
+  padding: 12px 26px; font-size: 13.5px; font-weight: 700;
+  font-family: inherit; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  box-shadow: 0 2px 10px rgba(15,110,86,.28); transition: all .15s;
+}
+.wz-next:hover { transform: translateY(-1px); box-shadow: 0 4px 18px rgba(15,110,86,.38); }
+.wz-next:disabled { background: var(--g2); box-shadow: none; cursor: not-allowed; transform: none; }
+.wz-back {
+  background: var(--white); border: 1.5px solid var(--border);
+  border-radius: var(--r); padding: 12px 20px;
+  font-size: 13px; color: var(--sub); cursor: pointer; font-family: inherit; transition: all .15s;
+}
+.wz-back:hover { border-color: var(--g4); color: var(--g7); }
+
+/* Pantalla de éxito */
+.wz-done { text-align: center; padding: 40px 24px; }
+.wz-done .wz-done-icon {
+  width: 64px; height: 64px; margin: 0 auto 16px;
+  border-radius: 50%; background: #d1fae5;
+  display: flex; align-items: center; justify-content: center;
+}
+.wz-done .wz-done-icon svg { width: 32px; height: 32px; stroke: #047857; }
+.wz-done h2 { font-size: 20px; color: var(--text); margin-bottom: 6px; }
+.wz-done p { font-size: 13.5px; color: var(--sub); margin-bottom: 20px; }
+
+@media (max-width: 640px) {
+  .wz-sum-row { flex-direction: column; gap: 1px; }
+  .wz-sum-k { min-width: 0; }
+  .wz-nav { padding: 14px 18px; }
+}
+</style>
+</head>
+<body>
+<div class="wz-page">
+
+  <!-- ── Header ── -->
+  <header class="hdr">
+    <div class="hdr-icon">
+      <svg fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+      </svg>
+    </div>
+    <div class="hdr-text">
+      <h1>Configuración inicial</h1>
+      <p>Conectá tu Jira y dejá la app lista para trabajar</p>
+    </div>
+  </header>
+
+  <!-- Banner de estado global -->
+  <div id="wz-status-banner" class="wz-banner info" style="display:none"></div>
+
+  <!-- Stepper -->
+  <nav class="wz-stepper" id="wz-stepper"></nav>
+
+  <!-- ═══════════ PASO 1 · Tableros ═══════════ -->
+  <section class="card wz-step active" data-step="1">
+    <div class="sec-hdr">
+      <div class="sec-icon">
+        <svg fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+      </div>
+      <div><div class="sec-title">Tableros / Proyectos</div><div class="sec-sub">Definí los proyectos QA, Bug y Técnicos</div></div>
+      <div class="sec-num">1</div>
+    </div>
+    <div class="fields">
+      <!-- QA -->
+      <div class="wz-group">
+        <div class="wz-group-hdr">
+          <span class="wz-group-title">QA</span><span class="wz-group-tag req">Requerido</span>
+        </div>
+        <div id="boards-qa"></div>
+        <button type="button" class="btn-add" data-add="qa">+ Añadir tablero QA</button>
+      </div>
+      <!-- Bug -->
+      <div class="wz-group">
+        <div class="wz-group-hdr">
+          <span class="wz-group-title">Bugs</span><span class="wz-group-tag opt">Opcional</span>
+        </div>
+        <div id="boards-bug"></div>
+        <button type="button" class="btn-add" data-add="bug">+ Añadir tablero de Bugs</button>
+      </div>
+      <!-- Tech -->
+      <div class="wz-group">
+        <div class="wz-group-hdr">
+          <span class="wz-group-title">Técnicos</span><span class="wz-group-tag opt">Opcional</span>
+        </div>
+        <div id="boards-tech"></div>
+        <button type="button" class="btn-add" data-add="tech">+ Añadir tablero Técnico</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ PASO 2 · Campos ═══════════ -->
+  <section class="card wz-step" data-step="2">
+    <div class="sec-hdr">
+      <div class="sec-icon">
+        <svg fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
+      </div>
+      <div><div class="sec-title">Campos personalizados</div><div class="sec-sub">Mapeá los custom fields de tu Jira</div></div>
+      <div class="sec-num">2</div>
+    </div>
+    <div class="fields">
+      <div class="wz-banner info">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span>Pulsá <b>Detectar campos</b> para elegir de una lista, o escribí el <code>customfield_xxxxx</code> a mano.</span>
+      </div>
+      <button type="button" class="wz-inline-btn" id="btn-detect">
+        <span class="spinner"></span>
+        <span>Detectar campos</span>
+      </button>
+      <div class="wz-result" id="detect-result"></div>
+
+      <div class="field" data-fieldrow="reporterEmail">
+        <label class="lbl">Reporter Email</label>
+        <select data-fieldsel="reporterEmail" style="display:none"></select>
+        <input type="text" data-field="reporterEmail" placeholder="customfield_xxxxx">
+      </div>
+      <div class="field" data-fieldrow="reporterName">
+        <label class="lbl">Reporter Name</label>
+        <select data-fieldsel="reporterName" style="display:none"></select>
+        <input type="text" data-field="reporterName" placeholder="customfield_xxxxx">
+      </div>
+      <div class="field" data-fieldrow="category">
+        <label class="lbl">Categoría</label>
+        <select data-fieldsel="category" style="display:none"></select>
+        <input type="text" data-field="category" placeholder="customfield_xxxxx">
+      </div>
+      <div class="field" data-fieldrow="epicLink">
+        <label class="lbl">Epic Link <span class="hint">(default customfield_10014)</span></label>
+        <select data-fieldsel="epicLink" style="display:none"></select>
+        <input type="text" data-field="epicLink" placeholder="customfield_10014">
+      </div>
+      <div class="field" data-fieldrow="bgDependency">
+        <label class="lbl">Bug Dependency</label>
+        <select data-fieldsel="bgDependency" style="display:none"></select>
+        <input type="text" data-field="bgDependency" placeholder="customfield_xxxxx">
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ PASO 3 · Workflow + Confluence + Branding ═══════════ -->
+  <section class="card wz-step" data-step="3">
+    <div class="sec-hdr">
+      <div class="sec-icon">
+        <svg fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+      </div>
+      <div><div class="sec-title">Workflow, Confluence y marca</div><div class="sec-sub">Transiciones, historial y branding</div></div>
+      <div class="sec-num">3</div>
+    </div>
+    <div class="fields">
+      <div class="row2">
+        <div class="field">
+          <label class="lbl">Finalize transition ID</label>
+          <input type="text" data-wf="finalizeTransitionId" placeholder="ej: 31">
+        </div>
+        <div class="field">
+          <label class="lbl">Bug "under review" status ID</label>
+          <input type="text" data-wf="bugUnderReviewStatusId" placeholder="ej: 10012">
+        </div>
+      </div>
+      <div class="field">
+        <label class="lbl">Prefijo de versión <span class="hint">(default v)</span></label>
+        <input type="text" data-wf="versionPrefix" placeholder="v">
+      </div>
+
+      <!-- Confluence card -->
+      <div class="wz-board" style="background:var(--white)">
+        <div class="wz-board-top">
+          <span class="wz-group-title">Confluence</span>
+          <label class="wz-radio" style="margin-left:auto">
+            <input type="checkbox" id="cf-enabled"> Activar Confluence
+          </label>
+        </div>
+        <div id="cf-fields" style="display:none; flex-direction:column; gap:12px;">
+          <div class="field">
+            <label class="lbl">History Page ID</label>
+            <input type="text" data-cf="historyPageId" placeholder="ej: 123456789">
+          </div>
+          <div class="field">
+            <label class="lbl">Space</label>
+            <input type="text" data-cf="space" placeholder="ej: DOCS">
+          </div>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label class="lbl">Nombre de la organización</label>
+          <input type="text" data-br="orgName" placeholder="QA Suite">
+        </div>
+        <div class="field">
+          <label class="lbl">Nombre de la app</label>
+          <input type="text" data-br="appName" placeholder="QA Automation">
+        </div>
+      </div>
+
+      <!-- ── Textos de la interfaz (opcional) ── -->
+      <div class="wz-group">
+        <div class="wz-group-hdr">
+          <span class="wz-group-title">Textos de la interfaz</span><span class="wz-group-tag opt">Opcional</span>
+        </div>
+        <div class="wz-banner info">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span>Personalizá los textos de la app. Dejalos vacíos para usar los valores por defecto.</span>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label class="lbl">Botón: reportar bug</label>
+            <input type="text" data-lbl="reportBug" placeholder="Reportar como bug">
+          </div>
+          <div class="field">
+            <label class="lbl">Casilla: finalizar bug</label>
+            <input type="text" data-lbl="finalizeBug" placeholder="Finalizar bug">
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label class="lbl">Casilla: finalizar caso de prueba</label>
+            <input type="text" data-lbl="finalizeTestCase" placeholder="Finalizar caso">
+          </div>
+          <div class="field">
+            <label class="lbl">Filtro: requiere configuración</label>
+            <input type="text" data-lbl="requiresConfig" placeholder="Requiere configuración">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ PASO 4 · Revisar y guardar ═══════════ -->
+  <section class="card wz-step" data-step="4">
+    <div class="sec-hdr">
+      <div class="sec-icon">
+        <svg fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      </div>
+      <div><div class="sec-title">Revisar y guardar</div><div class="sec-sub">Verificá todo antes de confirmar</div></div>
+      <div class="sec-num">4</div>
+    </div>
+    <div class="fields">
+      <div id="wz-summary" class="wz-sum"></div>
+      <div class="wz-result" id="save-result"></div>
+    </div>
+    <!-- Pantalla de éxito (oculta) -->
+    <div class="wz-done" id="wz-done" style="display:none">
+      <div class="wz-done-icon">
+        <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <h2>¡Configuración guardada!</h2>
+      <p id="wz-done-note">Ya podés empezar a trabajar.</p>
+      <a href="/" class="wz-next" style="text-decoration:none">Ir a la app</a>
+    </div>
+  </section>
+
+  <!-- Navegación -->
+  <div class="wz-nav" id="wz-nav">
+    <button type="button" class="wz-back" id="btn-back">Atrás</button>
+    <div class="wz-spacer"></div>
+    <button type="button" class="wz-next" id="btn-next">Siguiente</button>
+  </div>
+
+</div>
+
+<script>
+/**
+ * setup.html — Asistente de personalización (tableros, campos, workflow, marca, textos)
+ * La conexión (host/email/token) se maneja aparte en /connect; acá se asume ya resuelta.
+ * IIFE única `Setup`. Funciones privadas con prefijo `_`.
+ * Contrato de servidor: /config.js, /setup/status, /setup/detect-fields, /setup/save.
+ */
+(function () {
+  'use strict';
+
+  // ── Estado ─────────────────────────────────────────────────────────────────
+  var _state = {
+    step: 1,
+    maxStep: 4,
+    seq: 0,                 // contador para IDs estables de tableros
+    boards: { qa: [], bug: [], tech: [] },
+    active: { qa: null, bug: null, tech: null },
+    detectedFields: [],
+    status: null
+  };
+
+  var FIELD_KEYS = ['reporterEmail', 'reporterName', 'category', 'epicLink', 'bgDependency'];
+  var LABEL_KEYS = ['reportBug', 'finalizeBug', 'finalizeTestCase', 'requiresConfig'];
+
+  // ── Utilidades ─────────────────────────────────────────────────────────────
+  function _$(sel, root) { return (root || document).querySelector(sel); }
+  function _$all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+  function _cfg() { return (typeof window !== 'undefined' && window.APP_CONFIG) || {}; }
+  function _slug(s) {
+    return String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+  function _newId(type, name) {
+    _state.seq += 1;
+    var base = _slug(name);
+    return base ? (type + '-' + base + '-' + _state.seq) : (type + '-' + _state.seq);
+  }
+  function _iconCheck() {
+    return '<svg fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>';
+  }
+  function _iconX() {
+    return '<svg fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  }
+
+  // ── Prefill desde APP_CONFIG (la conexión ya está resuelta en /connect) ─────
+  function _prefill() {
+    var c = _cfg();
+
+    // Paso 1 — tableros. APP_CONFIG usa forma plana (projects/epics); construimos 1 tablero por tipo.
+    var proj = c.projects || {};
+    var epics = c.epics || {};
+    var brand = c.branding || {};
+    if (proj.qa) {
+      _addBoard('qa', { name: (brand.appName || 'QA'), projectKey: proj.qa,
+        epics: { verification: epics.verification || '', activities: epics.activities || '' } }, false);
+    }
+    if (proj.bug) _addBoard('bug', { name: 'Bugs', projectKey: proj.bug }, false);
+    if (proj.tech) _addBoard('tech', { name: 'Técnicos', projectKey: proj.tech }, false);
+
+    // Paso 2 — fields
+    var f = c.fields || {};
+    FIELD_KEYS.forEach(function (k) {
+      var input = _$('input[data-field="' + k + '"]');
+      if (!input) return;
+      if (f[k]) input.value = f[k];
+    });
+    // epicLink default
+    var el = _$('input[data-field="epicLink"]');
+    if (el && !el.value) el.value = 'customfield_10014';
+
+    // Paso 3 — workflow
+    var wf = c.workflow || {};
+    if (wf.finalizeTransitionId != null) _$('input[data-wf="finalizeTransitionId"]').value = wf.finalizeTransitionId;
+    if (wf.bugUnderReviewStatusId != null) _$('input[data-wf="bugUnderReviewStatusId"]').value = wf.bugUnderReviewStatusId;
+    _$('input[data-wf="versionPrefix"]').value = wf.versionPrefix || 'v';
+
+    // Confluence
+    var cf = c.confluence || {};
+    var enabled = !!(cf.historyPageId || cf.space);
+    _$('#cf-enabled').checked = enabled;
+    if (cf.historyPageId) _$('input[data-cf="historyPageId"]').value = cf.historyPageId;
+    if (cf.space) _$('input[data-cf="space"]').value = cf.space;
+    _syncConfluence();
+
+    // Branding
+    _$('input[data-br="orgName"]').value = brand.orgName || 'QA Suite';
+    _$('input[data-br="appName"]').value = brand.appName || 'QA Automation';
+
+    // Textos de la interfaz (labels) — sólo pre-llenar si hay valor; vacío => usa default del server
+    var labels = c.labels || {};
+    LABEL_KEYS.forEach(function (k) {
+      var input = _$('input[data-lbl="' + k + '"]');
+      if (input && labels[k]) input.value = labels[k];
+    });
+  }
+
+  // ── /setup/status ──────────────────────────────────────────────────────────
+  function _loadStatus() {
+    return fetch('/setup/status', { headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (s) {
+        _state.status = s || {};
+        _applyStatus(_state.status);
+      })
+      .catch(function () {
+        _banner('warn', 'No se pudo consultar el estado del servidor. Podés configurar igualmente y guardar.');
+      });
+  }
+
+  function _applyStatus(s) {
+    // Banner global (la conexión ya está resuelta; acá sólo personalización)
+    if (s.needSetup === false) {
+      _banner('ok', 'Ya está configurado — podés editar y volver a guardar.');
+    } else {
+      _banner('info', 'Completá los pasos para dejar la app lista.');
+    }
+
+    // Problems por path
+    if (s.problems && s.problems.length) _showProblems(s.problems, false);
+  }
+
+  function _banner(kind, html) {
+    var b = _$('#wz-status-banner');
+    b.className = 'wz-banner ' + kind;
+    var icon = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+    b.innerHTML = icon + '<span>' + html + '</span>';
+    b.style.display = 'flex';
+  }
+
+  // ── Stepper ────────────────────────────────────────────────────────────────
+  var STEP_NAMES = ['Tableros', 'Campos', 'Workflow', 'Revisar'];
+  function _renderStepper() {
+    var nav = _$('#wz-stepper');
+    nav.innerHTML = '';
+    STEP_NAMES.forEach(function (name, i) {
+      var n = i + 1;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      var cls = '';
+      if (n === _state.step) cls = 'active';
+      else if (n < _state.step) cls = 'done';
+      btn.className = cls;
+      btn.innerHTML = '<span class="wz-dot">' + n + '</span><span>' + name + '</span>';
+      btn.addEventListener('click', function () { _goStep(n); });
+      nav.appendChild(btn);
+    });
+  }
+
+  // ── Navegación entre pasos ─────────────────────────────────────────────────
+  function _goStep(n) {
+    if (n < 1) n = 1;
+    if (n > _state.maxStep) n = _state.maxStep;
+    _state.step = n;
+
+    _$all('.wz-step').forEach(function (sec) {
+      sec.classList.toggle('active', Number(sec.getAttribute('data-step')) === n);
+    });
+
+    _renderStepper();
+
+    // Botones de navegación
+    _$('#btn-back').style.visibility = (n === 1) ? 'hidden' : 'visible';
+    var next = _$('#btn-next');
+    if (n === _state.maxStep) {
+      next.textContent = 'Guardar';
+    } else {
+      next.textContent = 'Siguiente';
+    }
+    if (n === _state.maxStep) _renderSummary();
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function _esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // ── Paso 1 · Tableros ──────────────────────────────────────────────────────
+  function _addBoard(type, data, focus) {
+    data = data || {};
+    var item = {
+      id: data.id || _newId(type, data.name),
+      name: data.name || '',
+      projectKey: data.projectKey || '',
+      epics: { verification: (data.epics && data.epics.verification) || '', activities: (data.epics && data.epics.activities) || '' }
+    };
+    _state.boards[type].push(item);
+    if (!_state.active[type]) _state.active[type] = item.id;
+    _renderBoards(type);
+    if (focus) {
+      var card = _$('.wz-board[data-id="' + item.id + '"]');
+      if (card) { var i = card.querySelector('input[data-bfield="name"]'); if (i) i.focus(); }
+    }
+  }
+
+  function _removeBoard(type, id) {
+    var arr = _state.boards[type];
+    if (type === 'qa' && arr.length <= 1) return; // no borrar el último QA
+    _state.boards[type] = arr.filter(function (b) { return b.id !== id; });
+    if (_state.active[type] === id) {
+      _state.active[type] = _state.boards[type].length ? _state.boards[type][0].id : null;
+    }
+    _renderBoards(type);
+  }
+
+  function _renderBoards(type) {
+    var host = _$('#boards-' + type);
+    if (!host) return;
+    host.innerHTML = '';
+    _state.boards[type].forEach(function (item, idx) {
+      host.appendChild(_renderBoardCard(type, item, idx));
+    });
+  }
+
+  function _renderBoardCard(type, item, idx) {
+    var isQA = type === 'qa';
+    var canRemove = !(isQA && _state.boards.qa.length <= 1);
+    var el = document.createElement('div');
+    el.className = 'wz-board';
+    el.setAttribute('data-id', item.id);
+
+    var epicsHtml = '';
+    if (isQA) {
+      epicsHtml =
+        '<div class="row2">' +
+          '<div class="field"><label class="lbl">Epic verificación</label>' +
+            '<input type="text" data-bfield="epicVer" placeholder="' + _esc(item.projectKey || 'KEY') + '-n" value="' + _esc(item.epics.verification) + '"></div>' +
+          '<div class="field"><label class="lbl">Epic actividades</label>' +
+            '<input type="text" data-bfield="epicAct" placeholder="' + _esc(item.projectKey || 'KEY') + '-n" value="' + _esc(item.epics.activities) + '"></div>' +
+        '</div>';
+    }
+
+    el.innerHTML =
+      '<div class="wz-board-top">' +
+        '<label class="wz-radio"><input type="radio" name="active-' + type + '" data-active="' + type + '" ' +
+          (_state.active[type] === item.id ? 'checked' : '') + '> Activo</label>' +
+        '<button type="button" class="wz-brm" data-brm ' + (canRemove ? '' : 'disabled') + ' title="Quitar tablero">&times;</button>' +
+      '</div>' +
+      '<div class="row2">' +
+        '<div class="field"><label class="lbl">Nombre</label>' +
+          '<input type="text" data-bfield="name" placeholder="ej: QA Web" value="' + _esc(item.name) + '"></div>' +
+        '<div class="field"><label class="lbl">Project key</label>' +
+          '<input type="text" data-bfield="projectKey" placeholder="ej: PROJ" value="' + _esc(item.projectKey) + '"></div>' +
+      '</div>' +
+      epicsHtml;
+
+    // Listeners
+    el.querySelector('input[data-active]').addEventListener('change', function () {
+      _state.active[type] = item.id;
+    });
+    var rm = el.querySelector('[data-brm]');
+    if (rm) rm.addEventListener('click', function () { _removeBoard(type, item.id); });
+
+    el.querySelectorAll('input[data-bfield]').forEach(function (inp) {
+      inp.addEventListener('input', function () {
+        var key = inp.getAttribute('data-bfield');
+        if (key === 'name') item.name = inp.value;
+        else if (key === 'projectKey') item.projectKey = inp.value.trim();
+        else if (key === 'epicVer') item.epics.verification = inp.value.trim();
+        else if (key === 'epicAct') item.epics.activities = inp.value.trim();
+      });
+    });
+
+    return el;
+  }
+
+  // ── Paso 2 · Detectar campos ───────────────────────────────────────────────
+  function _detectFields() {
+    var btn = _$('#btn-detect');
+    var out = _$('#detect-result');
+    btn.classList.add('loading'); btn.disabled = true;
+    out.className = 'wz-result'; out.innerHTML = '';
+
+    fetch('/setup/detect-fields', { headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'Respuesta inválida.' }; }); })
+      .then(function (d) {
+        if (d && d.ok && Array.isArray(d.fields)) {
+          _state.detectedFields = d.fields;
+          _populateFieldSelects(d.fields);
+          out.className = 'wz-result ok show';
+          out.innerHTML = _iconCheck() + '<span>' + d.fields.length + ' campos detectados. Elegí de la lista o escribí a mano.</span>';
+        } else {
+          out.className = 'wz-result bad show';
+          out.innerHTML = _iconX() + '<span>' + _esc((d && d.message) || 'No se pudieron detectar campos. Escribilos a mano.') + '</span>';
+        }
+      })
+      .catch(function () {
+        out.className = 'wz-result bad show';
+        out.innerHTML = _iconX() + '<span>Error de red. Podés escribir los campos a mano.</span>';
+      })
+      .finally(function () { btn.classList.remove('loading'); btn.disabled = false; });
+  }
+
+  function _populateFieldSelects(fields) {
+    FIELD_KEYS.forEach(function (key) {
+      var sel = _$('select[data-fieldsel="' + key + '"]');
+      var inp = _$('input[data-field="' + key + '"]');
+      if (!sel || !inp) return;
+      var opts = '<option value="">— elegir campo —</option>';
+      fields.forEach(function (f) {
+        var label = (f.name || f.id) + ' (' + f.id + ')';
+        var selAttr = (inp.value && inp.value === f.id) ? ' selected' : '';
+        opts += '<option value="' + _esc(f.id) + '"' + selAttr + '>' + _esc(label) + '</option>';
+      });
+      sel.innerHTML = opts;
+      sel.style.display = '';
+      sel.onchange = function () { if (sel.value) inp.value = sel.value; };
+    });
+  }
+
+  // ── Paso 3 · Confluence toggle ─────────────────────────────────────────────
+  function _syncConfluence() {
+    var on = _$('#cf-enabled').checked;
+    var box = _$('#cf-fields');
+    box.style.display = on ? 'flex' : 'none';
+    _$all('#cf-fields input').forEach(function (i) { i.disabled = !on; });
+  }
+
+  // ── Construcción del config (forma qa-config.json) ─────────────────────────
+  function _buildConfig() {
+    var boards = {};
+
+    // QA — requerido (>= 1). Sólo QA lleva epics.
+    var qaItems = _state.boards.qa
+      .filter(function (b) { return b.projectKey; })
+      .map(function (b) {
+        return {
+          id: b.id,
+          name: b.name || b.projectKey,
+          projectKey: b.projectKey,
+          epics: { verification: b.epics.verification || '', activities: b.epics.activities || '' }
+        };
+      });
+    boards.qa = {
+      activeBoardId: _pickActive('qa', qaItems),
+      items: qaItems
+    };
+
+    // Bug / Tech — opcionales: si no hay tableros válidos, se OMITE el tipo.
+    ['bug', 'tech'].forEach(function (type) {
+      var items = _state.boards[type]
+        .filter(function (b) { return b.projectKey; })
+        .map(function (b) { return { id: b.id, name: b.name || b.projectKey, projectKey: b.projectKey, epics: {} }; });
+      if (items.length) {
+        boards[type] = { activeBoardId: _pickActive(type, items), items: items };
+      }
+    });
+
+    var cfOn = _$('#cf-enabled').checked;
+
+    var cfg = {
+      version: 1,
+      boards: boards,
+      fields: {
+        reporterEmail: _fieldVal('reporterEmail'),
+        reporterName: _fieldVal('reporterName'),
+        category: _fieldVal('category'),
+        epicLink: _fieldVal('epicLink') || 'customfield_10014',
+        bgDependency: _fieldVal('bgDependency')
+      },
+      workflow: {
+        finalizeTransitionId: _$('input[data-wf="finalizeTransitionId"]').value.trim(),
+        bugUnderReviewStatusId: _$('input[data-wf="bugUnderReviewStatusId"]').value.trim(),
+        versionPrefix: _$('input[data-wf="versionPrefix"]').value.trim() || 'v'
+      },
+      confluence: {
+        enabled: cfOn,
+        historyPageId: cfOn ? _$('input[data-cf="historyPageId"]').value.trim() : '',
+        space: cfOn ? _$('input[data-cf="space"]').value.trim() : ''
+      },
+      branding: {
+        orgName: _$('input[data-br="orgName"]').value.trim() || 'QA Suite',
+        appName: _$('input[data-br="appName"]').value.trim() || 'QA Automation'
+      }
+    };
+
+    // Textos de la interfaz — sólo se serializan las claves con valor; vacío => usa default del server
+    var labels = _buildLabels();
+    if (Object.keys(labels).length) cfg.labels = labels;
+
+    return cfg;
+  }
+
+  function _buildLabels() {
+    var out = {};
+    LABEL_KEYS.forEach(function (k) {
+      var inp = _$('input[data-lbl="' + k + '"]');
+      var val = inp ? inp.value.trim() : '';
+      if (val) out[k] = val;
+    });
+    return out;
+  }
+
+  function _pickActive(type, items) {
+    var active = _state.active[type];
+    var exists = items.some(function (i) { return i.id === active; });
+    return (exists && active) ? active : (items.length ? items[0].id : '');
+  }
+
+  function _fieldVal(key) {
+    var inp = _$('input[data-field="' + key + '"]');
+    return inp ? inp.value.trim() : '';
+  }
+
+  // ── Paso 4 · Resumen ───────────────────────────────────────────────────────
+  function _renderSummary() {
+    var cfg = _buildConfig();
+
+    function block(title, rows) {
+      var html = '<div class="wz-sum-block"><div class="wz-sum-h">' + title + '</div>';
+      rows.forEach(function (r) {
+        html += '<div class="wz-sum-row"><div class="wz-sum-k">' + _esc(r[0]) + '</div>' +
+                '<div class="wz-sum-v' + (r[2] ? ' mono' : '') + '">' + _esc(r[1] || '—') + '</div></div>';
+      });
+      return html + '</div>';
+    }
+
+    var out = '';
+
+    // Tableros
+    var boardRows = [];
+    ['qa', 'bug', 'tech'].forEach(function (type) {
+      var b = cfg.boards[type];
+      if (!b) return;
+      b.items.forEach(function (it) {
+        var mark = (it.id === b.activeBoardId) ? ' ★' : '';
+        var extra = (type === 'qa' && (it.epics.verification || it.epics.activities))
+          ? ('  [ver:' + (it.epics.verification || '—') + ' / act:' + (it.epics.activities || '—') + ']') : '';
+        boardRows.push([type.toUpperCase() + mark, (it.name || it.projectKey) + ' · ' + it.projectKey + extra, false]);
+      });
+    });
+    out += block('Tableros', boardRows);
+
+    out += block('Campos', FIELD_KEYS.map(function (k) { return [k, cfg.fields[k], true]; }));
+
+    out += block('Workflow', [
+      ['Finalize transition', cfg.workflow.finalizeTransitionId, true],
+      ['Bug under review', cfg.workflow.bugUnderReviewStatusId, true],
+      ['Prefijo versión', cfg.workflow.versionPrefix, true]
+    ]);
+
+    out += block('Confluence', [
+      ['Activado', cfg.confluence.enabled ? 'Sí' : 'No', false],
+      ['History page', cfg.confluence.historyPageId, true],
+      ['Space', cfg.confluence.space, true]
+    ]);
+
+    out += block('Marca', [
+      ['Organización', cfg.branding.orgName, false],
+      ['App', cfg.branding.appName, false]
+    ]);
+
+    // Textos de la interfaz — muestra el valor configurado o "por defecto"
+    var lbls = cfg.labels || {};
+    var LABEL_NAMES = {
+      reportBug: 'Reportar bug', finalizeBug: 'Finalizar bug',
+      finalizeTestCase: 'Finalizar caso', requiresConfig: 'Requiere configuración'
+    };
+    out += block('Textos', LABEL_KEYS.map(function (k) {
+      return [LABEL_NAMES[k], lbls[k] || 'por defecto', false];
+    }));
+
+    _$('#wz-summary').innerHTML = out;
+  }
+
+  // ── Guardar ────────────────────────────────────────────────────────────────
+  function _save() {
+    var out = _$('#save-result');
+    var next = _$('#btn-next');
+    var config = _buildConfig();
+
+    // Validación cliente ligera (el servidor es la fuente de verdad).
+    // La conexión ya está resuelta en /connect: acá sólo se persiste la personalización.
+    if (!config.boards.qa.items.length) {
+      out.className = 'wz-result bad show';
+      out.innerHTML = _iconX() + '<span>Necesitás al menos un tablero QA con project key.</span>';
+      return;
+    }
+
+    next.disabled = true; next.textContent = 'Guardando…';
+    out.className = 'wz-result'; out.innerHTML = '';
+
+    // Sólo se envía { config }. Sin `secrets`: el server conserva el .env existente.
+    fetch('/setup/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ config: config })
+    })
+      .then(function (r) {
+        return r.json().catch(function () { return { ok: false }; })
+          .then(function (d) { return { status: r.status, data: d }; });
+      })
+      .then(function (res) {
+        var d = res.data || {};
+        if (res.status === 200 && d.ok) {
+          _showDone(!!d.needsRestart);
+          return;
+        }
+        if (res.status === 422 && d.problems) {
+          _showProblems(d.problems, true);
+          out.className = 'wz-result bad show';
+          out.innerHTML = _iconX() + '<span>Hay campos inválidos. Revisá los marcados en rojo.</span>';
+        } else {
+          out.className = 'wz-result bad show';
+          out.innerHTML = _iconX() + '<span>' + _esc(d.message || ('Error al guardar (HTTP ' + res.status + ').')) + '</span>';
+        }
+        next.disabled = false; next.textContent = 'Guardar';
+      })
+      .catch(function () {
+        out.className = 'wz-result bad show';
+        out.innerHTML = _iconX() + '<span>Error de red al guardar. Reintentá.</span>';
+        next.disabled = false; next.textContent = 'Guardar';
+      });
+  }
+
+  function _showDone(needsRestart) {
+    _$('#wz-summary').style.display = 'none';
+    _$('#save-result').style.display = 'none';
+    _$('#wz-nav').style.display = 'none';
+    var done = _$('#wz-done');
+    _$('#wz-done-note').textContent = needsRestart
+      ? 'Reiniciá el servidor para aplicar las nuevas credenciales, luego entrá a la app.'
+      : 'Ya podés empezar a trabajar.';
+    done.style.display = 'block';
+    _banner('ok', '¡Configuración guardada correctamente!');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // ── Mostrar problems del servidor y saltar al paso ─────────────────────────
+  // path -> {step, selector}
+  function _resolveProblemTarget(path) {
+    var p = String(path || '');
+    // boards
+    if (/boards/i.test(p)) return { step: 1, el: null };
+    // fields
+    var fm = p.match(/fields\.(\w+)/i);
+    if (fm) return { step: 2, el: _$('input[data-field="' + fm[1] + '"]') };
+    // workflow
+    var wm = p.match(/workflow\.(\w+)/i);
+    if (wm) return { step: 3, el: _$('input[data-wf="' + wm[1] + '"]') };
+    // confluence
+    var cm = p.match(/confluence\.(\w+)/i);
+    if (cm) return { step: 3, el: _$('input[data-cf="' + cm[1] + '"]') };
+    // branding
+    var bm = p.match(/branding\.(\w+)/i);
+    if (bm) return { step: 3, el: _$('input[data-br="' + bm[1] + '"]') };
+    // labels
+    var lm = p.match(/labels\.(\w+)/i);
+    if (lm) return { step: 3, el: _$('input[data-lbl="' + lm[1] + '"]') };
+    return { step: 1, el: null };
+  }
+
+  function _showProblems(problems, jump) {
+    // Limpiar errores previos
+    _$all('.wz-err').forEach(function (e) { e.classList.remove('wz-err'); });
+    _$all('.wz-field-msg.show').forEach(function (m) { m.classList.remove('show'); m.textContent = ''; });
+
+    var firstStep = null;
+    var stepsWithProblem = {};
+
+    (problems || []).forEach(function (pr) {
+      var t = _resolveProblemTarget(pr.path);
+      stepsWithProblem[t.step] = true;
+      if (firstStep === null || t.step < firstStep) firstStep = t.step;
+      if (t.el) {
+        t.el.classList.add('wz-err');
+        // Mensaje inline si hay un contenedor de mensaje asociado al campo
+        var msg = t.el.parentElement && t.el.parentElement.querySelector('.wz-field-msg');
+        if (msg) { msg.textContent = pr.message || 'Valor inválido'; msg.classList.add('show'); }
+      }
+    });
+
+    // Marca los pasos con problema en el stepper
+    _renderStepper();
+    _$all('#wz-stepper button').forEach(function (btn, i) {
+      if (stepsWithProblem[i + 1]) btn.classList.add('has-problem');
+    });
+
+    if (jump && firstStep) {
+      _goStep(firstStep);
+      var focusEl = null;
+      (problems || []).some(function (pr) {
+        var t = _resolveProblemTarget(pr.path);
+        if (t.step === firstStep && t.el) { focusEl = t.el; return true; }
+        return false;
+      });
+      if (focusEl) setTimeout(function () { focusEl.focus(); }, 120);
+    }
+  }
+
+  // ── Wiring ─────────────────────────────────────────────────────────────────
+  function _bind() {
+    _$('#btn-next').addEventListener('click', function () {
+      if (_state.step === _state.maxStep) _save();
+      else _goStep(_state.step + 1);
+    });
+    _$('#btn-back').addEventListener('click', function () { _goStep(_state.step - 1); });
+
+    _$('#btn-detect').addEventListener('click', _detectFields);
+
+    _$all('[data-add]').forEach(function (btn) {
+      btn.addEventListener('click', function () { _addBoard(btn.getAttribute('data-add'), {}, true); });
+    });
+
+    _$('#cf-enabled').addEventListener('change', _syncConfluence);
+
+    // Limpiar marca de error al editar
+    document.addEventListener('input', function (e) {
+      if (e.target && e.target.classList && e.target.classList.contains('wz-err')) {
+        e.target.classList.remove('wz-err');
+        var msg = e.target.parentElement && e.target.parentElement.querySelector('.wz-field-msg');
+        if (msg) msg.classList.remove('show');
+      }
+    });
+  }
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  function init() {
+    _bind();
+    _prefill();
+    // Garantizar al menos un tablero QA
+    if (!_state.boards.qa.length) _addBoard('qa', { name: 'QA' }, false);
+    _renderBoards('qa'); _renderBoards('bug'); _renderBoards('tech');
+    _renderStepper();
+    _goStep(1);
+    _loadStatus();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  // Exponer para debug / tests
+  window.Setup = {
+    _state: _state, _buildConfig: _buildConfig,
+    _goStep: _goStep, _detectFields: _detectFields,
+    _save: _save, _showProblems: _showProblems
+  };
+})();
+</script>
+</body>
+</html>

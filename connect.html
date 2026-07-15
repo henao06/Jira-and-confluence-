@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conexión con Jira</title>
+<script src="/config.js"></script>
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --txt:#e2e8f0; --muted:#94a3b8; --g:#35b083; --g2:#79d1ae; --r:#fca5a5; --rbg:#450a0a; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(1200px 600px at 50% -10%, #16233b, var(--bg));
+    color: var(--txt); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 20px;
+  }
+  .card {
+    width: 100%; max-width: 440px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,.45); padding: 28px 26px;
+  }
+  .brand { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { font-size: 13px; color: var(--muted); margin: 0 0 20px; line-height: 1.5; }
+  .field { margin-bottom: 14px; }
+  label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 5px; color: #cbd5e1; }
+  label .miss { color: var(--g2); font-weight: 700; }
+  input {
+    width: 100%; padding: 10px 12px; font-size: 14px; font-family: inherit;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px; color: var(--txt);
+  }
+  input:focus { outline: none; border-color: var(--g); box-shadow: 0 0 0 3px rgba(53,176,131,.18); }
+  .hint { font-size: 11.5px; color: var(--muted); margin-top: 5px; }
+  .hint a { color: var(--g2); }
+  .row { display: flex; gap: 10px; }
+  .row .field { flex: 1; }
+  .actions { display: flex; gap: 10px; margin-top: 20px; }
+  button {
+    flex: 1; padding: 11px 14px; font-size: 14px; font-weight: 600; font-family: inherit;
+    border-radius: 8px; cursor: pointer; border: 1px solid transparent; transition: all .15s;
+  }
+  .btn-test { background: transparent; border-color: var(--line); color: var(--txt); }
+  .btn-test:hover { border-color: var(--muted); }
+  .btn-save { background: var(--g); color: #052e1c; }
+  .btn-save:hover { background: var(--g2); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .msg { margin-top: 16px; padding: 11px 13px; border-radius: 8px; font-size: 13px; display: none; line-height: 1.5; }
+  .msg.ok  { display: block; background: #05261a; border: 1px solid #14603f; color: var(--g2); }
+  .msg.err { display: block; background: var(--rbg); border: 1px solid #7f1d1d; color: var(--r); }
+  .foot { margin-top: 18px; font-size: 11.5px; color: var(--muted); text-align: center; line-height: 1.5; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand" id="brand">Configuración</div>
+    <h1>Conectá con Jira</h1>
+    <p class="sub">Faltan credenciales para arrancar. Esto se guarda en tu <code>.env</code> local — nunca sale al navegador ni se comparte. Los campos que ya tengas configurados podés dejarlos vacíos.</p>
+
+    <div class="field">
+      <label for="host">Dominio de Jira <span class="miss" id="miss-host"></span></label>
+      <input id="host" type="text" placeholder="tu-empresa.atlassian.net" autocomplete="off">
+      <div class="hint">Solo el dominio, sin <code>https://</code></div>
+    </div>
+
+    <div class="field">
+      <label for="email">Email de la cuenta <span class="miss" id="miss-email"></span></label>
+      <input id="email" type="email" placeholder="vos@tu-empresa.com" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label for="token">API Token <span class="miss" id="miss-token"></span></label>
+      <input id="token" type="password" placeholder="••••••••••••" autocomplete="off">
+      <div class="hint">Generalo en <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener">id.atlassian.com → API tokens</a>. Dejá vacío para conservar el actual.</div>
+    </div>
+
+    <div class="field">
+      <label for="port">Puerto <span style="color:var(--muted);font-weight:400">(opcional)</span></label>
+      <input id="port" type="number" placeholder="8080" autocomplete="off">
+    </div>
+
+    <div class="actions">
+      <button class="btn-test" id="btn-test" type="button">Probar conexión</button>
+      <button class="btn-save" id="btn-save" type="button">Guardar y arrancar</button>
+    </div>
+
+    <div class="msg" id="msg"></div>
+    <div class="foot">Una vez conectado, personalizás tableros, campos y textos desde el configurador.</div>
+  </div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const cfg = window.APP_CONFIG || {};
+
+  // Branding + prefill de host (el host NO es secreto: viene en APP_CONFIG).
+  if (cfg.branding && cfg.branding.orgName) $('brand').textContent = cfg.branding.orgName;
+  if (cfg.jira && cfg.jira.host) $('host').value = cfg.jira.host;
+
+  // Marcar qué secretos faltan (según el server).
+  fetch('/setup/status').then(r => r.json()).then(s => {
+    const missing = s.missingSecrets || [];
+    const map = { JIRA_HOST: 'miss-host', JIRA_EMAIL: 'miss-email', JIRA_TOKEN: 'miss-token' };
+    missing.forEach(k => { const el = $(map[k]); if (el) el.textContent = '— falta'; });
+  }).catch(() => {});
+
+  function payload() {
+    const p = {};
+    const host = $('host').value.trim(), email = $('email').value.trim(), token = $('token').value, port = $('port').value.trim();
+    if (host)  p.JIRA_HOST  = host;
+    if (email) p.JIRA_EMAIL = email;
+    if (token) p.JIRA_TOKEN = token;   // vacío = conservar el actual
+    if (port)  p.PORT       = port;
+    return p;
+  }
+
+  function show(kind, text) { const m = $('msg'); m.className = 'msg ' + kind; m.textContent = text; }
+  function busy(v) { $('btn-test').disabled = v; $('btn-save').disabled = v; }
+
+  $('btn-test').addEventListener('click', async () => {
+    const host = $('host').value.trim(), email = $('email').value.trim(), token = $('token').value;
+    if (!host || !email || !token) { show('err', 'Para probar necesito dominio, email y token juntos.'); return; }
+    busy(true); show('ok', 'Probando…');
+    try {
+      const r = await fetch('/setup/test-connection', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ JIRA_HOST: host, JIRA_EMAIL: email, JIRA_TOKEN: token }),
+      });
+      const d = await r.json();
+      if (d.ok) show('ok', '✓ Conectado como ' + (d.displayName || email));
+      else show('err', '✗ ' + (d.message || 'No se pudo conectar'));
+    } catch (e) { show('err', '✗ ' + e.message); }
+    busy(false);
+  });
+
+  $('btn-save').addEventListener('click', async () => {
+    const p = payload();
+    if (!Object.keys(p).length) { show('err', 'Completá al menos lo que falta.'); return; }
+    busy(true); show('ok', 'Guardando…');
+    try {
+      const r = await fetch('/setup/secrets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(p),
+      });
+      const d = await r.json();
+      if (!d.ok) { show('err', '✗ ' + (d.error || d.message || 'No se pudo guardar')); busy(false); return; }
+      if (d.needsRestart) { show('ok', '✓ Guardado. Cambiaste el puerto → reiniciá el servidor.'); busy(false); return; }
+      if ((d.missingSecrets || []).length) { show('err', 'Todavía falta: ' + d.missingSecrets.join(', ')); busy(false); return; }
+      show('ok', '✓ Conexión lista. Entrando…');
+      setTimeout(() => { window.location = '/'; }, 700);
+    } catch (e) { show('err', '✗ ' + e.message); busy(false); }
+  });
+})();
+</script>
+</body>
+</html>

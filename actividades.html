@@ -6,6 +6,8 @@
 <title>Actividades</title>
 <link rel="stylesheet" href="/styles.css">
 <script src="/config.js"></script>
+<script src="/board-switcher.js"></script>
+<script src="/labels.js"></script>
 <script src="/bg_reporter.js?v=20260513"></script>
 <script src="/releases.js?v=20260513"></script>
 <style>
@@ -79,6 +81,7 @@
     <p id="hdr-sub"></p>
   </div>
   <div class="hdr-right">
+    <div id="board-switcher-container"></div>
     <a href="/" class="btn-hdr-history">
       <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
         <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
@@ -259,7 +262,7 @@
       <span> Técnica</span>
     </label>
     <label class="checkbox-label">
-      <input type="checkbox" id="registrarEnQAAFinalizada"> Finalizar TC
+      <input type="checkbox" id="registrarEnQAAFinalizada"> <span data-label="finalizeTestCase">Finalizar TC</span>
     </label>
     <button class="btn-submit" id="btn-submit" onclick="submitActividad()">Crear actividad</button>
   </div>
@@ -444,7 +447,7 @@ async function loadTiposProyecto(projectKey, selId, preferido = 'Tarea') {
   }
 }
 
-// QAA es el tablero base de la actividad: siempre se carga.
+// El proyecto QA es el tablero base de la actividad: siempre se carga.
 async function loadTiposActividad() {
   return loadTiposProyecto(APP_CONFIG.projects.qa, 'tipo-actividad', 'Tarea');
 }
@@ -592,6 +595,8 @@ inicializarSistemaVersiones().catch(() => {});
 
 restoreState();
 
+BoardSwitcher.init({ container: document.getElementById('board-switcher-container') });
+
 // ── Submit ────────────────────────────────────────────────────────────────────
 async function submitActividad() {
   const titulo = document.getElementById('titulo').value.trim();
@@ -621,7 +626,7 @@ async function submitActividad() {
       ? Array.from(document.querySelectorAll('#pasos-wrap .step-row input')).map(i => i.value.trim()).filter(Boolean)
       : [];
 
-    // ── 1. Crear issue QAA ──
+    // ── 1. Crear issue en el proyecto QA ──
     btn.textContent = `Creando en ${APP_CONFIG.projects.qa}…`;
     const r = await fetch(`${JIRA_BASE}/rest/api/3/issue`, {
       method:  'POST',
@@ -644,7 +649,7 @@ async function submitActividad() {
     qaaKey = created.key;
     const issueUrl = `${APP_CONFIG.jira.browseUrl}${qaaKey}`;
 
-    // ── 2. Adjuntos a QAA ──
+    // ── 2. Adjuntos al issue QA ──
     for (const file of uploadedFiles) {
       btn.textContent = `Subiendo ${file.name}…`;
       const fd = new FormData(); fd.append('file', file);

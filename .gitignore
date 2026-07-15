@@ -9,6 +9,9 @@ boot/
 .env.*.local
 chatkit_uploads/
 
+# Config estructural generada por el wizard (por-instancia; keys de proyecto, no secretos)
+qa-config.json
+
 # ─── Node ───
 node_modules/
 npm-debug.log*
@@ -55,4 +58,5 @@ solu.txt
 solu.md
 uv.lock
 AGENTS.md
+CLAUDE.md
 CLAUDE.md

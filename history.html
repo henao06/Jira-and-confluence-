@@ -7,6 +7,8 @@
 <link rel="stylesheet" href="/styles.css">
 <script src="/config.js"></script>
 <script src="/epic-filter.js"></script>
+<script src="/board-switcher.js"></script>
+<script src="/labels.js"></script>
 <style>
 :root {
   --pass-bg:#dcfce7; --pass-fg:#15803d;
@@ -339,6 +341,7 @@
     <p id="hdr-sub">Tiempo real desde Jira</p>
   </div>
   <div class="hdr-right">
+    <div id="board-switcher-container"></div>
     <div class="hdr-badges"></div>
     <a href="/" class="btn-hdr-history">
       <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
@@ -443,7 +446,7 @@
       </div>
     </div>
     <div class="filter-checks">
-      <label class="filter-check-item"><input type="checkbox" id="f-config"> ⚙️ Requiere configuración</label>
+      <label class="filter-check-item"><input type="checkbox" id="f-config"> ⚙️ <span data-label="requiresConfig">Requiere configuración</span></label>
       <label class="filter-check-item"><input type="checkbox" id="f-retest"> 🔁 Solo retest</label>
       <label class="filter-check-item"><input type="checkbox" id="f-enlazadas" onchange="onEnlazadasChange()"> 🔗 Enlazadas a bug</label>
     </div>
@@ -877,7 +880,7 @@ function renderIssues(issues) {
 
     // Flags
     const flags = [
-      labels.includes('requiere-config') ? '<span class="flag-tag" title="Requiere configuración">⚙️</span>' : '',
+      labels.includes('requiere-config') ? '<span class="flag-tag" title="' + (window.Labels ? Labels.get('requiresConfig', 'Requiere configuración') : 'Requiere configuración') + '">⚙️</span>' : '',
       labels.includes('retest')          ? '<span class="flag-tag" title="Retest"></span>' : '',
     ].filter(Boolean).join(' ') || '—';
 
@@ -1541,6 +1544,7 @@ EpicFilter.init({
   container: document.getElementById('epic-filter-container'),
   onUpdate:  filtrarEpicFiltroSelect
 });
+BoardSwitcher.init({ container: document.getElementById('board-switcher-container') });
 EpicFilter.loadEpicsFromJira(window.location.origin + '/jira');
 </script>
 </body>
