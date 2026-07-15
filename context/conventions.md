@@ -47,7 +47,7 @@ mkBulletList(items)             // ul
 mkTableCell(text, isHeader)
 mkTableRow(label, value)
 mkTable(rows)
-mkIssueLink(key)                // text node con link a https://liceopinoverde.atlassian.net/browse/{key}
+mkIssueLink(key)                // text node con link a APP_CONFIG.jira.browseUrl + {key}
 mkIssueRef(label, key)          // párrafo "label KEY"
 
 // Búsqueda y diff

@@ -7,7 +7,7 @@
  * mkOrderedList, mkBulletList, mkPanel, mkTable, mkTableRow
  */
 
-const _BG_JIRA = 'https://liceopinoverde.atlassian.net';
+const _BG_JIRA = APP_CONFIG.jira.baseUrl;
 
 function _mkLinkedRow(label, text, href) {
   const display = String(text || '—');
@@ -24,8 +24,8 @@ function _mkLinkedRow(label, text, href) {
 // Devuelve los project keys cuyos checkbox de reporte están marcados.
 function _proyectosReporteActivos() {
   const keys = [];
-  if (document.getElementById('reportar-bug')?.checked)  keys.push('BG');
-  if (document.getElementById('reportar-tech')?.checked) keys.push('SP');
+  if (document.getElementById('reportar-bug')?.checked)  keys.push(APP_CONFIG.projects.bug);
+  if (document.getElementById('reportar-tech')?.checked) keys.push(APP_CONFIG.projects.tech);
   return keys;
 }
 
@@ -83,7 +83,7 @@ async function _crearReporteIssue({ projectKey, issuetype, heading, tcId, desc, 
     mkTable([
       _mkLinkedRow('Test Case', tcId,            `${_BG_JIRA}/browse/${tcId}`),
       _mkLinkedRow('Módulo',    moduloNombre,    `${_BG_JIRA}/browse/${moduloNombre}`),
-      _mkLinkedRow('Versión',   versionActual || '—', versionActual ? `${_BG_JIRA}/projects/QAA?selectedItem=com.atlassian.jira.jira-projects-plugin%3Arelease-page` : null),
+      _mkLinkedRow('Versión',   versionActual || '—', versionActual ? `${_BG_JIRA}/projects/${APP_CONFIG.projects.qa}?selectedItem=com.atlassian.jira.jira-projects-plugin%3Arelease-page` : null),
       mkTableRow('Severidad',   sevLbl),
       mkTableRow('Entorno',     entorno || '—'),
     ]),
@@ -135,10 +135,10 @@ async function _crearReporteIssue({ projectKey, issuetype, heading, tcId, desc, 
 
 /** Crea un bug en BG. El issuetype sigue al tipo de la actividad QAA. */
 async function crearBugBG(opts) {
-  return _crearReporteIssue({ ...opts, projectKey: 'BG', issuetype: opts.tipo || 'Tarea', heading: 'Reporte de Bug' });
+  return _crearReporteIssue({ ...opts, projectKey: APP_CONFIG.projects.bug, issuetype: opts.tipo || 'Tarea', heading: 'Reporte de Bug' });
 }
 
 /** Crea una tarea en SP (LPV Tech). El issuetype se elige en el selector "Tipo SP". */
 async function crearTechSP(opts) {
-  return _crearReporteIssue({ ...opts, projectKey: 'SP', issuetype: opts.tipo || 'Tech Task', heading: 'Tarea técnica' });
+  return _crearReporteIssue({ ...opts, projectKey: APP_CONFIG.projects.tech, issuetype: opts.tipo || 'Tech Task', heading: 'Tarea técnica' });
 }

@@ -14,14 +14,14 @@ window.versionActualId = null;
 let projectIdQAA       = null;
 
 // ── Constantes ────────────────────────────────────────────────────────────────
-const HISTORIAL_PAGE_ID = '78053377';
+const HISTORIAL_PAGE_ID = APP_CONFIG.confluence.historyPageId;
 const CONFLUENCE_BASE   = window.location.origin + '/wiki/rest/api';
 
 // ── Jira: versiones ───────────────────────────────────────────────────────────
 
 async function resolverProjectId() {
   if (projectIdQAA) return projectIdQAA;
-  const r = await fetch(`/jira/rest/api/3/project/QAA`, {
+  const r = await fetch(`/jira/rest/api/3/project/${APP_CONFIG.projects.qa}`, {
     headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -30,12 +30,12 @@ async function resolverProjectId() {
 }
 
 async function obtenerVersionActiva() {
-  const r = await fetch(`/jira/rest/api/3/project/QAA/versions`, {
+  const r = await fetch(`/jira/rest/api/3/project/${APP_CONFIG.projects.qa}/versions`, {
     headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const activas = (await r.json())
-    .filter(v => !v.released && v.name.startsWith('test-v'))
+    .filter(v => !v.released && v.name.startsWith(APP_CONFIG.workflow.versionPrefix))
     .sort((a, b) => b.name.localeCompare(a.name));
   if (!activas.length) throw new Error('Sin versión activa');
   return activas[0];
@@ -56,11 +56,11 @@ async function inicializarSistemaVersiones() {
 }
 
 async function calcularSiguienteVersion() {
-  const r    = await fetch(`/jira/rest/api/3/project/QAA/versions`, {
+  const r    = await fetch(`/jira/rest/api/3/project/${APP_CONFIG.projects.qa}/versions`, {
     headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
   });
   const todas = r.ok ? await r.json() : [];
-  const test  = todas.filter(v => v.name.startsWith('test-v'));
+  const test  = todas.filter(v => v.name.startsWith(APP_CONFIG.workflow.versionPrefix));
 
   // Si ya hay otra versión sin publicar (distinta a la activa), es la siguiente
   const sinPublicar = test
@@ -69,18 +69,18 @@ async function calcularSiguienteVersion() {
   if (sinPublicar.length) return sinPublicar[0].name;
 
   // Si no, siguiente = max global (publicadas + no publicadas) + 1
-  const maxNum = test.reduce((max, v) => Math.max(max, parseInt(v.name.replace('test-v', ''), 10)), 0);
-  return `test-v${String(maxNum + 1).padStart(3, '0')}`;
+  const maxNum = test.reduce((max, v) => Math.max(max, parseInt(v.name.replace(APP_CONFIG.workflow.versionPrefix, ''), 10)), 0);
+  return `${APP_CONFIG.workflow.versionPrefix}${String(maxNum + 1).padStart(3, '0')}`;
 }
 
 async function iniciarSesion(motivo = 'New session') {
   const projectId = await resolverProjectId();
 
-  const rAll = await fetch(`/jira/rest/api/3/project/QAA/versions`, {
+  const rAll = await fetch(`/jira/rest/api/3/project/${APP_CONFIG.projects.qa}/versions`, {
     headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
   });
   const todas = rAll.ok ? await rAll.json() : [];
-  const test  = todas.filter(v => v.name.startsWith('test-v'));
+  const test  = todas.filter(v => v.name.startsWith(APP_CONFIG.workflow.versionPrefix));
 
   // En este punto la versión publicada ya fue cerrada, así que cualquier
   // sin-publicar que quede es una versión futura pre-existente — no crear otra.
@@ -93,8 +93,8 @@ async function iniciarSesion(motivo = 'New session') {
     window.versionActualId = sinPublicar[0].id;
   } else {
     // Calcular siguiente sobre el máximo global (publicadas + no publicadas)
-    const maxNum  = test.reduce((max, v) => Math.max(max, parseInt(v.name.replace('test-v', ''), 10)), 0);
-    const nombre  = `test-v${String(maxNum + 1).padStart(3, '0')}`;
+    const maxNum  = test.reduce((max, v) => Math.max(max, parseInt(v.name.replace(APP_CONFIG.workflow.versionPrefix, ''), 10)), 0);
+    const nombre  = `${APP_CONFIG.workflow.versionPrefix}${String(maxNum + 1).padStart(3, '0')}`;
     const r = await fetch(`/jira/rest/api/3/version`, {
       method: 'POST',
       headers: { 'Authorization': AUTH, 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -147,7 +147,7 @@ async function obtenerDatosVersion(nombreVersion) {
   const allIssues = [];
   let nextPageToken = null;
   const jql = encodeURIComponent(
-    `project = QAA AND fixVersion = "${nombreVersion}" AND issuetype != Epic ORDER BY created ASC`
+    `project = ${APP_CONFIG.projects.qa} AND fixVersion = "${nombreVersion}" AND issuetype != Epic ORDER BY created ASC`
   );
   while (true) {
     let url = `/jira/rest/api/3/search/jql?jql=${jql}&fields=summary,status,priority,labels,parent,assignee,created,issuelinks,issuetype,subtasks&maxResults=100`;
@@ -166,7 +166,7 @@ async function obtenerDatosVersion(nombreVersion) {
   for (const issue of allIssues) {
     const links = (issue.fields.issuelinks || [])
       .map(l => l.inwardIssue || l.outwardIssue)
-      .filter(l => l?.key?.startsWith('BG-'));
+      .filter(l => l?.key?.startsWith(`${APP_CONFIG.projects.bug}-`));
     links.forEach(l => bgKeySet.add(l.key));
     if (links.length) qaaToBg[issue.key] = links.map(l => l.key);
   }
@@ -191,21 +191,21 @@ async function obtenerDatosVersion(nombreVersion) {
   const blockedIssues    = allIssues.filter(i => hasLbl(i, 'estado-blocked'));
   const retestIssues     = allIssues.filter(i => hasLbl(i, 'retest'));
   const configIssues     = allIssues.filter(i => hasLbl(i, 'requiere-config'));
-  // Actividades: issues hijos del Epic QAA-179 (creadas por actividades.html)
-  const actividadIssues  = allIssues.filter(i => i.fields.parent?.key === 'QAA-179');
+  // Actividades: issues hijos del Epic de actividades (creadas por actividades.html)
+  const actividadIssues  = allIssues.filter(i => i.fields.parent?.key === APP_CONFIG.epics.activities);
 
-  // Vinculados: BGs enlazados a QAA-172 (vía issuelinks) que pertenecen a esta versión
+  // Vinculados: BGs enlazados al Epic de verificación (vía issuelinks) que pertenecen a esta versión
   // El proyecto BG no tiene fixVersions definidas, así que se filtran por label de versión.
   let vinculadosKeys = [];
   try {
-    const r = await fetch(`/jira/rest/api/3/issue/QAA-172?fields=issuelinks`, {
+    const r = await fetch(`/jira/rest/api/3/issue/${APP_CONFIG.epics.verification}?fields=issuelinks`, {
       headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
     });
     if (r.ok) {
       const d = await r.json();
       const bgLinkedKeys = (d.fields?.issuelinks || [])
         .map(l => l.outwardIssue?.key || l.inwardIssue?.key)
-        .filter(k => k && k.startsWith('BG-'));
+        .filter(k => k && k.startsWith(`${APP_CONFIG.projects.bug}-`));
       if (bgLinkedKeys.length) {
         const jql = `key in (${bgLinkedKeys.join(',')}) AND labels = "${nombreVersion}"`;
         const r2 = await fetch(`/jira/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=key&maxResults=100`, {
@@ -312,10 +312,10 @@ async function agregarAlHistorialConfluence({ version, motivo, observaciones, da
   // Todo el contenido enviado a Confluence se genera en INGLÉS (request del usuario).
   const fecha   = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const tasa    = stats.total > 0 ? `${Math.round((stats.pass / stats.total) * 100)}%` : '—';
-  const JIRA_UI = 'https://liceopinoverde.atlassian.net';
+  const JIRA_UI = APP_CONFIG.jira.baseUrl;
   const WIKI_V1 = window.location.origin + '/wiki/rest/api';
 
-  const jqlBase  = `project = QAA AND fixVersion = "${version}" AND issuetype != Epic`;
+  const jqlBase  = `project = ${APP_CONFIG.projects.qa} AND fixVersion = "${version}" AND issuetype != Epic`;
   const jqlUrl   = extra => `${JIRA_UI}/issues/?jql=${encodeURIComponent(extra ? `${jqlBase} AND ${extra}` : jqlBase)}`;
   const issueUrl = key   => `${JIRA_UI}/browse/${key}`;
   const link     = (key, label) => `<a href="${issueUrl(key)}">${label ?? key}</a>`;
@@ -359,7 +359,7 @@ async function agregarAlHistorialConfluence({ version, motivo, observaciones, da
     .join(' · ');
 
   // URL to the Releases page of the QAA project
-  const releasesUrl = `${JIRA_UI}/projects/QAA?selectedItem=com.atlassian.jira.jira-projects-plugin%3Arelease-page&status=no-filter`;
+  const releasesUrl = `${JIRA_UI}/projects/${APP_CONFIG.projects.qa}?selectedItem=com.atlassian.jira.jira-projects-plugin%3Arelease-page&status=no-filter`;
   const versionLink = `<a href="${releasesUrl}">${version}</a>`;
   // JQL URL for all BG bugs reported in this session
   const bgBugsJqlUrl = bgIssues.length
@@ -382,7 +382,7 @@ async function agregarAlHistorialConfluence({ version, motivo, observaciones, da
   // URL for the "Linked" JQL — uses key in (...) to show exactly the computed BGs
   const vinculadosJqlUrl = stats.vinculadosKeys?.length
     ? `${JIRA_UI}/issues/?jql=${encodeURIComponent(`key in (${stats.vinculadosKeys.join(',')})`)}`
-    : `${JIRA_UI}/browse/QAA-172`;
+    : `${JIRA_UI}/browse/${APP_CONFIG.epics.verification}`;
 
   // Version and Date removed — already shown in the summary header.
   const metricasTable = `<table><tbody>
@@ -402,7 +402,7 @@ async function agregarAlHistorialConfluence({ version, motivo, observaciones, da
       <td style="text-align:center;color:#991b1b"><strong><a href="${jqlUrl('labels = "estado-fail"')}" style="color:inherit">${stats.fail}</a></strong></td>
       <td style="text-align:center;color:#92400e"><strong><a href="${jqlUrl('labels = "estado-blocked"')}" style="color:inherit">${stats.blocked}</a></strong></td>
       <td style="text-align:center;color:#6d28d9"><strong><a href="${jqlUrl('labels = "retest"')}" style="color:inherit">${stats.retest}</a></strong></td>
-      <td style="text-align:center;color:#0369a1"><strong><a href="${jqlUrl('parent = QAA-179')}" style="color:inherit">${stats.actividades}</a></strong></td>
+      <td style="text-align:center;color:#0369a1"><strong><a href="${jqlUrl(`parent = ${APP_CONFIG.epics.activities}`)}" style="color:inherit">${stats.actividades}</a></strong></td>
       <td style="text-align:center;color:#7c3aed"><strong><a href="${vinculadosJqlUrl}" style="color:inherit">${stats.vinculados}</a></strong></td>
       <td style="text-align:center"><strong>${tasa}</strong></td>
     </tr>
@@ -410,8 +410,8 @@ async function agregarAlHistorialConfluence({ version, motivo, observaciones, da
 
   // ── 3. Module breakdown (expandable) ──────────────────────────────────────
   const EPIC_LABELS = {
-    'QAA-172': 'BG Verification',
-    'QAA-179': 'Activities and Suggestions',
+    [APP_CONFIG.epics.verification]: 'BG Verification',
+    [APP_CONFIG.epics.activities]: 'Activities and Suggestions',
   };
 
   const buildModuleRows = mod => {
@@ -446,7 +446,7 @@ async function agregarAlHistorialConfluence({ version, motivo, observaciones, da
   };
 
   // Known Epics first (QAA-172 and QAA-179), then the rest
-  const EPIC_ORDER = ['QAA-172', 'QAA-179'];
+  const EPIC_ORDER = [APP_CONFIG.epics.verification, APP_CONFIG.epics.activities];
   const sortedModules = [
     ...EPIC_ORDER.filter(k => byModule[k]).map(k => byModule[k]),
     ...Object.values(byModule).filter(m => !EPIC_ORDER.includes(m.key)),
@@ -568,7 +568,7 @@ async function promptPublicarVersion() {
     requiereConfig: false, pasosConfig: [], bugsFijos: [],
     bgIssues: [], byModule: {}, bgBySeverity: {}, retestIssues: [], configIssues: [], qaaToBg: {},
   };
-  let siguiente = `test-v${String(parseInt(publicada.replace('test-v',''),10)+1).padStart(3,'0')}`;
+  let siguiente = `${APP_CONFIG.workflow.versionPrefix}${String(parseInt(publicada.replace(APP_CONFIG.workflow.versionPrefix,''),10)+1).padStart(3,'0')}`;
   try {
     [datos, siguiente] = await Promise.all([
       obtenerDatosVersion(publicada),
@@ -584,14 +584,14 @@ function abrirModalPublicar(publicada, siguiente, datos) {
   const tasa = stats.total > 0 ? Math.round((stats.pass / stats.total) * 100) + '%' : '—';
 
   const bugsHtml = bugsFijos.length
-    ? bugsFijos.map(k => `<a href="https://liceopinoverde.atlassian.net/browse/${k}" target="_blank"
+    ? bugsFijos.map(k => `<a href="${APP_CONFIG.jira.browseUrl}${k}" target="_blank"
         style="display:inline-block;padding:2px 8px;background:#fee2e2;color:#991b1b;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none;margin:2px">${k}</a>`).join('')
     : '<span style="font-size:12px;color:var(--g4)">Ninguno</span>';
 
   const configHtml = requiereConfig
     ? `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px;font-size:12px;color:#92400e">
         ⚙️ <strong>${pasosConfig.length} tarea${pasosConfig.length !== 1 ? 's' : ''} requieren configuración:</strong>
-        <ul style="margin:6px 0 0 0;padding-left:16px">${pasosConfig.map(p=>`<li><a href="https://liceopinoverde.atlassian.net/browse/${p.key}" target="_blank" style="color:#92400e;font-weight:700">${p.key}</a>: ${p.summary}</li>`).join('')}</ul>
+        <ul style="margin:6px 0 0 0;padding-left:16px">${pasosConfig.map(p=>`<li><a href="${APP_CONFIG.jira.browseUrl}${p.key}" target="_blank" style="color:#92400e;font-weight:700">${p.key}</a>: ${p.summary}</li>`).join('')}</ul>
        </div>`
     : `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;font-size:12px;color:#15803d"> Sin cambios de configuración en esta versión</div>`;
 
@@ -680,7 +680,7 @@ async function ejecutarPublicacion(publicada, siguiente) {
 
     await iniciarSesion(motivoSig);
 
-    const confUrl = `https://liceopinoverde.atlassian.net/wiki/spaces/QD/pages/${HISTORIAL_PAGE_ID}`;
+    const confUrl = `${APP_CONFIG.jira.baseUrl}/wiki/spaces/${APP_CONFIG.confluence.space}/pages/${HISTORIAL_PAGE_ID}`;
     showModal('success',
       `<div class="modal-icon success">
         <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">

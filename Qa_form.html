@@ -3,9 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QA Testing — Hybred</title>
+<script src="/config.js"></script>
+<title>QA Testing</title>
 <link rel="stylesheet" href="/styles.css">
 <script src="/epic-filter.js"></script>
+<script>document.title = window.APP_CONFIG.branding.appName;</script>
 </head>
 <body>
 <div class="page">
@@ -19,11 +21,11 @@
   </div>
   <div class="hdr-text">
     <h1>Caso de Prueba QA</h1>
-    <p>Hybred · Proyecto QAA</p>
+    <p id="hdr-subtitle"></p>
   </div>
   <div class="hdr-right">
     <div class="hdr-badges">
-      <a class="badge badge-version" id="version-actual" href="https://liceopinoverde.atlassian.net/jira/software/projects/QAA/releases" target="_blank" title="Ver publicaciones en Jira">...</a>
+      <a class="badge badge-version" id="version-actual" href="#" target="_blank" title="Ver publicaciones en Jira">...</a>
       <button class="btn-version-avanzar" id="btn-avanzar-version" onclick="promptAvanzarVersion()" title="Nueva versión">
         <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
       </button>
@@ -41,7 +43,7 @@
       <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
         <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
       </svg>
-      <span>Verificar BG</span>
+      <span>Verificar bugs</span>
     </a>
     <a href="/actividades" class="btn-hdr-history" style="background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.3);color:#6ee7b7">
       <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
@@ -179,7 +181,7 @@
     <div class="row2">
       <div class="field">
         <label class="lbl" for="url-pantalla">URL / Pantalla <span class="hint">Opcional</span></label>
-        <input type="text" id="url-pantalla" placeholder="https://app.hybred.edu.co/...">
+        <input type="text" id="url-pantalla" placeholder="https://tu-app.example.com/...">
       </div>
       <div class="field">
         <label class="lbl" for="rol-usuario">Rol de usuario <span class="req">*</span></label>
@@ -354,7 +356,7 @@
         <span>Sí, este TC valida un error corregido</span>
       </label>
       <div class="retest-extra" id="retest-extra">
-        <input type="text" id="retest-tc" placeholder="Issue anterior, ej: QAA-7" style="margin-top:8px">
+        <input type="text" id="retest-tc" placeholder="Issue anterior" style="margin-top:8px">
       </div>
     </div>
     <div class="field">
@@ -427,13 +429,13 @@
     </label>
     <label class="config-check-label" id="bug-check-label" style="opacity:.4;cursor:not-allowed" title="Solo disponible cuando el resultado es Fail">
       <input type="checkbox" id="reportar-bug" disabled onchange="toggleBgAssignee(this)">
-      <span>🐛 Reportar como bug en BG</span>
+      <span>🐛 Reportar como bug</span>
     </label>
     <label class="checkbox-label">
-      <input type="checkbox" id="registrarEnBG"> FN BG
+      <input type="checkbox" id="registrarEnBG"> Finalizar bug
     </label>
     <label class="checkbox-label">
-      <input type="checkbox" id="registrarEnQAAFinalizada"> FN QAA
+      <input type="checkbox" id="registrarEnQAAFinalizada"> Finalizar TC
     </label>
     <button class="btn-submit" id="btn-submit" onclick="submitForm()">
       <svg id="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -746,6 +748,10 @@ document.addEventListener('click',  e => {
 });
 
 window.addEventListener('DOMContentLoaded', async () => {
+  document.getElementById('hdr-subtitle').textContent = `${APP_CONFIG.branding.orgName} · Proyecto ${APP_CONFIG.projects.qa}`;
+  document.getElementById('version-actual').href = `${APP_CONFIG.jira.baseUrl}/jira/software/projects/${APP_CONFIG.projects.qa}/releases`;
+  document.getElementById('retest-tc').placeholder = `Issue anterior, ej: ${APP_CONFIG.projects.qa}-7`;
+
   document.getElementById('fecha').value = new Date().toISOString().split('T')[0];
   document.getElementById('requiere-config').checked = false;
   document.getElementById('config-section').style.display = 'none';
@@ -1080,10 +1086,10 @@ async function loadIssueForEdit(key, forceRetest = false) {
 
     const bgLink = (f.issuelinks || []).find(l => {
       const k = (l.inwardIssue?.key || l.outwardIssue?.key || '');
-      return k.startsWith('BG-');
+      return k.startsWith(`${APP_CONFIG.projects.bug}-`);
     });
     if (bgLink) {
-      window.editMode.bgKey = bgLink.inwardIssue?.key?.startsWith('BG-')
+      window.editMode.bgKey = bgLink.inwardIssue?.key?.startsWith(`${APP_CONFIG.projects.bug}-`)
         ? bgLink.inwardIssue.key
         : bgLink.outwardIssue.key;
 
@@ -1126,12 +1132,12 @@ async function loadIssueForEdit(key, forceRetest = false) {
                      style="width:90px;height:72px;object-fit:cover;border-radius:8px;border:1.5px solid var(--border)"
                      onerror="this.style.display='none'">
                 <button type="button" class="preview-remove" onclick="removeExistingBgAttachment(this,'${att.id}')">×</button>
-                <div class="preview-name" style="font-size:9px">[BG] ${shortName}</div>`;
+                <div class="preview-name" style="font-size:9px">[Bug] ${shortName}</div>`;
             } else if (att.mimeType?.startsWith('video/')) {
               item.innerHTML = `
                 <video src="${proxyUrl}" title="${att.filename}" controls muted playsinline preload="metadata"></video>
                 <button type="button" class="preview-remove" onclick="removeExistingBgAttachment(this,'${att.id}')">×</button>
-                <div class="preview-name" style="font-size:9px">[BG] ${shortName}</div>`;
+                <div class="preview-name" style="font-size:9px">[Bug] ${shortName}</div>`;
             } else {
               const ext = att.filename.split('.').pop().toUpperCase();
               item.innerHTML = `
@@ -1145,7 +1151,7 @@ async function loadIssueForEdit(key, forceRetest = false) {
                   </div>
                 </a>
                 <button type="button" class="preview-remove" onclick="removeExistingBgAttachment(this,'${att.id}')">×</button>
-                <div class="preview-name" style="font-size:9px">[BG] ${shortName}</div>`;
+                <div class="preview-name" style="font-size:9px">[Bug] ${shortName}</div>`;
             }
             wrap?.appendChild(item);
           });
@@ -1549,7 +1555,7 @@ async function toggleBgAssignee(chk) {
   const sel = document.getElementById('bg-asignado');
   sel.innerHTML = '<option value="">Cargando…</option>';
   try {
-    const r = await fetch(`${JIRA_BASE}/rest/api/3/user/assignable/search?project=BG&maxResults=50`, {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/user/assignable/search?project=${APP_CONFIG.projects.bug}&maxResults=50`, {
       headers: { 'Accept': 'application/json' }
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -1596,7 +1602,7 @@ async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual
     method:  'POST',
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     body: JSON.stringify({ fields: {
-      project:     { key: 'BG' },
+      project:     { key: APP_CONFIG.projects.bug },
       summary:     `${tcId} — ${desc}`,
       description: bgDescription,
       issuetype:   { name: 'Tarea' },
@@ -1612,7 +1618,7 @@ async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual
 
   const bug    = await bugRes.json();
   const bugKey = bug.key;
-  const bugUrl = `https://liceopinoverde.atlassian.net/browse/${bugKey}`;
+  const bugUrl = `${APP_CONFIG.jira.browseUrl}${bugKey}`;
 
   for (const file of uploadedFiles) {
     const fd = new FormData(); fd.append('file', file);
@@ -1644,7 +1650,7 @@ async function crearBugBG({ tcId, desc, moduloNombre, moduloLabel, versionActual
 async function fetchAssignees() {
   const sel = document.getElementById('asignado');
   try {
-    const r = await fetch(`${JIRA_BASE}/rest/api/3/user/assignable/search?project=QAA&maxResults=50`, {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/user/assignable/search?project=${APP_CONFIG.projects.qa}&maxResults=50`, {
       headers: { 'Accept': 'application/json' }
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -1965,13 +1971,13 @@ function showSuccess(tcId, issueKey, issueUrl, moduloNombre, tipoLabel, entorno,
       </svg>
     </div>
     <div>
-      <div class="modal-title">${bugKey ? 'Enviado a QAA y BG' : 'Caso enviado a Jira'}</div>
+      <div class="modal-title">${bugKey ? `Enviado a ${APP_CONFIG.projects.qa} y ${APP_CONFIG.projects.bug}` : 'Caso enviado a Jira'}</div>
       <div class="modal-sub">${estadoLabel}</div>
     </div>`;
 
   const bugRow = bugKey ? `
     <div class="modal-key" style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
-      🐛 Bug en BG: <a href="${bugUrl}" target="_blank" style="color:#dc2626;font-weight:700">${bugKey}</a>
+      🐛 Bug: <a href="${bugUrl}" target="_blank" style="color:#dc2626;font-weight:700">${bugKey}</a>
     </div>` : '';
 
   const body = `
@@ -1994,7 +2000,7 @@ function showSuccess(tcId, issueKey, issueUrl, moduloNombre, tipoLabel, entorno,
     <a href="${issueUrl}" target="_blank" style="flex:1;text-decoration:none">
       <button class="modal-btn-primary" style="width:100%">Ver en Jira</button>
     </a>
-    ${bugKey ? `<a href="${bugUrl}" target="_blank" style="text-decoration:none"><button class="modal-btn-secondary" style="color:#dc2626;border-color:#fca5a5">Ver bug BG</button></a>` : ''}
+    ${bugKey ? `<a href="${bugUrl}" target="_blank" style="text-decoration:none"><button class="modal-btn-secondary" style="color:#dc2626;border-color:#fca5a5">Ver bug</button></a>` : ''}
     <button class="modal-btn-secondary" onclick="closeModal()">Cerrar</button>`;
 
   showModal('success', head, body, footer);
@@ -2031,7 +2037,7 @@ function showUpdateSuccess(editKey, issueUrl, moduloNombre, tipoLabel, entorno, 
 
   const bugRow = bugKey ? `
     <div class="modal-card" style="border-color:#fca5a5">
-      <div class="modal-card-label" style="color:#dc2626">Bug en BG</div>
+      <div class="modal-card-label" style="color:#dc2626">Bug</div>
       <div class="modal-tc" style="color:#dc2626">${bugKey}</div>
       <div class="modal-key"><a href="${bugUrl}" target="_blank" style="color:#dc2626">${bugUrl}</a></div>
     </div>` : '';
@@ -2053,7 +2059,7 @@ function showUpdateSuccess(editKey, issueUrl, moduloNombre, tipoLabel, entorno, 
     <a href="${issueUrl}" target="_blank" style="flex:1;text-decoration:none">
       <button class="modal-btn-primary" style="width:100%;background:rgba(99,102,241,.8)">Ver en Jira</button>
     </a>
-    ${bugKey ? `<a href="${bugUrl}" target="_blank" style="text-decoration:none"><button class="modal-btn-secondary" style="color:#dc2626;border-color:#fca5a5">Ver bug BG</button></a>` : ''}
+    ${bugKey ? `<a href="${bugUrl}" target="_blank" style="text-decoration:none"><button class="modal-btn-secondary" style="color:#dc2626;border-color:#fca5a5">Ver bug</button></a>` : ''}
     <a href="/history" style="text-decoration:none">
       <button class="modal-btn-secondary">Ver historial</button>
     </a>
@@ -2118,7 +2124,7 @@ async function cargarEpicsDesdeJira() {
   const select = document.getElementById('modulo');
   select.disabled = true;
   try {
-    const jql = encodeURIComponent('project = QAA AND issuetype = Epic ORDER BY created ASC');
+    const jql = encodeURIComponent(`project = ${APP_CONFIG.projects.qa} AND issuetype = Epic ORDER BY created ASC`);
     const r = await fetch(`/jira/rest/api/3/search/jql?jql=${jql}&fields=summary,description&maxResults=100`, {
       headers: { 'Authorization': AUTH, 'Accept': 'application/json' }
     });
@@ -2154,7 +2160,7 @@ async function cargarEpicsDesdeJira() {
 
       if (!prefix) {
         const m = summary.match(/^([A-Z]{2,4})\s*[—\-]/);
-        prefix = m ? m[1] : epicKey.replace('QAA-', 'M');
+        prefix = m ? m[1] : epicKey.replace(`${APP_CONFIG.projects.qa}-`, 'M');
       }
 
       EPICS[moduloId] = { key: epicKey, prefix, modulo, severidadDefault, nombre };
@@ -2207,12 +2213,12 @@ const TEST_CASES = {
       id: 'LG-TC-001',
       titulo: 'Login exitoso con credenciales válidas',
       precondiciones: [
-        'El usuario tiene una cuenta activa en Hybred',
+        'El usuario tiene una cuenta activa en la aplicación',
         'El usuario NO está logueado actualmente',
         'El servidor está disponible',
       ],
       pasos: [
-        'Navegar a https://app.hybred.edu.co/login',
+        'Navegar a https://tu-app.example.com/login',
         'Ingresar email válido en el campo "Correo electrónico"',
         'Ingresar contraseña correcta en el campo "Contraseña"',
         'Hacer clic en el botón "Iniciar sesión"',
@@ -2227,7 +2233,7 @@ const TEST_CASES = {
         'El servidor está disponible',
       ],
       pasos: [
-        'Navegar a https://app.hybred.edu.co/login',
+        'Navegar a https://tu-app.example.com/login',
         'Ingresar un email inválido o inexistente',
         'Ingresar cualquier contraseña',
         'Hacer clic en el botón "Iniciar sesión"',
@@ -2597,7 +2603,7 @@ async function submitForm() {
   if (!estado)                  return showError('Seleccioná el estado: Pass, Fail o Bloqueado.');
   if (estado==='fail'&&!severidad)  return showError('Seleccioná la severidad del defecto.');
   if (estado==='fail'&&!frecuencia) return showError('Seleccioná la frecuencia del error.');
-  if (esRetest && !retestTc)    return showError('Indicá el issue del TC anterior (ej: QAA-7).');
+  if (esRetest && !retestTc)    return showError(`Indicá el issue del TC anterior (ej: ${APP_CONFIG.projects.qa}-7).`);
 
   // Resolver el epic según el módulo seleccionado
   const moduloKey = moduloRaw.trim().toLowerCase();
@@ -2685,7 +2691,7 @@ async function submitForm() {
       const editKey  = window.editMode.key;
       const tcPrefix = window.editMode.tcPrefix || tcId;
       const summary  = `${requiereConfig ? '⚙️ ' : ''}${tcPrefix} — ${desc}`;
-      const issueUrl = `https://liceopinoverde.atlassian.net/browse/${editKey}`;
+      const issueUrl = `${APP_CONFIG.jira.browseUrl}${editKey}`;
 
       const r = await fetch(`/jira/rest/api/3/issue/${editKey}`, {
         method: 'PUT',
@@ -2735,7 +2741,7 @@ async function submitForm() {
       if (window.editMode.bgKey) {
         const bgKey = window.editMode.bgKey;
         editBugKey = bgKey;
-        editBugUrl = `https://liceopinoverde.atlassian.net/browse/${bgKey}`;
+        editBugUrl = `${APP_CONFIG.jira.browseUrl}${bgKey}`;
 
         const bgDescription = { type:'doc', version:1, content:[
           mkPanel(tcPanelType, [
@@ -2854,11 +2860,11 @@ async function submitForm() {
         method:'POST',
         headers:{'Authorization':AUTH,'Content-Type':'application/json','Accept':'application/json'},
         body:JSON.stringify({ fields:{
-          project:           { key: 'QAA' },
+          project:           { key: APP_CONFIG.projects.qa },
           parent:            { key: epic.key },
           summary,
           issuetype:         { name: 'Tarea' },
-          customfield_10014: epic.key,
+          [APP_CONFIG.fields.epicLink]: epic.key,
           priority:          { name: requiereConfig ? 'High' : 'Medium' },
           labels,
           description,
@@ -2869,7 +2875,7 @@ async function submitForm() {
 
       const created  = await r.json();
       const issueKey = created.key;
-      const issueUrl = `https://liceopinoverde.atlassian.net/browse/${issueKey}`;
+      const issueUrl = `${APP_CONFIG.jira.browseUrl}${issueKey}`;
 
       // ── 3b. Registrar en BG como finalizada (si está habilitado) ──
       const registrarEnBG = document.getElementById('registrarEnBG')?.checked;
@@ -2879,7 +2885,7 @@ async function submitForm() {
           method: 'POST',
           headers: { 'Authorization': AUTH, 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify({ fields: {
-            project:     { key: 'BG' },
+            project:     { key: APP_CONFIG.projects.bug },
             summary:     summary,
             description: description,
             issuetype:   { name: 'Tarea' },
@@ -2890,11 +2896,11 @@ async function submitForm() {
         if (bgFinRes.ok) {
           const bgFinData = await bgFinRes.json();
           bgFinalizadaKey = bgFinData.key;
-          // Transicionar a "Finalizada" (transition id: "31")
+          // Transicionar a "Finalizada"
           await fetch(`/jira/rest/api/3/issue/${bgFinalizadaKey}/transitions`, {
             method: 'POST',
             headers: { 'Authorization': AUTH, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ transition: { id: '31' } })
+            body: JSON.stringify({ transition: { id: APP_CONFIG.workflow.finalizeTransitionId } })
           });
           // Vincular BG finalizada <-> QAA
           await fetch(`/jira/rest/api/3/issueLink`, {
@@ -2914,7 +2920,7 @@ async function submitForm() {
         await fetch(`/jira/rest/api/3/issue/${issueKey}/transitions`, {
           method: 'POST',
           headers: { 'Authorization': AUTH, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transition: { id: '31' } })
+          body: JSON.stringify({ transition: { id: APP_CONFIG.workflow.finalizeTransitionId } })
         });
       }
 

@@ -4,7 +4,8 @@
 /* ── Tokens ── */
 :root {
   --g9: #052e1f; --g8: #0a4a32; --g7: #0f6e56; --g6: #1d9e75;
-  --g4: #4dbf94; --g2: #a8e6cc; --g1: #d4f5e8; --g0: #edfaf4;
+  --g5: #35b083; --g4: #4dbf94; --g3: #79d1ae; --g2: #a8e6cc;
+  --g1: #d4f5e8; --g0: #edfaf4;
   --bg: #f2f5f4;
   --white: #fff;
   --border: #dde8e3;
@@ -38,6 +39,7 @@ body {
   border-radius: var(--rl);
   padding: 24px 28px;
   display: flex; align-items: center; gap: 16px;
+  flex-wrap: wrap;                 /* evita overflow del nav en la banda tablet */
   box-shadow: var(--s2);
 }
 .hdr-icon {
@@ -542,6 +544,26 @@ select {
 @media (min-width: 641px) and (max-width: 900px) {
   .modal-overlay { padding: 20px; }
   .modal-box { max-width: 540px !important; }
+}
+
+/* ── Utility: contenedor con scroll horizontal para contenido ancho (tablas) ── */
+.table-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* ── Responsive: header en banda tablet (evita que el nav desborde) ── */
+@media (max-width: 820px) {
+  .hdr { padding: 18px 20px; row-gap: 12px; }
+}
+@media (max-width: 560px) {
+  /* el bloque de acciones baja a su propia fila, ancho completo */
+  .hdr-right { margin-left: 0; width: 100%; }
+  .hdr-right, .hdr-badges { justify-content: flex-start; }
+}
+
+/* ── Touch targets: en dispositivos táctiles, área mínima cómoda para el dedo ── */
+@media (pointer: coarse) {
+  button, .btn, .btn-hdr-history, .e-btn, .sev-btn,
+  .modal-btn-primary, .modal-btn-secondary { min-height: 40px; }
+  .btn-rm { width: 30px; height: 30px; }
 }
 
 /* ── Lightbox ── */

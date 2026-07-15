@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Editor JSON — Hybred QA</title>
+<title>Editor JSON</title>
 <link rel="stylesheet" href="/styles.css">
+<script src="/config.js"></script>
 <script src="/epic-filter.js"></script>
 <style>
 .editor-wrap {
@@ -72,6 +73,16 @@
   font-family: monospace; color: var(--g7); font-size: 11px;
 }
 .schema-hint summary { cursor: pointer; font-weight: 600; color: var(--g6); font-size: 12px; }
+
+/* ── Responsive (reutiliza el breakpoint 640px de la app) ── */
+@media (max-width: 640px) {
+  /* Select de epic: de 260px fijo a ancho completo para no desbordar en teléfono */
+  .epic-select { min-width: 0; width: 100%; }
+  /* Editor más bajo para que toolbar y botones queden alcanzables sin scroll largo */
+  #json-editor { min-height: 320px; }
+  /* Botones del toolbar se reparten al envolver (altura táctil viene de pointer:coarse) */
+  .editor-toolbar .btn-tool { flex: 1 1 auto; }
+}
 </style>
 </head>
 <body>
@@ -87,7 +98,7 @@
   </div>
   <div class="hdr-text">
     <h1>Editor JSON de Jira</h1>
-    <p>Hybred · Estructura QA por Epic</p>
+    <p id="hdr-org">Estructura QA por Epic</p>
   </div>
   <div class="hdr-right">
     <a href="/" class="btn-hdr-history">
@@ -100,7 +111,7 @@
       <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
         <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
       </svg>
-      <span>Verificar BG</span>
+      <span>Verificar bugs</span>
     </a>
     <a href="/history" class="btn-hdr-history">
       <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
@@ -194,7 +205,14 @@
 
 <script>
 const JIRA_BASE = window.location.origin;
-const EPICS_JQL = encodeURIComponent('project = QAA AND issuetype = Epic ORDER BY created ASC');
+const EPICS_JQL = encodeURIComponent(`project = ${APP_CONFIG.projects.qa} AND issuetype = Epic ORDER BY created ASC`);
+
+// ── Branding desde APP_CONFIG ────────────────────────────────────────────────
+if (window.APP_CONFIG && APP_CONFIG.branding) {
+  document.title = `Editor JSON — ${APP_CONFIG.branding.appName}`;
+  const orgEl = document.getElementById('hdr-org');
+  if (orgEl) orgEl.textContent = `${APP_CONFIG.branding.orgName} · Estructura QA por Epic`;
+}
 
 let originalJSON = '';
 let currentEpicKey = '';

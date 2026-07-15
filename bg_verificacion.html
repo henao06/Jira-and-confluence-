@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Verificación BG — Hybred QA</title>
+<title>Verificación de bugs</title>
 <link rel="stylesheet" href="/styles.css">
+<script src="/config.js"></script>
 <script src="/epic-filter.js"></script>
 <script src="/bulk-epic.js"></script>
 <style>
@@ -550,6 +551,32 @@ a.badge-key:hover { color: #0052cc; border-color: #b3d4ff; background: #e9f2ff; 
 @media (max-width: 720px) {
   .two-col { grid-template-columns: 1fr; }
   .col-body { max-height: 50vh; }
+  /* Al apilarse, no forzar paneles altos y vacíos */
+  .col-panel { min-height: 0; }
+
+  /* Bulk por Epic: el sidebar pasa arriba en una sola columna;
+     la lista de epics scrollea con altura acotada para no comerse la pantalla */
+  .bulk-layout { grid-template-columns: 1fr; }
+  .bulk-epic-list { max-height: 40vh; }
+  .bulk-detail { min-height: 0; }
+}
+
+@media (max-width: 640px) {
+  body { padding: 16px 14px 40px; }
+  .bulk-detail { padding: 16px; }
+  .bulk-radio-row { flex-wrap: wrap; }
+  .bulk-actions { flex-wrap: wrap; gap: 10px; }
+  .bulk-progress { flex-basis: 100%; }
+}
+
+@media (max-width: 480px) {
+  body { padding: 14px 10px 32px; }
+  .two-col { gap: 14px; }
+  .col-body { max-height: 44vh; padding: 12px; gap: 8px; }
+  .col-header { padding: 12px 14px; }
+  .bulk-detail { padding: 14px; }
+  .bulk-detail-empty { min-height: 200px; }
+  .bulk-btn-complete { width: 100%; }
 }
 
 /* ── Queue card extra sections ── */
@@ -919,6 +946,15 @@ a.badge-key:hover { color: #0052cc; border-color: #b3d4ff; background: #e9f2ff; 
 }
 .pending-status-btn:hover:not(:disabled) { border-color: var(--g4); color: var(--g7); }
 .pending-status-btn:disabled { opacity: .5; cursor: not-allowed; }
+/* Acción táctil para mover a la cola (el drag&drop HTML5 no funciona en touch) */
+.btn-to-queue {
+  margin-top: 8px; width: 100%;
+  background: var(--g7); border: none; border-radius: 6px;
+  padding: 8px 10px; font-size: 11.5px; font-weight: 600;
+  color: #fff; cursor: pointer; font-family: inherit;
+  transition: background .12s;
+}
+.btn-to-queue:hover { background: var(--g8); }
 
 .pending-status-row { display: flex; align-items: center; gap: 5px; }
 
@@ -1145,8 +1181,8 @@ a.badge-key:hover { color: #0052cc; border-color: #b3d4ff; background: #e9f2ff; 
     </svg>
   </div>
   <div class="hdr-text">
-    <h1>Verificación BG</h1>
-    <p>Hybred · Bugs Under Review → Cola QAA</p>
+    <h1 id="hdr-title">Verificación</h1>
+    <p id="hdr-sub">Bugs Under Review</p>
   </div>
   <div class="hdr-right">
     <a href="/" class="btn-hdr-history">
@@ -1186,7 +1222,7 @@ a.badge-key:hover { color: #0052cc; border-color: #b3d4ff; background: #e9f2ff; 
       <span>Bulk Epic</span>
     </button>
     <div id="epic-filter-container"></div>
-    <a id="version-badge" href="https://liceopinoverde.atlassian.net/jira/software/projects/QAA/releases" target="_blank" class="btn-hdr-history" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#a5b4fc" title="Versión activa">...</a>
+    <a id="version-badge" href="#" target="_blank" class="btn-hdr-history" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#a5b4fc" title="Versión activa">...</a>
   </div>
 </div>
 
@@ -1219,7 +1255,7 @@ a.badge-key:hover { color: #0052cc; border-color: #b3d4ff; background: #e9f2ff; 
   <!-- COLA QAA -->
   <div class="col-panel" id="cola-qaa-col">
     <div class="col-header">
-      <div class="col-title">Cola QAA</div>
+      <div class="col-title" id="cola-qaa-title">Cola</div>
       <span class="col-count zero" id="queue-count">0</span>
     </div>
     <div id="summary-banner" class="summary-banner"></div>
@@ -1240,7 +1276,7 @@ a.badge-key:hover { color: #0052cc; border-color: #b3d4ff; background: #e9f2ff; 
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
         </svg>
-        Enviar cola a QAA
+        <span id="btn-subir-label">Enviar cola</span>
       </button>
     </div>
   </div>
@@ -1273,18 +1309,18 @@ a.badge-key:hover { color: #0052cc; border-color: #b3d4ff; background: #e9f2ff; 
 
 <script>
 const JIRA_BASE  = window.location.origin + '/jira';
-const QAA_PARENT = 'QAA-172';
+const QAA_PARENT = APP_CONFIG.epics.verification;
 
 let versionActual = null;
 
 async function cargarVersionActual() {
   try {
-    const r = await fetch(`${JIRA_BASE}/rest/api/3/project/QAA/versions`, {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/project/${APP_CONFIG.projects.qa}/versions`, {
       headers: { Accept: 'application/json' }
     });
     if (!r.ok) return;
     const activas = (await r.json())
-      .filter(v => !v.released && v.name.startsWith('test-v'))
+      .filter(v => !v.released && v.name.startsWith(APP_CONFIG.workflow.versionPrefix))
       .sort((a, b) => b.name.localeCompare(a.name));
     if (!activas.length) return;
     versionActual = activas[0].name;
@@ -1301,7 +1337,7 @@ let   dragKey    = null;
 let   submitting = false;
 // Filtros del selector — se pueblan desde la descripción del epic (heading → bloque JQL).
 // El primero es el fallback si el epic no carga. { name, jql }
-let filtros         = [{ name: 'Verificación BG', jql: 'project = BG AND status = 10261 ORDER BY priority DESC, created DESC' }];
+let filtros         = [{ name: `Verificación ${APP_CONFIG.projects.bug}`, jql: `project = ${APP_CONFIG.projects.bug} AND status = ${APP_CONFIG.workflow.bugUnderReviewStatusId} ORDER BY priority DESC, created DESC` }];
 let filtroActivoIdx = 0;
 function jqlActivo()          { return filtros[filtroActivoIdx]?.jql || filtros[0].jql; }
 // Proyecto destino del filtro activo (BG, SP, …) leído de la JQL.
@@ -1310,12 +1346,12 @@ function proyectoFiltroActivo() {
   return m ? m[1].toUpperCase() : '';
 }
 // El flujo de verificación (Pendientes → Cola → evidencia en QAA) aplica a BG y SP.
-function esModoVerificacion() { return ['BG', 'SP'].includes(proyectoFiltroActivo()); }
+function esModoVerificacion() { return [APP_CONFIG.projects.bug, APP_CONFIG.projects.tech].includes(proyectoFiltroActivo()); }
 
 // ── Priority helpers ──────────────────────────────────────────────────────────
 
 function extraerKeyRetest(summary) {
-  const m = (summary || '').match(/^(QAA-\d+)\s*[—\-]/);
+  const m = (summary || '').match(new RegExp(`^(${APP_CONFIG.projects.qa}-\\d+)\\s*[—\\-]`));
   return m ? m[1] : null;
 }
 
@@ -1347,7 +1383,7 @@ function extraerTextoADF(adf) {
   return parts.join('').trim();
 }
 
-// ── Dependencia BG (customfield_10370) ───────────────────────────────────────
+// ── Dependencia bug↔TC (APP_CONFIG.fields.bgDependency) ──────────────────────
 
 
 // ── JQL desde epic ────────────────────────────────────────────────────────────
@@ -1380,7 +1416,7 @@ function extraerFiltrosDeADF(adf) {
 
 async function cargarJqlDesdeEpic() {
   try {
-    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${QAA_PARENT}?fields=description,customfield_10370`, {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${QAA_PARENT}?fields=description,${APP_CONFIG.fields.bgDependency}`, {
       headers: { Accept: 'application/json' }
     });
     if (r.ok) {
@@ -1439,7 +1475,7 @@ async function cargarPendientes() {
     body.innerHTML = '';
     body.appendChild(_crearLoadingEl());
 
-    const epicClause = (proyectoFiltroActivo() === 'BG') ? EpicFilter.getJqlClause() : '';
+    const epicClause = (proyectoFiltroActivo() === APP_CONFIG.projects.bug) ? EpicFilter.getJqlClause() : '';
     let finalJql = jqlActivo();
     if (epicClause) {
       const orderByIdx = finalJql.toLowerCase().indexOf(' order by');
@@ -1452,7 +1488,7 @@ async function cargarPendientes() {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
         jql: finalJql,
-        fields: ['summary', 'priority', 'assignee', 'reporter', 'created', 'description', 'labels', 'status', 'customfield_10370', 'customfield_10014'],
+        fields: ['summary', 'priority', 'assignee', 'reporter', 'created', 'description', 'labels', 'status', APP_CONFIG.fields.bgDependency, APP_CONFIG.fields.epicLink],
         maxResults: 50
       })
     });
@@ -1561,11 +1597,11 @@ function makeRetestBadge(summary, bgKey) {
         const data  = await r.json();
         const links = data.fields?.issuelinks || [];
         const found = links.find(l =>
-          (l.inwardIssue?.key  || '').startsWith('QAA-') ||
-          (l.outwardIssue?.key || '').startsWith('QAA-')
+          (l.inwardIssue?.key  || '').startsWith(APP_CONFIG.projects.qa + '-') ||
+          (l.outwardIssue?.key || '').startsWith(APP_CONFIG.projects.qa + '-')
         );
         if (found) {
-          qaaKey = (found.inwardIssue?.key || '').startsWith('QAA-')
+          qaaKey = (found.inwardIssue?.key || '').startsWith(APP_CONFIG.projects.qa + '-')
             ? found.inwardIssue.key
             : found.outwardIssue.key;
         }
@@ -1591,7 +1627,7 @@ function makePendingCard(issue) {
 
   card.innerHTML = `
     <div class="card-top">
-      <a class="badge-key" href="https://liceopinoverde.atlassian.net/browse/${esc(issue.key)}" target="_blank" rel="noopener noreferrer" title="Abrir ${esc(issue.key)} en Jira" onclick="event.stopPropagation()" draggable="false">${esc(issue.key)}</a>
+      <a class="badge-key" href="${APP_CONFIG.jira.browseUrl}${esc(issue.key)}" target="_blank" rel="noopener noreferrer" title="Abrir ${esc(issue.key)} en Jira" onclick="event.stopPropagation()" draggable="false">${esc(issue.key)}</a>
       <span class="badge-priority ${priorityClass(priority)}">${priority}</span>
     </div>
     <div class="card-summary">${esc(f.summary || '—')}</div>
@@ -1697,6 +1733,18 @@ function makePendingCard(issue) {
   statusSection.appendChild(btnEstado);
   card.appendChild(statusSection);
 
+  // Mover a la cola con un tap — alternativa al drag&drop, que no funciona en touch.
+  // Reusa addToQueue(key), la misma función que dispara onDrop (idempotente).
+  const btnToQueue = document.createElement('button');
+  btnToQueue.className   = 'btn-to-queue';
+  btnToQueue.type        = 'button';
+  btnToQueue.textContent = '→ Mover a la cola';
+  btnToQueue.addEventListener('click', e => {
+    e.stopPropagation();
+    addToQueue(issue.key);
+  });
+  card.appendChild(btnToQueue);
+
   card.addEventListener('dragstart', e => {
     dragKey = issue.key;
     card.classList.add('dragging');
@@ -1722,7 +1770,7 @@ function makeQueueCard(issue) {
     <div class="queue-card">
       <div class="queue-card-info">
         <div class="card-top" id="card-top-${key}">
-          <a class="badge-key" href="https://liceopinoverde.atlassian.net/browse/${esc(key)}" target="_blank" rel="noopener noreferrer" title="Abrir ${esc(key)} en Jira" onclick="event.stopPropagation()">${esc(key)}</a>
+          <a class="badge-key" href="${APP_CONFIG.jira.browseUrl}${esc(key)}" target="_blank" rel="noopener noreferrer" title="Abrir ${esc(key)} en Jira" onclick="event.stopPropagation()">${esc(key)}</a>
           <span class="badge-priority ${priorityClass(priority)}">${priority}</span>
         </div>
         <div class="card-summary">${esc(f.summary || '—')}</div>
@@ -1814,7 +1862,7 @@ function makeQueueCard(issue) {
   chk.addEventListener('change', () => { item.marcarFinalizada = chk.checked; });
   const chkLbl = document.createElement('span');
   chkLbl.className   = 'estado-check-label';
-  chkLbl.textContent = 'FN QAA';
+  chkLbl.textContent = `FN ${APP_CONFIG.projects.qa}`;
   chkRow.appendChild(chk);
   chkRow.appendChild(chkLbl);
   secEstado.appendChild(chkRow);
@@ -1949,13 +1997,13 @@ function makeQueueCard(issue) {
   sections.appendChild(btnPreview);
 
   // 5. Agregar tarea en BG (sólo en el flujo BG; no aplica a otros proyectos)
-  if (proyectoFiltroActivo() === 'BG') {
+  if (proyectoFiltroActivo() === APP_CONFIG.projects.bug) {
     const secTareasBG = document.createElement('div');
     secTareasBG.className = 'tarea-bg-section';
     const btnAgregarBG = document.createElement('button');
     btnAgregarBG.className = 'btn-agregar-bg';
     btnAgregarBG.type      = 'button';
-    btnAgregarBG.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Agregar tarea en BG`;
+    btnAgregarBG.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Agregar tarea en ${APP_CONFIG.projects.bug}`;
     btnAgregarBG.addEventListener('click', e => {
       e.stopPropagation();
       agregarTareaBGPendiente(issue, secTareasBG);
@@ -2172,7 +2220,7 @@ function abrirModalPreview(key) {
 
   // Adjuntos originales del bug en BG (se copian automáticamente)
   const secAdjOriginales = document.createElement('div');
-  secAdjOriginales.innerHTML = `<div class="modal-section-title">Adjuntos originales BG (se copian automáticamente)</div>`;
+  secAdjOriginales.innerHTML = `<div class="modal-section-title">Adjuntos originales ${APP_CONFIG.projects.bug} (se copian automáticamente)</div>`;
   const listOriginales = document.createElement('div');
   listOriginales.className = 'modal-adjuntos-list';
   listOriginales.innerHTML = '<span class="modal-empty-list">Cargando adjuntos...</span>';
@@ -2404,7 +2452,7 @@ function agregarTareaBGPendiente(issue, container) {
   const header = document.createElement('div');
   header.className = 'tarea-bg-item-header';
   const lbl = document.createElement('span');
-  lbl.textContent = 'Nueva tarea BG';
+  lbl.textContent = `Nueva tarea ${APP_CONFIG.projects.bug}`;
   const btnRm = document.createElement('button');
   btnRm.className   = 'btn-remove-tarea-bg';
   btnRm.type        = 'button';
@@ -2451,7 +2499,7 @@ function agregarTareaBGPendiente(issue, container) {
   btnCrear.className   = 'btn-agregar-bg';
   btnCrear.type        = 'button';
   btnCrear.style.cssText = 'border-style:solid;background:var(--g1);color:var(--g8);border-color:var(--g4);margin-top:4px;';
-  btnCrear.textContent = 'Crear en BG';
+  btnCrear.textContent = `Crear en ${APP_CONFIG.projects.bug}`;
   btnCrear.addEventListener('click', async e => {
     e.stopPropagation();
     if (!tarea.titulo.trim()) { inputTitulo.focus(); return; }
@@ -2461,7 +2509,7 @@ function agregarTareaBGPendiente(issue, container) {
     try {
       const bgPayload = {
         fields: {
-          project:   { key: 'BG' },
+          project:   { key: APP_CONFIG.projects.bug },
           summary:   tarea.titulo.trim(),
           issuetype:   { name: 'Tarea' },
           labels:      ['qa-reported'],
@@ -2526,7 +2574,7 @@ function agregarTareaBGPendiente(issue, container) {
 
       wrap.innerHTML = '';
       const badge = document.createElement('a');
-      badge.href        = `https://liceopinoverde.atlassian.net/browse/${esc(bgNewKey)}`;
+      badge.href        = `${APP_CONFIG.jira.browseUrl}${esc(bgNewKey)}`;
       badge.target      = '_blank';
       badge.className   = 'card-result-badge badge-ok';
       badge.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:5px;background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;text-decoration:none;';
@@ -2584,7 +2632,7 @@ function mkB(text)             { return { type:'paragraph', content:[{type:'text
 function mkRule()              { return { type:'rule' }; }
 // Nodo de texto con la key del issue como link clickeable a Jira
 function mkIssueLink(key) {
-  return { type:'text', text:String(key), marks:[{ type:'link', attrs:{ href:`https://liceopinoverde.atlassian.net/browse/${key}` } }] };
+  return { type:'text', text:String(key), marks:[{ type:'link', attrs:{ href:`${APP_CONFIG.jira.browseUrl}${key}` } }] };
 }
 // Párrafo "label KEY" donde KEY es un link clickeable
 function mkIssueRef(label, key) {
@@ -2702,7 +2750,7 @@ async function subirTodoAQAA() {
         const detalle    = result.changes.length
           ? ` title="${esc(result.changes.join(', '))}"`
           : '';
-        resultArea.innerHTML = `<span class="card-result-badge ${badgeClass}"${detalle}><a href="https://liceopinoverde.atlassian.net/browse/${esc(createdKey)}" target="_blank" style="color:inherit;text-decoration:underline;">${esc(createdKey)}</a> ${icon}${retestLink}</span>`;
+        resultArea.innerHTML = `<span class="card-result-badge ${badgeClass}"${detalle}><a href="${APP_CONFIG.jira.browseUrl}${esc(createdKey)}" target="_blank" style="color:inherit;text-decoration:underline;">${esc(createdKey)}</a> ${icon}${retestLink}</span>`;
       }
       const removeBtn = document.querySelector(`#drop-zone .bug-card[data-key="${key}"] .btn-remove-queue`);
       if (removeBtn) removeBtn.disabled = true;
@@ -2725,7 +2773,7 @@ async function subirTodoAQAA() {
 
   if (fail === 0) {
     banner.className   = 'summary-banner show ok';
-    banner.textContent = partes.join(' · ') + ' en QAA.';
+    banner.textContent = partes.join(' · ') + ` en ${APP_CONFIG.projects.qa}.`;
     const failKeys = queue.filter(k => {
       const ra = document.getElementById(`result-${k}`);
       return ra && ra.querySelector('.badge-fail');
@@ -2750,7 +2798,7 @@ async function buscarSubtareaQAAExistente(bgKey) {
 
   // 1) Intento por label
   try {
-    const jql = encodeURIComponent(`project = QAA AND labels = "${labelKey}"`);
+    const jql = encodeURIComponent(`project = ${APP_CONFIG.projects.qa} AND labels = "${labelKey}"`);
     const r = await fetch(`${JIRA_BASE}/rest/api/3/search/jql?jql=${jql}&fields=${fields}&maxResults=1`, {
       headers: { Accept: 'application/json' }
     });
@@ -2772,7 +2820,7 @@ async function buscarSubtareaQAAExistente(bgKey) {
       const qaaKey = links
         .flatMap(l => [l.inwardIssue?.key, l.outwardIssue?.key])
         .filter(Boolean)
-        .find(k => k.startsWith('QAA-') && k !== QAA_PARENT);
+        .find(k => k.startsWith(APP_CONFIG.projects.qa + '-') && k !== QAA_PARENT);
       if (qaaKey) {
         const r2 = await fetch(`${JIRA_BASE}/rest/api/3/issue/${qaaKey}?fields=${fields}`, {
           headers: { Accept: 'application/json' }
@@ -2928,10 +2976,10 @@ async function sincronizarSubtareaQAA(issue, finalizar = false) {
     mode = 'created';
     const payload = {
       fields: {
-        project:           { key: 'QAA' },
-        parent:            { key: QAA_PARENT },
-        customfield_10014: QAA_PARENT,
-        issuetype:         { name: 'Tarea' },
+        project:                     { key: APP_CONFIG.projects.qa },
+        parent:                      { key: QAA_PARENT },
+        [APP_CONFIG.fields.epicLink]: QAA_PARENT,
+        issuetype:                   { name: 'Tarea' },
         ...expectedFields
       }
     };
@@ -3032,7 +3080,7 @@ async function sincronizarSubtareaQAA(issue, finalizar = false) {
         mkRule(),
         mkH(resultLabel),
         ...(resultados ? [mkH('Resultado obtenido'), mkP(resultados)] : []),
-        mkH('Subtarea QAA vinculada'),
+        mkH(`Subtarea ${APP_CONFIG.projects.qa} vinculada`),
         { type:'paragraph', content:[ mkIssueLink(qaaKey) ] }
       ];
       const newDesc = bgCurrentDesc
@@ -3221,6 +3269,21 @@ function cambiarTab(name) {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+
+// Branding e identificadores de instancia (desde APP_CONFIG) en el markup estático.
+(function aplicarBranding() {
+  document.title = `Verificación ${APP_CONFIG.projects.bug} — ${APP_CONFIG.branding.appName}`;
+  const _h1 = document.getElementById('hdr-title');
+  if (_h1) _h1.textContent = `Verificación ${APP_CONFIG.projects.bug}`;
+  const _sub = document.getElementById('hdr-sub');
+  if (_sub) _sub.textContent = `${APP_CONFIG.branding.orgName} · Bugs Under Review → Cola ${APP_CONFIG.projects.qa}`;
+  const _colTitle = document.getElementById('cola-qaa-title');
+  if (_colTitle) _colTitle.textContent = `Cola ${APP_CONFIG.projects.qa}`;
+  const _btnLabel = document.getElementById('btn-subir-label');
+  if (_btnLabel) _btnLabel.textContent = `Enviar cola a ${APP_CONFIG.projects.qa}`;
+  const _verBadge = document.getElementById('version-badge');
+  if (_verBadge) _verBadge.href = `${APP_CONFIG.jira.baseUrl}/jira/software/projects/${APP_CONFIG.projects.qa}/releases`;
+})();
 
 cargarVersionActual();
 

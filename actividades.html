@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Actividades — Hybred</title>
+<title>Actividades</title>
 <link rel="stylesheet" href="/styles.css">
+<script src="/config.js"></script>
 <script src="/bg_reporter.js?v=20260513"></script>
 <script src="/releases.js?v=20260513"></script>
 <style>
@@ -45,6 +46,22 @@
 .result-box.show { display: flex; }
 .result-box a { color: #059669; font-weight: 700; text-decoration: none; }
 .result-box a:hover { text-decoration: underline; }
+
+/* ── Responsive (reutiliza el breakpoint 640px de la app) ── */
+@media (max-width: 640px) {
+  /* Cabeceras de sección: dejan bajar el control (select / toggle) a una fila propia */
+  .sec-hdr { flex-wrap: wrap; }
+  .sec-hdr label { margin-left: 0 !important; flex: 1 1 100%; }
+  .sec-hdr .sel { flex: 1; min-width: 0 !important; max-width: none !important; }
+
+  /* Toggle Texto/Pasos a ancho completo y botones cómodos para el dedo */
+  .mode-toggle { flex: 1 1 100%; }
+  .mode-btn { flex: 1; padding: 9px 18px; }
+
+  /* Fila de campos de reporte (Bug/Técnica): selects a ancho completo */
+  #bg-assignee-wrap label { flex: 1 1 100%; }
+  #bg-assignee-wrap .sel { flex: 1; min-width: 0 !important; max-width: none !important; }
+}
 </style>
 </head>
 <body>
@@ -59,7 +76,7 @@
   </div>
   <div class="hdr-text">
     <h1>Actividades</h1>
-    <p>Hybred · QAA-179</p>
+    <p id="hdr-sub"></p>
   </div>
   <div class="hdr-right">
     <a href="/" class="btn-hdr-history">
@@ -72,7 +89,7 @@
       <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
         <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
       </svg>
-      <span>Verificar BG</span>
+      <span>Verificar bugs</span>
     </a>
     <a href="/history" class="btn-hdr-history">
       <svg fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
@@ -196,13 +213,13 @@
   <!-- Campos de reporte (visible al marcar BG o TECH) -->
   <div id="bg-assignee-wrap" style="display:none;padding:10px 24px;gap:8px 20px;flex-wrap:wrap;align-items:center;background:var(--g0);border-top:1px solid var(--border)">
     <label id="bg-tipo-wrap" style="display:none;align-items:center;gap:6px">
-      <span style="font-size:.8rem;color:var(--g4);white-space:nowrap">Tipo BG:</span>
+      <span style="font-size:.8rem;color:var(--g4);white-space:nowrap">Tipo de bug:</span>
       <select id="bg-tipo" class="sel" style="padding:4px 10px;font-size:.82rem;height:32px;min-width:130px">
         <option value="Error">Error</option>
       </select>
     </label>
     <label id="tech-tipo-wrap" style="display:none;align-items:center;gap:6px">
-      <span style="font-size:.8rem;color:var(--g4);white-space:nowrap">Tipo SP:</span>
+      <span style="font-size:.8rem;color:var(--g4);white-space:nowrap">Tipo de tarea:</span>
       <select id="tech-tipo" class="sel" style="padding:4px 10px;font-size:.82rem;height:32px;min-width:130px">
         <option value="Tech Task">Tech Task</option>
       </select>
@@ -235,14 +252,14 @@
     <button class="btn-reset" onclick="resetForm()">Limpiar</button>
     <label class="config-check-label">
       <input type="checkbox" id="reportar-bug" onchange="onReportToggle()">
-      <span>BG</span>
+      <span>Bug</span>
     </label>
     <label class="config-check-label">
       <input type="checkbox" id="reportar-tech" onchange="onReportToggle()">
-      <span> TECH</span>
+      <span> Técnica</span>
     </label>
     <label class="checkbox-label">
-      <input type="checkbox" id="registrarEnQAAFinalizada"> FN QAA
+      <input type="checkbox" id="registrarEnQAAFinalizada"> Finalizar TC
     </label>
     <button class="btn-submit" id="btn-submit" onclick="submitActividad()">Crear actividad</button>
   </div>
@@ -252,10 +269,13 @@
 
 <script>
 const JIRA_BASE = window.location.origin + '/jira';
-const JIRA_HOST = 'liceopinoverde.atlassian.net';
-const EPIC_KEY  = 'QAA-179';
+const EPIC_KEY  = APP_CONFIG.epics.activities;
 const AUTH      = '';       // el proxy del servidor inyecta la auth
 const configFiles = [];     // requerido por crearBugBG de bg_reporter.js
+
+document.title = `Actividades — ${APP_CONFIG.branding.orgName}`;
+const _hdrSub = document.getElementById('hdr-sub');
+if (_hdrSub) _hdrSub.textContent = `${APP_CONFIG.branding.orgName} · ${APP_CONFIG.epics.activities}`;
 
 let uploadedFiles = [];
 let modoActual    = 'texto';
@@ -337,12 +357,12 @@ async function restoreState() {
         document.getElementById('bg-tipo-wrap').style.display   = d.bug  ? 'flex' : 'none';
         document.getElementById('tech-tipo-wrap').style.display = d.tech ? 'flex' : 'none';
         if (d.bug) {
-          await loadTiposProyecto('BG', 'bg-tipo', 'Error');
+          await loadTiposProyecto(APP_CONFIG.projects.bug, 'bg-tipo', 'Error');
           const s = document.getElementById('bg-tipo');
           if (d.tipoBg && Array.from(s.options).some(o => o.value === d.tipoBg)) s.value = d.tipoBg;
         }
         if (d.tech) {
-          await loadTiposProyecto('SP', 'tech-tipo', 'Tech Task');
+          await loadTiposProyecto(APP_CONFIG.projects.tech, 'tech-tipo', 'Tech Task');
           const s = document.getElementById('tech-tipo');
           if (d.tipoTech && Array.from(s.options).some(o => o.value === d.tipoTech)) s.value = d.tipoTech;
         }
@@ -426,7 +446,7 @@ async function loadTiposProyecto(projectKey, selId, preferido = 'Tarea') {
 
 // QAA es el tablero base de la actividad: siempre se carga.
 async function loadTiposActividad() {
-  return loadTiposProyecto('QAA', 'tipo-actividad', 'Tarea');
+  return loadTiposProyecto(APP_CONFIG.projects.qa, 'tipo-actividad', 'Tarea');
 }
 
 // ── BG: versiones y toggle ────────────────────────────────────────────────────
@@ -437,7 +457,7 @@ async function loadBgVersions() {
   const sel = document.getElementById('bg-version');
   sel.innerHTML = '<option value="">Cargando…</option>';
   try {
-    const r = await fetch(`${JIRA_BASE}/rest/api/3/project/QAA/versions`, {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/project/${APP_CONFIG.projects.qa}/versions`, {
       headers: { 'Accept': 'application/json' }
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -449,7 +469,7 @@ async function loadBgVersions() {
       versions.map(v => `<option value="${v.name}">${v.name}${v.released ? '' : ' ✦'}</option>`).join('');
     // Pre-seleccionar la versión activa (test-v más reciente no publicada)
     const activa = window.versionActual
-      || versions.find(v => !v.released && v.name.startsWith('test-v'))?.name;
+      || versions.find(v => !v.released && v.name.startsWith(APP_CONFIG.workflow.versionPrefix))?.name;
     if (activa) sel.value = activa;
     bgVersionsLoaded = true;
   } catch(e) {
@@ -465,8 +485,8 @@ function onReportToggle() {
   toggleBgAssignee();
   document.getElementById('bg-tipo-wrap').style.display   = bug  ? 'flex' : 'none';
   document.getElementById('tech-tipo-wrap').style.display = tech ? 'flex' : 'none';
-  if (bug)  loadTiposProyecto('BG', 'bg-tipo', 'Error');
-  if (tech) loadTiposProyecto('SP', 'tech-tipo', 'Tech Task');
+  if (bug)  loadTiposProyecto(APP_CONFIG.projects.bug, 'bg-tipo', 'Error');
+  if (tech) loadTiposProyecto(APP_CONFIG.projects.tech, 'tech-tipo', 'Tech Task');
   if (bug || tech) loadBgVersions();
   saveTextState();
 }
@@ -602,14 +622,14 @@ async function submitActividad() {
       : [];
 
     // ── 1. Crear issue QAA ──
-    btn.textContent = 'Creando en QAA…';
+    btn.textContent = `Creando en ${APP_CONFIG.projects.qa}…`;
     const r = await fetch(`${JIRA_BASE}/rest/api/3/issue`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({ fields: {
-        project:           { key: 'QAA' },
+        project:           { key: APP_CONFIG.projects.qa },
         parent:            { key: EPIC_KEY },
-        customfield_10014: EPIC_KEY,
+        [APP_CONFIG.fields.epicLink]: EPIC_KEY,
         summary:           titulo,
         issuetype:         { name: document.getElementById('tipo-actividad').value || 'Tarea' },
         ...(window.versionActual ? { fixVersions: [{ name: window.versionActual }] } : {}),
@@ -622,7 +642,7 @@ async function submitActividad() {
     }
     const created  = await r.json();
     qaaKey = created.key;
-    const issueUrl = `https://${JIRA_HOST}/browse/${qaaKey}`;
+    const issueUrl = `${APP_CONFIG.jira.browseUrl}${qaaKey}`;
 
     // ── 2. Adjuntos a QAA ──
     for (const file of uploadedFiles) {
@@ -679,18 +699,18 @@ async function submitActividad() {
 
       // ── BG ──
       if (reportarBug) {
-        btn.textContent = 'Creando bug en BG…';
+        btn.textContent = `Creando bug en ${APP_CONFIG.projects.bug}…`;
         const bg = await crearBugBG({ ...reporteBase, tipo: document.getElementById('bg-tipo').value || 'Error' });
         bgKey = bg.key;
-        await subirAdjuntos(bgKey, 'BG');
+        await subirAdjuntos(bgKey, APP_CONFIG.projects.bug);
       }
 
       // ── TECH (SP) ──
       if (reportarTech) {
-        btn.textContent = 'Creando tarea en SP…';
+        btn.textContent = `Creando tarea en ${APP_CONFIG.projects.tech}…`;
         const tech = await crearTechSP({ ...reporteBase, tipo: document.getElementById('tech-tipo').value || 'Tech Task' });
         techKey = tech.key;
-        await subirAdjuntos(techKey, 'SP');
+        await subirAdjuntos(techKey, APP_CONFIG.projects.tech);
       }
     }
 
@@ -700,7 +720,7 @@ async function submitActividad() {
       const tr = await fetch(`${JIRA_BASE}/rest/api/3/issue/${qaaKey}/transitions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transition: { id: '31' } }),
+        body: JSON.stringify({ transition: { id: APP_CONFIG.workflow.finalizeTransitionId } }),
       });
       if (!tr.ok) throw new Error(`Error al finalizar ${qaaKey}`);
     }
@@ -708,8 +728,8 @@ async function submitActividad() {
     // ── Todo ok — mostrar resultado ──
     const msg = document.getElementById('result-msg');
     msg.innerHTML = `Actividad creada: <a href="${issueUrl}" target="_blank" style="color:#059669;font-weight:700">${qaaKey}</a>`
-      + (bgKey   ? ` &nbsp;·&nbsp; Bug BG: <a href="https://${JIRA_HOST}/browse/${bgKey}" target="_blank" style="color:#dc2626;font-weight:700">${bgKey}</a>` : '')
-      + (techKey ? ` &nbsp;·&nbsp; Tech SP: <a href="https://${JIRA_HOST}/browse/${techKey}" target="_blank" style="color:#2563eb;font-weight:700">${techKey}</a>` : '');
+      + (bgKey   ? ` &nbsp;·&nbsp; Bug ${APP_CONFIG.projects.bug}: <a href="${APP_CONFIG.jira.browseUrl}${bgKey}" target="_blank" style="color:#dc2626;font-weight:700">${bgKey}</a>` : '')
+      + (techKey ? ` &nbsp;·&nbsp; Tech ${APP_CONFIG.projects.tech}: <a href="${APP_CONFIG.jira.browseUrl}${techKey}" target="_blank" style="color:#2563eb;font-weight:700">${techKey}</a>` : '');
     document.getElementById('result-box').classList.add('show');
     document.getElementById('result-box').scrollIntoView({ behavior: 'smooth' });
     clearDraft();

@@ -1,4 +1,4 @@
-# Context · Proyecto QA Hybred
+# Context · Proyecto QA Tool
 
 Carpeta de contexto autogestionada. Leer en este orden para entender el proyecto.
 
@@ -8,6 +8,7 @@ Carpeta de contexto autogestionada. Leer en este orden para entender el proyecto
 |---------|-----------|-------------|
 | [README.md](README.md) | Este overview | Siempre primero |
 | [architecture.md](architecture.md) | Server.JS, archivos, data flow | Cualquier tarea de código |
+| [config.md](config.md) | Sistema de config: `.env` → `APP_CONFIG` | Antes de tocar valores org-específicos |
 | [jira.md](jira.md) | Proyectos, custom fields, endpoints, ADF | Cualquier tarea que toque Jira |
 | [flows.md](flows.md) | Flujos de usuario por página | Para entender qué hace cada pantalla |
 | [conventions.md](conventions.md) | Patrones de código + ADF helpers | Antes de escribir código |
@@ -15,10 +16,10 @@ Carpeta de contexto autogestionada. Leer en este orden para entender el proyecto
 
 ## Overview en 60 segundos
 
-**Qué es**: Aplicación interna del Liceo Pinoverde para gestionar la ejecución de Test Cases en Jira (Atlassian Cloud).
+**Qué es**: Aplicación para gestionar la ejecución de Test Cases en Jira (Atlassian Cloud). Es **org-neutral**: el dominio Jira, las keys de proyecto, custom fields, epics y branding se configuran vía `.env` → `window.APP_CONFIG` (ver [config.md](config.md)). Los valores como QAA/BG que aparecen abajo son **ejemplos** de una instancia real, no valores fijos.
 
 **Para qué sirve**:
-- Ejecutar test cases manualmente (Qa_form.html) → crea issue en Jira (proyecto QAA)
+- Ejecutar test cases manualmente (Qa_form.html) → crea issue en Jira (proyecto QA, ej. QAA)
 - Verificar bugs reportados (bg_verificacion.html) → genera subtareas QAA con trazabilidad bidireccional
 - Generar TCs faltantes en bloque por Epic (bulk-epic en bg_verificacion.html)
 - Ver historial, cobertura, releases (history.html, actividades.html)

@@ -1,4 +1,4 @@
-# Proyecto: QA Hybred · Liceo Pinoverde
+# Proyecto: QA Tool (org-neutral)
 
 > Este archivo lo lee Claude Code automáticamente al iniciar cualquier sesión en este proyecto.
 > Es la **puerta de entrada** al contexto. No borrar ni renombrar.
@@ -38,8 +38,9 @@ Si añadís funcionalidad nueva relevante al flujo de usuario, agregala a `flows
 - Mensajes en español o inglés, breves
 - NUNCA `--no-verify`, NUNCA force-push a `main`
 
-## Contacto
+## Contacto y configuración
 
-- Usuario: `dev.team@hybred.edu.co`
-- Jira: `liceopinoverde.atlassian.net`
-- Proyectos principales: **QAA** (test cases) y **BG** (bugs)
+- Usuario: `tu-email@empresa.com`
+- Jira: `tu-empresa.atlassian.net`
+- Proyectos principales: se configuran vía `.env` (`QA_PROJECT` / `BUG_PROJECT`, ej. **QAA** / **BG**). Ver `context/config.md`.
+- La herramienta es org-neutral: dominio, proyectos, custom fields, epics y branding salen de `.env` → `window.APP_CONFIG` (no hay valores de tu organización hardcodeados en el código).

@@ -53,7 +53,7 @@ const EpicFilter = (() => {
 
   async function loadEpicsFromJira(jiraBase) {
     try {
-      const jql = 'project = QAA AND issuetype = Epic ORDER BY created ASC';
+      const jql = `project = ${APP_CONFIG.projects.qa} AND issuetype = Epic ORDER BY created ASC`;
       const r = await fetch(
         `${jiraBase}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=summary&maxResults=100`,
         { headers: { Accept: 'application/json' } }
@@ -138,7 +138,7 @@ const EpicFilter = (() => {
       <div class="ef-chips" id="ef-available-${_pageKey}"></div>
 
       <div class="ef-input-row">
-        <input class="ef-input" placeholder="Agregar epic key (ej: QAA-1)" />
+        <input class="ef-input" placeholder="Agregar epic key (ej: ${APP_CONFIG.projects.qa}-1)" />
         <button class="ef-add-btn">+</button>
       </div>
     `;

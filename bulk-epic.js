@@ -36,8 +36,8 @@ function _mkTable(rows) {
 }
 
 // ── Helpers de links clickeables en ADF ───────────────────────────────────
-const _JIRA_BROWSE = 'https://liceopinoverde.atlassian.net/browse/';
-const _JIRA_VERSIONS = 'https://liceopinoverde.atlassian.net/jira/software/projects/QAA/releases';
+const _JIRA_BROWSE = APP_CONFIG.jira.browseUrl;
+const _JIRA_VERSIONS = `${APP_CONFIG.jira.baseUrl}/jira/software/projects/${APP_CONFIG.projects.qa}/releases`;
 
 function _esJiraKey(s)   { return /^[A-Z]+-\d+$/.test(String(s || '').trim()); }
 function _esUrl(s)       { return /^https?:\/\//i.test(String(s || '').trim()); }
@@ -130,7 +130,7 @@ async function cargarBulkEpics() {
   listEl.innerHTML = '<div style="padding:20px;color:var(--sub);font-size:12px;text-align:center;">Cargando epics + cobertura...</div>';
 
   try {
-    const epicJql = encodeURIComponent('project = QAA AND issuetype = Epic ORDER BY created ASC');
+    const epicJql = encodeURIComponent(`project = ${APP_CONFIG.projects.qa} AND issuetype = Epic ORDER BY created ASC`);
     const rE = await fetch(`${JIRA_BASE}/rest/api/3/search/jql?jql=${epicJql}&fields=summary&maxResults=100`, {
       headers: { Accept: 'application/json' }
     });
@@ -261,7 +261,7 @@ function renderBulkDetail() {
       <div style="flex:1">
         <div class="bulk-detail-title">${esc(epic.name)}</div>
         <div class="bulk-detail-sub">
-          <a href="https://liceopinoverde.atlassian.net/browse/${esc(epic.key)}" target="_blank" rel="noopener noreferrer" style="color:var(--sub);text-decoration:underline;">${esc(epic.key)}</a>
+          <a href="${APP_CONFIG.jira.browseUrl}${esc(epic.key)}" target="_blank" rel="noopener noreferrer" style="color:var(--sub);text-decoration:underline;">${esc(epic.key)}</a>
           · ${tasks.length} TC${tasks.length !== 1 ? 's' : ''} sin ejecutar${vBadge}
         </div>
       </div>
@@ -400,9 +400,9 @@ async function _generarTC(tc, epic, resultado, textoObtenido, numero) {
 
   const payload = {
     fields: {
-      project:           { key: 'QAA' },
+      project:           { key: APP_CONFIG.projects.qa },
       parent:            { key: epic.key },
-      customfield_10014: epic.key,
+      [APP_CONFIG.fields.epicLink]: epic.key,
       summary,
       issuetype:         { name: 'Tarea' },
       priority:          { name: bulkState.prioridad || 'Medium' },
@@ -507,7 +507,7 @@ async function completarBulk() {
     const linksHtml = creados.length
       ? `<div style="margin-top:8px;font-size:11px;line-height:1.7">` +
           creados.map(c =>
-            `<a href="https://liceopinoverde.atlassian.net/browse/${esc(c.key)}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;font-weight:700;margin-right:8px" title="Abrir ${esc(c.key)} en Jira">${esc(c.tcId)} → ${esc(c.key)}</a>`
+            `<a href="${APP_CONFIG.jira.browseUrl}${esc(c.key)}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;font-weight:700;margin-right:8px" title="Abrir ${esc(c.key)} en Jira">${esc(c.tcId)} → ${esc(c.key)}</a>`
           ).join('') +
         `</div>`
       : '';

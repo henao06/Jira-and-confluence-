@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Historial QA — Hybred</title>
+<title>Historial QA</title>
 <link rel="stylesheet" href="/styles.css">
+<script src="/config.js"></script>
 <script src="/epic-filter.js"></script>
 <style>
 :root {
@@ -284,6 +285,43 @@
 .missing-tc-id   { color:#6d28d9; font-weight:600; font-size:11.5px; white-space:nowrap; flex-shrink:0; }
 .missing-tc-name { color:var(--g7); flex:1; }
 .missing-tc-go   { opacity:0; color:#7c3aed; font-size:11px; font-weight:600; white-space:nowrap; flex-shrink:0; transition:opacity .15s; }
+
+/* ── Responsive (reutiliza breakpoint 640px de la app + 480px para teléfono angosto) ── */
+@media (max-width:640px) {
+  .page { padding:0 12px; }
+  .top-bar { padding:10px 12px; gap:6px; }
+  .filters-grid { padding:14px 12px 10px; }
+  .filter-checks { padding:4px 12px 12px; }
+  .filters-footer { padding:10px 12px; }
+  .stat-card { padding:12px 14px; min-width:78px; }
+  .stat-num { font-size:20px; }
+  .progress-wrap { padding:0 12px 12px; }
+  .pag-bar { padding:12px; flex-wrap:wrap; }
+  .missing-header { padding:10px 12px; }
+  .missing-body { padding:0 12px 12px; }
+  /* Celdas más compactas: entra más antes de necesitar scroll horizontal */
+  .history-table thead th { padding:8px 10px; font-size:10px; }
+  .history-table td { padding:8px 10px; font-size:12px; }
+  .history-table td.wrap { max-width:180px; }
+  /* Popover confinado al viewport (no puede desbordar horizontalmente) */
+  .popover { max-width:calc(100vw - 24px); }
+}
+@media (max-width:480px) {
+  .history-table thead th { padding:7px 8px; }
+  .history-table td { padding:7px 8px; font-size:11.5px; }
+  .history-table td.wrap { max-width:150px; }
+  /* Ocultar 2 columnas de baja prioridad en teléfonos muy angostos.
+     Las celdas se generan por posición y el thead coincide 1:1 con el tbody,
+     por eso se oculta el MISMO nth-child en cabecera y cuerpo (sin desalinear):
+     Prioridad = 7ª columna, Fecha = 11ª columna.
+     La fila de estado usa un td con colspan=12 (nth-child 1) y no se ve afectada. */
+  .history-table thead th:nth-child(7),
+  .history-table tbody td:nth-child(7),
+  .history-table thead th:nth-child(11),
+  .history-table tbody td:nth-child(11) { display:none; }
+  /* Menos min-width da holgura extra al left calculado por JS */
+  .popover { min-width:160px; }
+}
 </style>
 </head>
 <body>
@@ -298,7 +336,7 @@
   </div>
   <div class="hdr-text">
     <h1>Historial de pruebas</h1>
-    <p>Hybred · QAA · Tiempo real desde Jira</p>
+    <p id="hdr-sub">Tiempo real desde Jira</p>
   </div>
   <div class="hdr-right">
     <div class="hdr-badges"></div>
@@ -407,7 +445,7 @@
     <div class="filter-checks">
       <label class="filter-check-item"><input type="checkbox" id="f-config"> ⚙️ Requiere configuración</label>
       <label class="filter-check-item"><input type="checkbox" id="f-retest"> 🔁 Solo retest</label>
-      <label class="filter-check-item"><input type="checkbox" id="f-enlazadas" onchange="onEnlazadasChange()"> 🔗 Enlazadas a BG</label>
+      <label class="filter-check-item"><input type="checkbox" id="f-enlazadas" onchange="onEnlazadasChange()"> 🔗 Enlazadas a bug</label>
     </div>
     <div class="filter-group" style="margin-top:10px">
       <span class="filter-label">🔁 Estado Retest (Fail)</span>
@@ -470,7 +508,7 @@
   </div>
 
   <!-- Tabla -->
-  <div style="overflow-x:auto">
+  <div class="table-scroll">
     <table class="history-table">
       <thead>
         <tr>
@@ -507,8 +545,12 @@
 
 <script>
 const JIRA_BASE = window.location.origin + '/jira';
-const JIRA_HOST = 'liceopinoverde.atlassian.net';
 const PAGE_SIZE = 20;
+
+document.title = `Historial QA — ${APP_CONFIG.branding.orgName}`;
+const _hdrSub = document.getElementById('hdr-sub');
+if (_hdrSub) _hdrSub.textContent = `${APP_CONFIG.branding.orgName} · ${APP_CONFIG.projects.qa} · Tiempo real desde Jira`;
+
 let currentPage  = 0;
 let currentJQL   = '';
 let pageTokens   = []; // pageTokens[i] = nextPageToken para llegar a la página i+1
@@ -526,13 +568,13 @@ function onSearchInput() {
 async function fetchSuggestions(text) {
   try {
     const t = text.replace(/"/g, '').trim();
-    const isExactKey = /^QAA-\d+$/i.test(t);
+    const isExactKey = new RegExp('^' + APP_CONFIG.projects.qa + '-\\d+$', 'i').test(t);
     let jql;
     if (isExactKey) {
-      jql = `project = QAA AND issuetype != Epic AND key = "${t.toUpperCase()}"`;
+      jql = `project = ${APP_CONFIG.projects.qa} AND issuetype != Epic AND key = "${t.toUpperCase()}"`;
     } else {
       // text ~ cubre summary + description + comentarios + adjuntos
-      jql = `project = QAA AND issuetype != Epic AND text ~ "${t}*" ORDER BY created DESC`;
+      jql = `project = ${APP_CONFIG.projects.qa} AND issuetype != Epic AND text ~ "${t}*" ORDER BY created DESC`;
     }
     const r = await fetch(
       `${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&fields=summary,labels,status,fixVersions,priority&maxResults=8`,
@@ -610,8 +652,8 @@ function actualizarBadge() {
 // ── Cargar filtros desde Jira ─────────────────────────────────────────────────
 async function cargarFiltros() {
   const [versiones, epics] = await Promise.all([
-    fetch(`${JIRA_BASE}/rest/api/3/project/QAA/versions`, { headers:{ 'Accept':'application/json' } }).then(r=>r.json()).catch(()=>[]),
-    fetch(`${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent('project=QAA AND issuetype=Epic ORDER BY created ASC')}&fields=summary&maxResults=100`, { headers:{ 'Accept':'application/json' } }).then(r=>r.json()).catch(()=>({}))
+    fetch(`${JIRA_BASE}/rest/api/3/project/${APP_CONFIG.projects.qa}/versions`, { headers:{ 'Accept':'application/json' } }).then(r=>r.json()).catch(()=>[]),
+    fetch(`${JIRA_BASE}/rest/api/3/search/jql?jql=${encodeURIComponent(`project=${APP_CONFIG.projects.qa} AND issuetype=Epic ORDER BY created ASC`)}&fields=summary&maxResults=100`, { headers:{ 'Accept':'application/json' } }).then(r=>r.json()).catch(()=>({}))
   ]);
 
   const selV = document.getElementById('f-version');
@@ -663,17 +705,17 @@ async function fetchEnlazadasKeys() {
   // proyecto (QAA, BG, u otro).
   const keys = new Set();
   try {
-    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/QAA-172?fields=issuelinks`, {
+    const r = await fetch(`${JIRA_BASE}/rest/api/3/issue/${APP_CONFIG.epics.verification}?fields=issuelinks`, {
       headers: { Accept: 'application/json' }
     });
-    if (!r.ok) { console.warn('[enlazadas] GET QAA-172 HTTP', r.status); return []; }
+    if (!r.ok) { console.warn(`[enlazadas] GET ${APP_CONFIG.epics.verification} HTTP`, r.status); return []; }
     const data  = await r.json();
     const links = data.fields?.issuelinks || [];
-    console.log('[enlazadas] QAA-172 tiene', links.length, 'issuelinks');
+    console.log(`[enlazadas] ${APP_CONFIG.epics.verification} tiene`, links.length, 'issuelinks');
 
     for (const link of links) {
       const k = link.outwardIssue?.key || link.inwardIssue?.key;
-      if (k && k !== 'QAA-172') keys.add(k);
+      if (k && k !== APP_CONFIG.epics.verification) keys.add(k);
     }
     console.log('[enlazadas] Keys vinculadas:', keys.size, [...keys]);
   } catch(e) {
@@ -700,7 +742,7 @@ function buildJQL() {
     return cond.join(' AND ') + ' ORDER BY created DESC';
   }
 
-  const parts = ['project = QAA', 'issuetype != Epic'];
+  const parts = [`project = ${APP_CONFIG.projects.qa}`, 'issuetype != Epic'];
   if (g('f-version').value)   parts.push(`fixVersion = "${g('f-version').value}"`);
   if (g('f-epic').value)      parts.push(`parent = "${g('f-epic').value}"`);
   if (g('f-estado').value)    parts.push(`labels = "${g('f-estado').value}"`);
@@ -711,7 +753,7 @@ function buildJQL() {
   if (g('f-hasta').value)     parts.push(`created <= "${g('f-hasta').value}"`);
   const texto = g('f-texto').value.trim().replace(/"/g,'');
   if (texto) {
-    if (/^QAA-\d+$/i.test(texto)) parts.push(`key = "${texto.toUpperCase()}"`);
+    if (new RegExp('^' + APP_CONFIG.projects.qa + '-\\d+$', 'i').test(texto)) parts.push(`key = "${texto.toUpperCase()}"`);
     else parts.push(`text ~ "${texto}"`);
   }
   if (g('f-config').checked)  parts.push('labels = "requiere-config"');
@@ -842,7 +884,7 @@ function renderIssues(issues) {
     const version = (f.fixVersions||[])[0]?.name;
     const modulo  = f.parent?.fields?.summary || f.parent?.key || '—';
     const fecha   = f.created ? f.created.split('T')[0] : '—';
-    const jiraUrl = `https://${JIRA_HOST}/browse/${issue.key}`;
+    const jiraUrl = `${APP_CONFIG.jira.browseUrl}${issue.key}`;
 
     // Tipo de issue (Tarea/Subtarea/Historia/Error) — editable inline
     const itName = f.issuetype?.name || '—';
@@ -1385,8 +1427,8 @@ async function actualizarRetestPanel() {
   const version  = document.getElementById('f-version').value;
   const epicKey  = document.getElementById('f-epic').value;
 
-  let failJql   = 'project = QAA AND labels = "estado-fail" AND labels not in ("retest")';
-  let retestJql = 'project = QAA AND labels = "retest"';
+  let failJql   = `project = ${APP_CONFIG.projects.qa} AND labels = "estado-fail" AND labels not in ("retest")`;
+  let retestJql = `project = ${APP_CONFIG.projects.qa} AND labels = "retest"`;
   if (version)  { failJql += ` AND fixVersion = "${version}"`; retestJql += ` AND fixVersion = "${version}"`; }
   if (epicKey)  { failJql += ` AND parent = "${epicKey}"`;     retestJql += ` AND parent = "${epicKey}"`; }
 

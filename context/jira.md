@@ -1,17 +1,25 @@
 # Integración con Jira
 
+> **Todo lo org-específico de este archivo (dominio, keys de proyecto, custom field
+> IDs, keys de epic, transition IDs) es configurable vía `.env` → `window.APP_CONFIG`.**
+> Los valores concretos abajo (QAA, BG, `customfield_10271`, etc.) son **ejemplos** de
+> una instancia real, no valores fijos en el código. Ver `config.md` para el mapeo.
+
 ## Instancia y proyectos
 
-- **URL**: `https://liceopinoverde.atlassian.net`
+- **URL**: `https://<JIRA_HOST>` — de `.env` (`JIRA_HOST`), ej. `tu-empresa.atlassian.net`
 - **API base**: `/rest/api/3` (Jira Cloud v3)
 - **Acceso desde el cliente**: SIEMPRE `${JIRA_BASE}` = `window.location.origin + '/jira'` (NO direct)
 
 ## Proyectos
 
-| Key | Nombre | Para qué |
-|-----|--------|----------|
-| **QAA** | QA | Test cases ejecutados, organizados bajo Epics |
-| **BG** | Bugs | Bugs encontrados durante QA |
+Las keys salen de `APP_CONFIG.projects` (`.qa` / `.bug` / `.tech`, desde `QA_PROJECT` / `BUG_PROJECT` / `TECH_PROJECT`). Ejemplos de una instancia real:
+
+| Key (ej.) | `APP_CONFIG` | Para qué |
+|-----------|--------------|----------|
+| **QAA** | `projects.qa` | Test cases ejecutados, organizados bajo Epics |
+| **BG** | `projects.bug` | Bugs encontrados durante QA |
+| **SP** | `projects.tech` | Tech tasks (reporte TECH) |
 
 ## Issue types relevantes
 
@@ -20,6 +28,18 @@
 - **Tarea / Bug** (en BG): bugs reportados
 
 ## Custom Fields
+
+> Los IDs `customfield_XXXXX` de abajo son **ejemplos**: cada uno viene de una var de
+> `.env` mapeada a `APP_CONFIG.fields` (ver `config.md`). En otra instancia de Jira los
+> IDs son distintos — configurarlos, no hardcodearlos.
+
+| `.env` | `APP_CONFIG.fields` | ID (ej.) |
+|--------|---------------------|----------|
+| `FIELD_REPORTER_EMAIL` | `reporterEmail` | `customfield_10271` |
+| `FIELD_REPORTER_NAME` | `reporterName` | `customfield_10337` |
+| `FIELD_EPIC_LINK` | `epicLink` | `customfield_10014` |
+| `FIELD_BG_DEPENDENCY` | `bgDependency` | `customfield_10370` |
+| `FIELD_CATEGORY` | `category` | `customfield_10441` |
 
 | ID | Nombre | Set por | Para qué |
 |----|--------|---------|----------|
@@ -78,7 +98,7 @@ QA_STRUCTURE_END
 
 ## Convención de Versions (fixVersion)
 
-El proyecto QAA tiene versions con el patrón `test-vN` (ej. `test-v001`, `test-v003`).
+El proyecto QA tiene versions con un prefijo configurable (`VERSION_PREFIX` → `APP_CONFIG.workflow.versionPrefix`, ej. `test-v` → `test-v001`, `test-v003`).
 
 `cargarVersionActual()` en bg_verificacion.html:
 - Hace GET `/jira/rest/api/3/project/QAA/versions`
@@ -136,8 +156,7 @@ const target = transitions.find(t => /done|terminad|finaliz|listo|cerrad|resuelt
             || transitions.find(t => t.to?.statusCategory?.key === 'done');
 ```
 
-Algunos transition IDs hardcodeados:
-- `'31'` → "Finalizada" en QAA (visto en Qa_form.html línea 2855)
+Transition de finalizar: configurable vía `TRANSITION_FINALIZE` → `APP_CONFIG.workflow.finalizeTransitionId` (ej. `'31'` → "Finalizada" en QAA). El estado "Under Review" del proyecto de bugs sale de `STATUS_BUG_UNDER_REVIEW` → `APP_CONFIG.workflow.bugUnderReviewStatusId`.
 
 ## IssueLinks (vincular issues)
 

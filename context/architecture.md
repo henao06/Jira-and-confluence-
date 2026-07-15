@@ -7,9 +7,9 @@ Servidor HTTP de Node.js puro (sin Express, sin dependencias). 600 líneas.
 ### Responsabilidades
 
 1. **Servir archivos estáticos** del directorio raíz con MIME apropiados (.html, .js, .css, .png, .jpg, .ico)
-2. **Proxy `/jira/*` → `https://liceopinoverde.atlassian.net/*`**:
+2. **Proxy `/jira/*` → `https://<JIRA_HOST>/*`** (el host sale de `.env`, ej. `tu-empresa.atlassian.net`):
    - Inyecta header `Authorization: Basic <base64(email:token)>`
-   - Para POST/PUT a `/issue`: inyecta automáticamente `customfield_10271` (email) y `customfield_10337` (displayName) si no vienen
+   - Para POST/PUT a `/issue`: inyecta automáticamente el custom field de email (`FIELD_REPORTER_EMAIL`, ej. `customfield_10271`) y el de displayName (`FIELD_REPORTER_NAME`, ej. `customfield_10337`) si no vienen
 3. **Routing de paths bonitos** (sin extensión):
    - `/` → `Qa_form.html`
    - `/history` → `history.html`
@@ -18,14 +18,19 @@ Servidor HTTP de Node.js puro (sin Express, sin dependencias). 600 líneas.
    - `/actividades` → `actividades.html`
 4. **CORS abierto** (`*`) para desarrollo
 5. **Cache-Control: no-cache** para `.js` (importante: los cambios en JS se ven sin hard-refresh)
+6. **Servir `/config.js`**: arma un objeto `CONFIG` desde `.env` y lo expone como `window.APP_CONFIG` (endpoint dinámico, no archivo). Es lo que vuelve la app org-neutral — ver `config.md`.
 
 ### Variables de entorno (al iniciar)
 
+La app se configura enteramente por `.env`. Requeridas mínimas: `PORT`, `JIRA_HOST`, `JIRA_EMAIL`, `JIRA_TOKEN`, `QA_PROJECT`. Hay muchas más (proyectos, custom fields, epics, workflow, Confluence, branding) — **el listado completo con descripciones y el mapeo a `APP_CONFIG` está en `config.md`** y en `.env.example`.
+
+- `JIRA_HOST` — host de la instancia Jira Cloud (ej. `tu-empresa.atlassian.net`)
 - `JIRA_EMAIL` — email del bot/usuario de Jira
 - `JIRA_TOKEN` — API token de Atlassian
-- `PORT` — puerto (default 3000?)
+- `PORT` — puerto
+- `QA_PROJECT` — key del proyecto de test cases (gate del fail-fast)
 
-Si faltan, el server muestra error 503 con HTML explicativo.
+**Fail-fast**: si falta alguna requerida (incluida `QA_PROJECT`), el server NO arranca y muestra una página 503 de config-error con HTML explicativo.
 
 ### Inyección de custom fields (importante)
 
@@ -46,8 +51,8 @@ Cliente (Browser)
   ↓
 Server.JS
   ├─ inyecta Authorization
-  ├─ inyecta customfield_10271 / _10337
-  └─ proxy → https://liceopinoverde.atlassian.net/rest/api/3/issue
+  ├─ inyecta custom fields de reporter (IDs configurables, ej. _10271 / _10337)
+  └─ proxy → https://<JIRA_HOST>/rest/api/3/issue   (host de .env)
                   ↓
               Atlassian Jira Cloud
                   ↓
@@ -60,6 +65,7 @@ Patrón típico (Qa_form.html, bg_verificacion.html, etc.):
 
 ```html
 <head>
+  <script src="/config.js"></script>   <!-- SIEMPRE primero: define window.APP_CONFIG -->
   <style>
     /* CSS inline — variables CSS en :root, layout, componentes */
   </style>

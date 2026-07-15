@@ -1,6 +1,6 @@
 # Estado actual
 
-> Última actualización: 2026-06-17
+> Última actualización: 2026-07-15
 
 ## En qué estamos trabajando
 
@@ -9,6 +9,29 @@
 **Estado**: Funcional, probado parcialmente. Quedan pendientes algunos ajustes finos según uso real.
 
 ## Cambios recientes (orden cronológico inverso)
+
+### 2026-07-15 — Responsive: tablet + celular (hasta ~360px)
+- **Qué**: se hizo responsive toda la app (5 pantallas) para tablet y celular, no solo desktop.
+- **Fundación compartida (`styles.css`)**: `.hdr` con `flex-wrap` (evita overflow del nav en la banda tablet), utility `.table-scroll` (scroll horizontal para contenido ancho), `@media (max-width:820px/560px)` para el header, `@media (pointer:coarse)` para touch targets mínimos (40px), y fix de las variables `--g3`/`--g5` que estaban indefinidas.
+- **Reflows por página** (media queries en el `<style>` inline; desktop sin cambios, todo gateado):
+  - `history.html`: tabla de 12 columnas envuelta en `.table-scroll`; en celular se ocultan 2 columnas de baja prioridad (Prioridad, Fecha) y se contiene el popover al viewport.
+  - `bg_verificacion.html`: colapsa `.bulk-layout` (sidebar fijo 320px → 1 columna) y el board `.two-col`; fix de alturas `calc(100vh-…)`. **Botón "→ Mover a la cola"** en cada card pending: el drag&drop HTML5 NO funciona en touch, así que este botón llama a `addToQueue(key)` (misma función que el drop) como alternativa táctil.
+  - `actividades.html` / `jira_editor.html`: selects fijos pasan a ancho completo, filas flex envuelven.
+  - `Qa_form.html`: sin `<style>` propio, cubierto por la fundación compartida.
+- **Breakpoints**: se reusaron los existentes (640px principal, 720px board) + 480px para celular chico. Coherencia, no un sistema paralelo.
+- **Pendiente (Nivel 2, para fase de escalado)**: el board sigue sin drag&drop táctil real (solo el botón de fallback); un touch-DnD completo es un cambio de JS aparte.
+- **Archivos**: `styles.css`, `history.html`, `bg_verificacion.html`, `actividades.html`, `jira_editor.html`.
+
+### 2026-07-15 — Neutralización: app org-neutral vía config externalizada
+- **Qué**: se sacó TODO lo específico de una organización del código (dominio Jira, keys de proyecto QAA/BG/SP, epics QAA-172/QAA-179, custom field IDs, transition IDs, prefijo de versión, branding). Ahora todo sale de `.env`.
+- **Por qué**: volver la herramienta reusable por cualquier organización sin tocar código — solo configurar `.env`.
+- **Nuevo sistema de config** (ver `context/config.md` — doc de referencia completa):
+  - `Server.JS` arma un objeto `CONFIG` desde `.env` y lo sirve en `GET /config.js` como `window.APP_CONFIG` (agrupado en: `jira`, `projects`, `fields`, `epics`, `workflow`, `confluence`, `branding`).
+  - Cada HTML carga `/config.js` como **primer `<script>` del `<head>`**; el front-end lee de `APP_CONFIG` en vez de hardcodear.
+  - **Fail-fast**: si falta `PORT`/`JIRA_HOST`/`JIRA_EMAIL`/`JIRA_TOKEN`/`QA_PROJECT`, el server sirve una página 503 de config-error y no arranca.
+- **Schema `.env` ampliado** (ver `.env.example`): `QA_PROJECT, BUG_PROJECT, TECH_PROJECT, FIELD_REPORTER_EMAIL, FIELD_REPORTER_NAME, FIELD_CATEGORY, FIELD_EPIC_LINK, FIELD_BG_DEPENDENCY, EPIC_VERIFICATION, EPIC_ACTIVITIES, TRANSITION_FINALIZE, STATUS_BUG_UNDER_REVIEW, VERSION_PREFIX, CONFLUENCE_HISTORY_PAGE_ID, CONFLUENCE_SPACE, ORG_NAME, APP_NAME` (+ los originales `PORT, JIRA_HOST, JIRA_EMAIL, JIRA_TOKEN`). Opcional vacía = feature apagada.
+- **Archivos clave**: `Server.JS` (objeto CONFIG + endpoint `/config.js` + fail-fast), todos los HTML y `.js` compartidos (ahora leen `APP_CONFIG`), `.env` / `.env.example`, `context/config.md` (nuevo).
+- Los valores tipo QAA/BG/SP y QAA-172 que aparecen en el resto de la doc quedan como **ejemplos**, no como hechos fijos.
 
 ### 2026-06-17 — Qa_form.html + actividades.html: preview de videos en adjuntos
 - Los inputs de adjuntos/evidencia ya tenían `accept="*/*"` (los videos siempre se pudieron SUBIR). El gap era el preview: un video se mostraba como ícono genérico.

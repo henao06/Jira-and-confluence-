@@ -100,12 +100,12 @@ Edita `~/.config/claude-desktop/claude_desktop_config.json` (Linux):
 {
   "mcpServers": {
     "confluence": {
-      "command": "/home/sebastian/QA/mcp-confluence/.venv/bin/confluence-mcp",
+      "command": "/ruta/a/mcp-confluence/.venv/bin/confluence-mcp",
       "env": {
-        "CONFLUENCE_BASE_URL":   "https://liceopinoverde.atlassian.net",
-        "CONFLUENCE_EMAIL":      "tu-email@hybred.edu.co",
+        "CONFLUENCE_BASE_URL":   "https://tu-empresa.atlassian.net",
+        "CONFLUENCE_EMAIL":      "tu-email@empresa.com",
         "CONFLUENCE_TOKEN":      "tu-api-token",
-        "CONFLUENCE_DEFAULT_SPACE": "QD"
+        "CONFLUENCE_DEFAULT_SPACE": ""
       }
     }
   }
@@ -117,8 +117,8 @@ Después reiniciás Claude Desktop y vas a ver las tools de Confluence disponibl
 ## Conectar a Claude Code
 
 ```bash
-claude mcp add confluence /home/sebastian/QA/mcp-confluence/.venv/bin/confluence-mcp \
-  --env CONFLUENCE_BASE_URL=https://liceopinoverde.atlassian.net \
+claude mcp add confluence /ruta/a/mcp-confluence/.venv/bin/confluence-mcp \
+  --env CONFLUENCE_BASE_URL=https://tu-empresa.atlassian.net \
   --env CONFLUENCE_EMAIL=tu-email \
   --env CONFLUENCE_TOKEN=tu-token
 ```

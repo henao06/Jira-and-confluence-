@@ -1,8 +1,9 @@
 /**
- * Servidor local QA — Hybred
+ * Servidor local QA — proxy Jira/Confluence + servidor estático
  * Ejecutar: node Server.JS
- * Luego abrir: http://localhost:8080
+ * Luego abrir: http://localhost:8080 (o el PORT del .env)
  * No requiere dependencias externas — solo Node.js
+ * Toda la configuración de instancia vive en .env (ver .env.example)
  * Nuevo token se saca en https://id.atlassian.com/manage-profile/security/api-tokens
  */
 
@@ -26,22 +27,65 @@ if (fs.existsSync(envPath)) {
   });
 }
 
-const PORT       = parseInt(process.env.PORT, 10);
-const JIRA_HOST  = process.env.JIRA_HOST;
-const JIRA_EMAIL = process.env.JIRA_EMAIL;
-const JIRA_TOKEN = process.env.JIRA_TOKEN;
+const PORT        = parseInt(process.env.PORT, 10);
+const JIRA_HOST   = process.env.JIRA_HOST;
+const JIRA_EMAIL  = process.env.JIRA_EMAIL;
+const JIRA_TOKEN  = process.env.JIRA_TOKEN;
+const QA_PROJECT  = process.env.QA_PROJECT;   // identificador core: sin él ninguna página funciona
 
-const ENV_ERROR = !PORT || !JIRA_HOST || !JIRA_EMAIL || !JIRA_TOKEN
+const ENV_ERROR = !PORT || !JIRA_HOST || !JIRA_EMAIL || !JIRA_TOKEN || !QA_PROJECT
   ? `Falta configurar el archivo .env<br><br>
      Variables requeridas:<br>
      ${!PORT       ? ' PORT<br>'       : ''}
      ${!JIRA_HOST  ? ' JIRA_HOST<br>'  : ''}
      ${!JIRA_EMAIL ? ' JIRA_EMAIL<br>' : ''}
      ${!JIRA_TOKEN ? ' JIRA_TOKEN<br>' : ''}
+     ${!QA_PROJECT ? ' QA_PROJECT<br>' : ''}
      <br>Copiá <strong>.env.example</strong> como <strong>.env</strong> y completá los valores.`
   : null;
 
 const AUTH = ENV_ERROR ? '' : 'Basic ' + Buffer.from(JIRA_EMAIL + ':' + JIRA_TOKEN).toString('base64');
+
+// ── Config de instancia ────────────────────────────────────────────────────────
+// TODO valor específico de una organización se define acá vía .env. El front-end lo
+// consume por `/config.js` (window.APP_CONFIG) — no hay identificadores hardcodeados
+// en HTML/JS. Los defaults son neutros; los valores reales van en tu .env (gitignore).
+const CONFIG = {
+  jira: {
+    host:      JIRA_HOST,
+    baseUrl:   JIRA_HOST ? `https://${JIRA_HOST}` : '',
+    browseUrl: JIRA_HOST ? `https://${JIRA_HOST}/browse/` : '',
+  },
+  projects: {
+    qa:   process.env.QA_PROJECT   || '',   // proyecto de test cases
+    bug:  process.env.BUG_PROJECT  || '',   // proyecto de bugs
+    tech: process.env.TECH_PROJECT || '',   // proyecto de tareas técnicas
+  },
+  fields: {
+    reporterEmail: process.env.FIELD_REPORTER_EMAIL || '',                 // inyectado por el server (vacío = off)
+    reporterName:  process.env.FIELD_REPORTER_NAME  || '',                 // inyectado por el server (vacío = off)
+    category:      process.env.FIELD_CATEGORY       || '',                 // categoría de TC (vacío = off)
+    epicLink:      process.env.FIELD_EPIC_LINK      || 'customfield_10014',// Epic Link (default estándar de Jira Cloud)
+    bgDependency:  process.env.FIELD_BG_DEPENDENCY  || '',                 // dependencia bug↔TC (vacío = off)
+  },
+  epics: {
+    verification: process.env.EPIC_VERIFICATION || '',  // epic padre de verificación de bugs
+    activities:   process.env.EPIC_ACTIVITIES   || '',  // epic padre de actividades
+  },
+  workflow: {
+    finalizeTransitionId:   process.env.TRANSITION_FINALIZE     || '',  // id de transición "Finalizada"
+    bugUnderReviewStatusId: process.env.STATUS_BUG_UNDER_REVIEW || '',  // id de status "Under Review"
+    versionPrefix:          process.env.VERSION_PREFIX          || 'v',  // prefijo de versiones de release
+  },
+  confluence: {
+    historyPageId: process.env.CONFLUENCE_HISTORY_PAGE_ID || '',  // página de historial de releases
+    space:         process.env.CONFLUENCE_SPACE           || '',  // space key de Confluence
+  },
+  branding: {
+    orgName: process.env.ORG_NAME || 'QA Suite',        // nombre visible de la organización
+    appName: process.env.APP_NAME || 'QA Automation',   // nombre visible de la app
+  },
+};
 
 let myAccountId        = null;
 let myDisplayName      = null;
@@ -144,14 +188,27 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ── Diagnóstico de campos QAA ──────────────────────────────────────────────
+  // ── Config de instancia para el front-end (window.APP_CONFIG) ──────────────
+  if (parsed.pathname === '/config.js') {
+    res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end('window.APP_CONFIG = ' + JSON.stringify(CONFIG) + ';\n');
+    return;
+  }
+
+  // ── Diagnóstico de campos (categoría del proyecto QA) ──────────────────────
   if (parsed.pathname === '/debug/campos-qaa') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     (async () => {
       try {
-        // Buscar cualquier issue de QAA y llamar editmeta
+        const qaProject   = CONFIG.projects.qa;
+        const categoryFld = CONFIG.fields.category;
+        if (!qaProject || !categoryFld) {
+          res.end(JSON.stringify({ error: 'Configurá QA_PROJECT y FIELD_CATEGORY en el .env para usar este diagnóstico' }));
+          return;
+        }
+        // Buscar cualquier issue del proyecto QA y llamar editmeta
         const search = await jiraPost('/rest/api/3/search/jql', {
-          jql: 'project = QAA ORDER BY created DESC',
+          jql: `project = ${qaProject} ORDER BY created DESC`,
           maxResults: 5,
           fields: ['summary', 'issuetype'],
         });
@@ -160,8 +217,8 @@ const server = http.createServer((req, res) => {
         for (const issue of issues) {
           try {
             const meta  = await jiraGet(`/rest/api/3/issue/${issue.key}/editmeta`);
-            const campo = meta.fields?.customfield_10441;
-            resultados.push({ key: issue.key, tipo: issue.fields?.issuetype?.name, campo10441: campo });
+            const campo = meta.fields?.[categoryFld];
+            resultados.push({ key: issue.key, tipo: issue.fields?.issuetype?.name, campoCategoria: campo });
             if (campo?.allowedValues?.length) break;
           } catch(e) { resultados.push({ key: issue.key, error: e.message }); }
         }
@@ -169,9 +226,9 @@ const server = http.createServer((req, res) => {
         const valoresReales = [];
         for (const issue of issues) {
           try {
-            const full  = await jiraGet(`/rest/api/3/issue/${issue.key}?fields=customfield_10441`);
-            const valor = full.fields?.customfield_10441;
-            valoresReales.push({ key: issue.key, customfield_10441: valor });
+            const full  = await jiraGet(`/rest/api/3/issue/${issue.key}?fields=${categoryFld}`);
+            const valor = full.fields?.[categoryFld];
+            valoresReales.push({ key: issue.key, [categoryFld]: valor });
           } catch(e) { valoresReales.push({ key: issue.key, error: e.message }); }
         }
 
@@ -197,8 +254,10 @@ const server = http.createServer((req, res) => {
         try {
           const payload = JSON.parse(bodyData.toString());
           if (payload.fields) {
-            if (!payload.fields.customfield_10271) payload.fields.customfield_10271 = JIRA_EMAIL;
-            if (!payload.fields.customfield_10337) payload.fields.customfield_10337 = myDisplayName || JIRA_EMAIL;
+            const fEmail = CONFIG.fields.reporterEmail;
+            const fName  = CONFIG.fields.reporterName;
+            if (fEmail && !payload.fields[fEmail]) payload.fields[fEmail] = JIRA_EMAIL;
+            if (fName  && !payload.fields[fName])  payload.fields[fName]  = myDisplayName || JIRA_EMAIL;
             bodyData = Buffer.from(JSON.stringify(payload));
 
             const proj = payload.fields.project?.key || '?';
