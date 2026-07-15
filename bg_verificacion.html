@@ -9,6 +9,7 @@
 <script src="/epic-filter.js"></script>
 <script src="/board-switcher.js"></script>
 <script src="/labels.js"></script>
+<script src="/icons.js"></script>
 <script src="/bulk-epic.js"></script>
 <style>
 body { padding: 20px 16px 40px; }
@@ -1700,7 +1701,7 @@ function makePendingCard(issue) {
           statusSection.innerHTML = '';
           const badge = document.createElement('span');
           badge.className   = 'pending-status-badge';
-          badge.textContent = `${nombre} ✓`;
+          badge.textContent = `${nombre}`;
           statusSection.appendChild(badge);
         } catch {
           btnApply.textContent = 'Error';
@@ -1918,7 +1919,7 @@ function makeQueueCard(issue) {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       item.agregarAlEpic  = true;
       epicChk.checked     = true;
-      epicLbl.textContent = 'Agregado al Epic ✓';
+      epicLbl.textContent = 'Agregado al Epic';
       epicLbl.style.color = '#059669';
     } catch(e) {
       item.agregarAlEpic  = false;
@@ -1975,7 +1976,7 @@ function makeQueueCard(issue) {
       item.bgTransitionAplicada = true;
       item.selectedBgTransition = '';
       item.bgCurrentStatus      = estadoNombre;
-      lblBG.textContent = `${projLbl} (${estadoNombre}) ✓`;
+      lblBG.textContent = `${projLbl} (${estadoNombre})`;
       lblBG.style.color = '#059669';
     } catch (e) {
       item.selectedBgTransition = '';
@@ -2033,7 +2034,7 @@ function abrirPreviewArchivo(file) {
 
   const btnClose = document.createElement('button');
   btnClose.className   = 'preview-file-close';
-  btnClose.textContent = '✕';
+  btnClose.innerHTML = Icons.svg('x',{size:14});
   btnClose.addEventListener('click', () => { overlay.remove(); URL.revokeObjectURL(blobUrl); });
 
   const isImage = file.type.startsWith('image/');
@@ -2100,7 +2101,7 @@ function makeFilePreview(file, item, container) {
 
   const btnRemove = document.createElement('button');
   btnRemove.className = 'btn-remove-preview';
-  btnRemove.textContent = '✕';
+  btnRemove.innerHTML = Icons.svg('x',{size:14});
   btnRemove.title = 'Quitar archivo';
   btnRemove.addEventListener('click', () => {
     const idx = item.adjuntosNuevos.indexOf(file);
@@ -2154,7 +2155,7 @@ function abrirModalPreview(key) {
   h2.textContent = f.summary || key;
   const btnClose = document.createElement('button');
   btnClose.className   = 'btn-modal-close';
-  btnClose.textContent = '✕';
+  btnClose.innerHTML = Icons.svg('x',{size:14});
   btnClose.addEventListener('click', () => overlay.remove());
   header.appendChild(h2);
   header.appendChild(btnClose);
@@ -2392,7 +2393,7 @@ function addToQueue(key) {
         chk.checked  = true;
         chk.disabled = true;
         const epicLbl = chk.nextElementSibling;
-        if (epicLbl) { epicLbl.textContent = 'Ya enlazado al Epic ✓'; epicLbl.style.color = '#059669'; }
+        if (epicLbl) { epicLbl.textContent = 'Ya enlazado al Epic'; epicLbl.style.color = '#059669'; }
       }
     }
   }).catch(() => {
@@ -2459,7 +2460,7 @@ function agregarTareaBGPendiente(issue, container) {
   const btnRm = document.createElement('button');
   btnRm.className   = 'btn-remove-tarea-bg';
   btnRm.type        = 'button';
-  btnRm.textContent = '✕';
+  btnRm.innerHTML = Icons.svg('x',{size:14});
   btnRm.addEventListener('click', e => { e.stopPropagation(); wrap.remove(); });
   header.appendChild(lbl);
   header.appendChild(btnRm);
@@ -2581,7 +2582,7 @@ function agregarTareaBGPendiente(issue, container) {
       badge.target      = '_blank';
       badge.className   = 'card-result-badge badge-ok';
       badge.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:5px;background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;text-decoration:none;';
-      badge.textContent = `${bgNewKey} ✓`;
+      badge.textContent = `${bgNewKey}`;
       wrap.appendChild(badge);
     } catch(err) {
       const errMsg = err.message || 'Error desconocido';
@@ -2749,7 +2750,7 @@ async function subirTodoAQAA() {
                 style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:2px 8px;border-radius:5px;background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">↩ Retest</button>`
           : '';
         const badgeClass = result.mode === 'updated' ? 'badge-updated' : 'badge-ok';
-        const icon       = result.mode === 'updated' ? '↻' : '✓';
+        const icon       = result.mode === 'updated' ? '↻' : Icons.svg('check',{size:14});
         const detalle    = result.changes.length
           ? ` title="${esc(result.changes.join(', '))}"`
           : '';
@@ -3074,9 +3075,9 @@ async function sincronizarSubtareaQAA(issue, finalizar = false) {
   if (!_adfContieneKey(bgCurrentDesc, qaaKey)) {
     const resultados = item?.resultadosObtenidos?.trim();
     const resultLabel = resultado === 'pasa'
-      ? '✓ Verificación QA: PASA'
+      ? 'Verificación QA: PASA'
       : resultado === 'falla'
-        ? '✗ Verificación QA: FALLA — requiere retest'
+        ? 'Verificación QA: FALLA — requiere retest'
         : 'Verificación QA';
     try {
       const appendNodes = [

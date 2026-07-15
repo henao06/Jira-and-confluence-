@@ -1,121 +1,124 @@
-# QA Tool — Suite de QA sobre Jira & Confluence
+# QA Tool — QA Suite for Jira & Confluence
 
-Plataforma autohospedada para equipos de QA que trabajan sobre Atlassian Jira (y,
-opcionalmente, Confluence). Está escrita en Node.js plano, sin dependencias y sin paso de
-build: se clona, se levanta con `node Server.JS` y se configura desde el navegador.
+A self-hosted platform for QA teams working on Atlassian Jira (and, optionally,
+Confluence). It is written in plain Node.js, with no dependencies and no build step:
+you clone it, start it with `node Server.JS`, and configure it from the browser.
 
-La premisa de diseño es simple y se respeta en todo el código: **la herramienta no sabe nada
-de tu organización**. Ni el dominio, ni los proyectos, ni los custom fields, ni los nombres
-están escritos en el código. Todo eso vive en dos archivos externos que se generan desde la
-interfaz. Cualquiera puede clonar el repo, apuntarlo a su Jira y usarlo sin editar una línea.
+The design premise is simple and it is honored throughout the code: **the tool knows
+nothing about your organization**. Not the domain, not the projects, not the custom fields,
+not the names — none of it is baked into the code. All of that lives in two external files
+that are generated from the interface. Anyone can clone the repo, point it at their Jira, and
+use it without editing a single line.
 
-## Por qué existe
+## Why it exists
 
-Los formularios nativos de Jira son genéricos y lentos para un flujo de QA repetitivo: crear
-un caso de prueba, adjuntar evidencia, reportar el bug asociado, vincularlo, transicionar
-estados, versionar. Esta herramienta empaqueta ese flujo en pantallas hechas a medida y deja
-que Jira siga siendo la fuente de verdad. No reemplaza a Jira: lo maneja por vos a través de
-su API.
+Jira's native forms are generic and slow for a repetitive QA flow: creating a test case,
+attaching evidence, reporting the associated bug, linking it, transitioning states,
+versioning. This tool packages that flow into purpose-built screens and lets Jira remain the
+source of truth. It does not replace Jira: it drives it for you through its API.
 
-## Qué hace
+## What it does
 
-- Crea casos de prueba como issues de Jira con contenido ADF (tablas, pasos, resultado
-  esperado vs. obtenido), vinculados a un epic, con módulo, versión y adjuntos.
-- Reporta bugs en el tablero de bugs y tareas en el tablero técnico, enlazados al caso de
-  prueba de origen para mantener trazabilidad.
-- Genera casos en lote leyendo la estructura `QA_STRUCTURE` declarada en la descripción de un
-  epic, y detecta los que faltan.
-- Muestra el historial completo, filtrable por epic, versión y estado, con edición inline.
-- Verifica bugs en una cola de revisión y los transiciona por el workflow.
-- Publica el historial de versiones en una página de Confluence (opcional).
-- Permite tener varios tableros por tipo y cambiar el activo en vivo desde el encabezado.
+- Creates test cases as Jira issues with ADF content (tables, steps, expected vs. actual
+  result), linked to an epic, with module, version, and attachments.
+- Reports bugs on the bug board and tasks on the technical board, linked to the originating
+  test case to preserve traceability.
+- Generates cases in bulk by reading the `QA_STRUCTURE` declared in an epic's description, and
+  detects the ones that are missing.
+- Shows the full history, filterable by epic, version, and status, with inline editing.
+- Verifies bugs in a review queue and transitions them through the workflow.
+- Publishes the version history to a Confluence page (optional).
+- Lets you keep multiple boards per type and switch the active one live from the header.
 
-## Cómo está armado
+## How it's built
 
 ```
-Navegador  ->  Server.JS (Node)  ->  API de Jira Cloud
+Browser  ->  Server.JS (Node)  ->  Jira Cloud API
                     |
-                    |- inyecta la autenticación del lado servidor (el token nunca llega al browser)
-                    |- sirve las páginas (HTML/JS sin framework)
-                    |- publica tu configuración en /config.js  ->  window.APP_CONFIG
+                    |- injects authentication server-side (the token never reaches the browser)
+                    |- serves the pages (HTML/JS, no framework)
+                    |- publishes your configuration at /config.js  ->  window.APP_CONFIG
 ```
 
-Hay tres capas separadas a propósito, y conviene tenerlas claras antes de tocar nada:
+There are three deliberately separated layers, and it's worth being clear on them before
+touching anything:
 
-| Capa       | Qué contiene                                    | Dónde vive                         | Cómo se configura        |
-|------------|-------------------------------------------------|------------------------------------|--------------------------|
-| Conexión   | Dominio, email y token (secretos)               | `.env` (local, fuera de git)       | Pantalla `/connect`      |
-| Proyecto   | Tableros, campos, epics, workflow, textos, tipos| `qa-config.json` (local, fuera de git) | Asistente `/setup`   |
-| Aplicación | Las pantallas de QA                             | El código (neutro, igual para todos) | No se toca             |
+| Layer       | What it contains                                | Where it lives                     | How it's configured      |
+|-------------|-------------------------------------------------|------------------------------------|--------------------------|
+| Connection  | Domain, email, and token (secrets)              | `.env` (local, out of git)         | `/connect` screen        |
+| Project     | Boards, fields, epics, workflow, texts, types   | `qa-config.json` (local, out of git) | `/setup` wizard        |
+| Application | The QA screens                                  | The code (neutral, same for everyone) | Not touched           |
 
-La separación no es cosmética. Los secretos (el token) nunca se serializan al navegador ni se
-mezclan con la configuración estructural. El servidor resuelve el tablero activo y expone
-únicamente lo que el front necesita. Esa frontera es la que permite publicar el proyecto sin
-filtrar credenciales.
+The separation is not cosmetic. Secrets (the token) are never serialized to the browser nor
+mixed with the structural configuration. The server resolves the active board and exposes
+only what the front end needs. That boundary is what allows the project to be published
+without leaking credentials.
 
-## Puesta en marcha
+## Getting started
 
 ```bash
 git clone https://github.com/henao06/Jira-and-confluence-.git
 cd Jira-and-confluence-
 
-# No hay dependencias: no se corre npm install.
+# There are no dependencies: you don't run npm install.
 node Server.JS
 
-# Abrir el navegador. Si falta la conexión, la app redirige sola a /connect.
+# Open the browser. If the connection is missing, the app redirects to /connect on its own.
 # http://localhost:8080
 ```
 
-El arranque no falla por configuración faltante. Si no encuentra el `.env`, levanta igual en
-el puerto 8080 y te lleva a `/connect` para cargar las credenciales. Si ya hay credenciales
-pero falta la configuración del proyecto, te lleva a `/setup`. Recién cuando ambas están
-resueltas sirve la aplicación. En ningún caso hay que editar archivos a mano.
+Startup does not fail on missing configuration. If it can't find the `.env`, it still comes
+up on port 8080 and takes you to `/connect` to load the credentials. If credentials already
+exist but the project configuration is missing, it takes you to `/setup`. Only once both are
+resolved does it serve the application. In no case do you have to edit files by hand.
 
 ---
 
 <details open>
-<summary><h2>Configuración del proyecto (tableros, campos, textos)</h2></summary>
+<summary><h2>Project configuration (boards, fields, texts)</h2></summary>
 
-La configuración estructural vive en `qa-config.json`, en la raíz del repo. Está fuera de git
-y no contiene secretos. Lo genera el asistente `/setup`; no hace falta escribirlo a mano, pero
-vale la pena entender qué guarda porque es el archivo que define a qué se conecta la app.
+The structural configuration lives in `qa-config.json`, at the repo root. It is out of git
+and contains no secrets. It's generated by the `/setup` wizard; you don't need to write it by
+hand, but it's worth understanding what it stores because it's the file that defines what the
+app connects to.
 
-### El asistente `/setup`
+### The `/setup` wizard
 
-Son cuatro pasos:
+There are four steps:
 
-1. **Tableros y proyectos.** Definís uno o varios tableros por tipo (QA, bugs, técnicos) y
-   marcás cuál es el activo. El tablero de QA es obligatorio y necesita su project key; el
-   resto es opcional.
-2. **Campos personalizados.** Mapeás los `customfield_XXXXX` de tu instancia. Hay un botón que
-   los detecta automáticamente consultando tu Jira, así no tenés que buscarlos a mano.
-3. **Workflow, Confluence, marca, textos y tipos de issue.** Las transiciones de estado, la
-   integración opcional con Confluence, el nombre de tu organización, los textos de la interfaz
-   y los tipos de issue.
-4. **Revisión y guardado.** Un resumen antes de confirmar.
+1. **Boards and projects.** You define one or more boards per type (QA, bugs, technical) and
+   mark which one is active. The QA board is required and needs its project key; the rest is
+   optional.
+2. **Custom fields.** You map the `customfield_XXXXX` values of your instance. There's a button
+   that detects them automatically by querying your Jira, so you don't have to look them up by
+   hand.
+3. **Workflow, Confluence, branding, texts, and issue types.** The state transitions, the
+   optional Confluence integration, your organization's name, the interface texts, and the
+   issue types.
+4. **Review and save.** A summary before confirming.
 
-Podés volver a `/setup` cuando quieras. Los cambios se aplican sin reiniciar el servidor: se
-detecta la modificación del archivo y se recarga la configuración en caliente. La única
-excepción es el puerto, que sí requiere reinicio.
+You can go back to `/setup` whenever you want. Changes apply without restarting the server:
+the file modification is detected and the configuration is hot-reloaded. The only exception is
+the port, which does require a restart.
 
-### Ejemplo de `qa-config.json`
+### Example `qa-config.json`
 
-Los valores son de ejemplo y neutros; reemplazalos por los de tu instancia.
+The values are neutral examples; replace them with those of your instance.
 
 ```jsonc
 {
   "version": 1,
 
-  // Tableros por tipo. Puede haber uno o varios por tipo; "activeBoardId" define el activo.
+  // Boards by type. There can be one or several per type; "activeBoardId" defines the active one.
   "boards": {
-    "qa": {                                  // obligatorio: al menos un tablero de QA
+    "qa": {                                  // required: at least one QA board
       "activeBoardId": "qa-web",
       "items": [
         {
-          "id": "qa-web",                    // identificador interno que elegís vos
-          "name": "QA Web",                  // nombre visible en el selector del encabezado
-          "projectKey": "PROJ",              // project key en tu Jira
-          "epics": {                         // epics donde se cuelgan los issues (opcional)
+          "id": "qa-web",                    // internal identifier you choose
+          "name": "QA Web",                  // display name in the header selector
+          "projectKey": "PROJ",              // project key in your Jira
+          "epics": {                         // epics the issues are hung under (optional)
             "verification": "PROJ-100",
             "activities":   "PROJ-101"
           }
@@ -123,47 +126,47 @@ Los valores son de ejemplo y neutros; reemplazalos por los de tu instancia.
       ]
     },
     "bug":  { "activeBoardId": "bugs", "items": [ { "id": "bugs", "name": "Bugs", "projectKey": "BUG", "epics": {} } ] },
-    "tech": { "activeBoardId": "",     "items": [] }   // vacío: el tipo queda deshabilitado
+    "tech": { "activeBoardId": "",     "items": [] }   // empty: the type is disabled
   },
 
-  // IDs de custom fields de tu instancia (el asistente los detecta). epicLink trae el default estándar.
+  // Custom field IDs of your instance (the wizard detects them). epicLink ships with the standard default.
   "fields": {
     "reporterEmail": "customfield_10001",
     "reporterName":  "customfield_10002",
     "category":      "customfield_10003",
-    "epicLink":      "customfield_10014",   // default estándar de Jira Cloud
+    "epicLink":      "customfield_10014",   // standard Jira Cloud default
     "bgDependency":  "customfield_10004"
   },
 
-  // IDs propios de tu workflow: la transición al finalizar, el estado "en revisión", etc.
+  // Your own workflow IDs: the transition to finalize, the "under review" status, etc.
   "workflow": {
     "finalizeTransitionId":   "31",
     "bugUnderReviewStatusId": "10261",
-    "versionPrefix":          "v"           // prefijo de las versiones, por ejemplo v1.0
+    "versionPrefix":          "v"           // version prefix, for example v1.0
   },
 
-  // Confluence es opcional. Con enabled en false no se publica nada.
+  // Confluence is optional. With enabled set to false, nothing is published.
   "confluence": {
     "enabled":       false,
     "historyPageId": "",
     "space":         ""
   },
 
-  // Marca de tu organización; aparece en los títulos.
+  // Your organization's branding; it appears in the titles.
   "branding": {
     "orgName": "Acme Corp",
     "appName": "QA Suite"
   },
 
-  // Textos de la interfaz. Si falta una clave, se usa el texto por defecto del código.
+  // Interface texts. If a key is missing, the code's default text is used.
   "labels": {
-    "reportBug":        "Reportar como bug",
-    "finalizeBug":      "Finalizar bug",
-    "finalizeTestCase": "Finalizar caso",
-    "requiresConfig":   "Requiere configuración"
+    "reportBug":        "Report as bug",
+    "finalizeBug":      "Finalize bug",
+    "finalizeTestCase": "Finalize case",
+    "requiresConfig":   "Requires configuration"
   },
 
-  // Tipos de issue. Deben coincidir con los de tu Jira (por ejemplo "Task" si está en inglés).
+  // Issue types. They must match those in your Jira (for example "Task" if it's in English).
   "issueTypes": {
     "testCase": "Tarea",
     "techTask": "Tech Task",
@@ -172,212 +175,216 @@ Los valores son de ejemplo y neutros; reemplazalos por los de tu instancia.
 }
 ```
 
-### Qué es obligatorio y qué es opcional
+### What's required and what's optional
 
-| Clave                                                        | Obligatorio | Si falta o queda vacío                                        |
-|-------------------------------------------------------------|-------------|--------------------------------------------------------------|
-| `version`                                                   | Sí (vale 1) | La configuración se considera inválida y se abre el asistente |
-| `boards.qa` con al menos un item y `projectKey`             | Sí          | El asistente lo exige; es la condición mínima para arrancar   |
-| `boards.bug` / `boards.tech`                                | No          | El tipo correspondiente queda deshabilitado                   |
-| `fields.*`                                                  | No (ver nota)| El campo no se envía; algunos flujos lo necesitan            |
-| `workflow.finalizeTransitionId` / `bugUnderReviewStatusId`  | No (ver nota)| El botón de finalizar fallará: son IDs propios de tu Jira    |
-| `confluence`                                                | No          | Con `enabled:false` no se publica nada                        |
-| `branding`                                                  | No          | Defaults: `QA Suite` / `QA Automation`                        |
-| `labels`                                                    | No          | Se usan los textos por defecto                                |
+| Key                                                         | Required    | If missing or empty                                          |
+|-------------------------------------------------------------|-------------|-------------------------------------------------------------|
+| `version`                                                   | Yes (is 1)  | The configuration is deemed invalid and the wizard opens     |
+| `boards.qa` with at least one item and `projectKey`         | Yes         | The wizard requires it; it's the minimum condition to start  |
+| `boards.bug` / `boards.tech`                                | No          | The corresponding type is disabled                           |
+| `fields.*`                                                  | No (see note)| The field is not sent; some flows need it                   |
+| `workflow.finalizeTransitionId` / `bugUnderReviewStatusId`  | No (see note)| The finalize button will fail: they are IDs of your own Jira |
+| `confluence`                                                | No          | With `enabled:false`, nothing is published                   |
+| `branding`                                                  | No          | Defaults: `QA Suite` / `QA Automation`                       |
+| `labels`                                                    | No          | The default texts are used                                   |
 | `issueTypes`                                                | No          | Defaults: `Tarea`, `Tech Task`, `[Tarea, Subtarea, Historia, Error]` |
 
-Nota importante sobre `fields.*` y `workflow.*`: son identificadores únicos de cada instancia
-de Jira. La aplicación no los puede adivinar. Si los dejás vacíos o mal, esos features
-concretos van a dar error contra la API. No rompen la aplicación, pero no funcionan hasta que
-los cargues bien. Para eso está la detección automática de campos en el asistente.
+Important note on `fields.*` and `workflow.*`: they are unique identifiers of each Jira
+instance. The application can't guess them. If you leave them empty or wrong, those specific
+features will error out against the API. They don't break the application, but they won't work
+until you load them correctly. That's what the wizard's automatic field detection is for.
 
-### De dónde sacar cada valor
+### Where to get each value
 
-Esta es la parte que más cuesta la primera vez, así que vale detallarla. La mayoría de estos
-valores se pueden averiguar sin salir de la herramienta: como el servidor hace de proxy
-autenticado hacia Jira en `/jira/*`, podés abrir directamente los endpoints de la API en el
-navegador (con la app corriendo) y ver el JSON, sin pelear con tokens ni curl. Reemplazá el
-puerto por el tuyo.
+This is the part that's hardest the first time, so it's worth spelling out. Most of these
+values can be figured out without leaving the tool: since the server acts as an authenticated
+proxy to Jira at `/jira/*`, you can open the API endpoints directly in the browser (with the
+app running) and see the JSON, without wrestling with tokens or curl. Replace the port with
+your own.
 
-- **Project key** (`boards.*.items[].projectKey`). Es el prefijo de los issues, lo ves en
-  cualquier clave: en `PROJ-123`, el key es `PROJ`. También aparece en la URL del proyecto y en
-  la lista de proyectos de Jira.
+- **Project key** (`boards.*.items[].projectKey`). It's the prefix of the issues, you see it
+  in any key: in `PROJ-123`, the key is `PROJ`. It also appears in the project URL and in
+  Jira's project list.
 
-- **Custom fields** (`fields.reporterEmail`, `reporterName`, `category`, `bgDependency`). Son
-  los `customfield_XXXXX`. Lo más cómodo es el botón "Detectar campos" del asistente. Si querés
-  verlos crudos, abrí `http://localhost:8080/jira/rest/api/3/field`: devuelve todos los campos
-  con su `id` y su `name`, buscás el tuyo por nombre y copiás el id. `epicLink` en Jira Cloud
-  suele ser `customfield_10014` (el default que ya trae).
+- **Custom fields** (`fields.reporterEmail`, `reporterName`, `category`, `bgDependency`). They
+  are the `customfield_XXXXX` values. The most convenient option is the wizard's "Detect
+  fields" button. If you want to see them raw, open
+  `http://localhost:8080/jira/rest/api/3/field`: it returns all fields with their `id` and
+  their `name`, you find yours by name and copy the id. `epicLink` in Jira Cloud is usually
+  `customfield_10014` (the default it already ships with).
 
-- **Epics** (`boards.*.items[].epics.verification` y `activities`). Son claves de issue de tipo
-  Epic, por ejemplo `PROJ-100`. Las sacás del propio epic en Jira: es la clave que figura en su
-  encabezado o en la URL.
+- **Epics** (`boards.*.items[].epics.verification` and `activities`). They are keys of
+  Epic-type issues, for example `PROJ-100`. You get them from the epic itself in Jira: it's the
+  key shown in its header or in the URL.
 
-- **Transición de finalizar** (`workflow.finalizeTransitionId`). Es el ID numérico de la
-  transición que querés disparar al "finalizar". No es el nombre, es el ID. Para verlo, abrí
-  `http://localhost:8080/jira/rest/api/3/issue/PROJ-1/transitions` (usando la clave de un issue
-  real de ese proyecto y estado): lista las transiciones disponibles con su `id` y su `name`.
-  Copiás el `id` de la que corresponda.
+- **Finalize transition** (`workflow.finalizeTransitionId`). It's the numeric ID of the
+  transition you want to trigger on "finalize". It's not the name, it's the ID. To see it, open
+  `http://localhost:8080/jira/rest/api/3/issue/PROJ-1/transitions` (using the key of a real
+  issue in that project and state): it lists the available transitions with their `id` and their
+  `name`. You copy the `id` of the one you need.
 
-- **Estado "en revisión"** (`workflow.bugUnderReviewStatusId`). Es el ID numérico del estado en
-  el que la pantalla de verificación busca los bugs. En
-  `http://localhost:8080/jira/rest/api/3/status` tenés todos los estados con su `id` y su
-  `name`; buscás el que uses para "under review" y copiás el `id`.
+- **"Under review" status** (`workflow.bugUnderReviewStatusId`). It's the numeric ID of the
+  status the verification screen looks for bugs in. At
+  `http://localhost:8080/jira/rest/api/3/status` you have all statuses with their `id` and their
+  `name`; you find the one you use for "under review" and copy the `id`.
 
-- **Prefijo de versión** (`workflow.versionPrefix`). No sale de Jira: es tu convención. Si tus
-  versiones se llaman `v1.0`, `v1.1`, el prefijo es `v`.
+- **Version prefix** (`workflow.versionPrefix`). It doesn't come from Jira: it's your own
+  convention. If your versions are named `v1.0`, `v1.1`, the prefix is `v`.
 
-- **Tipos de issue** (`issueTypes.testCase`, `techTask`, `options`). Son los nombres exactos de
-  los tipos de tu instancia, tal como los escribe Jira (respetando idioma y mayúsculas). Los ves
-  en `http://localhost:8080/jira/rest/api/3/issuetype`, o en la configuración de tipos de issue
-  del proyecto. Si tu Jira está en inglés, seguramente sean `Task`, `Sub-task`, `Story`, `Bug`.
+- **Issue types** (`issueTypes.testCase`, `techTask`, `options`). They are the exact names of
+  the types in your instance, just as Jira writes them (respecting language and capitalization).
+  You see them at `http://localhost:8080/jira/rest/api/3/issuetype`, or in the project's issue
+  type configuration. If your Jira is in English, they are probably `Task`, `Sub-task`, `Story`,
+  `Bug`.
 
-- **Confluence** (`confluence.historyPageId` y `space`). El `historyPageId` es el número que
-  aparece en la URL de la página donde se publica el historial: en
-  `.../wiki/spaces/QD/pages/78053377/...`, el id es `78053377`. El `space` es la clave del
-  espacio, en ese mismo ejemplo `QD`.
+- **Confluence** (`confluence.historyPageId` and `space`). The `historyPageId` is the number
+  that appears in the URL of the page where the history is published: in
+  `.../wiki/spaces/QD/pages/78053377/...`, the id is `78053377`. The `space` is the space key,
+  in that same example `QD`.
 
-### Personalizar los textos
+### Customizing the texts
 
-Cualquier etiqueta de la interfaz que tenga una clave en `labels` se puede reemplazar. Los
-valores por defecto son genéricos, no atados a ninguna organización. Si tu equipo usa otra
-nomenclatura —por ejemplo "Finalizar QC" en lugar de "Finalizar caso"— alcanza con poner
-`"finalizeTestCase": "Finalizar QC"`. No es un sistema de i18n completo: es un mecanismo de
-override, pensado para cubrir el 20% de los textos que importan sin reescribir todo.
+Any interface label that has a key in `labels` can be replaced. The default values are
+generic, not tied to any organization. If your team uses different terminology —for example
+"Finalize QC" instead of "Finalize case"— it's enough to set
+`"finalizeTestCase": "Finalize QC"`. It's not a full i18n system: it's an override mechanism,
+designed to cover the 20% of the texts that matter without rewriting everything.
 
-### Varios tableros
+### Multiple boards
 
-En `boards.*.items` podés cargar tantos tableros como necesites por tipo, y elegir el activo
-con `activeBoardId`. El selector del encabezado permite cambiar el tablero activo en vivo; el
-servidor vuelve a resolver la configuración con el tablero elegido y las pantallas no cambian.
+In `boards.*.items` you can load as many boards as you need per type, and choose the active
+one with `activeBoardId`. The header selector lets you switch the active board live; the server
+resolves the configuration again with the chosen board and the screens don't change.
 
-### Los filtros de la pantalla de verificación
+### The verification screen filters
 
-La pantalla `/bg-verificacion` no trae los filtros escritos en el código: los toma de la
-descripción del epic de verificación. Esto es lo que hay que entender para usarla bien.
+The `/bg-verificacion` screen doesn't carry the filters hardcoded in the code: it takes them
+from the verification epic's description. This is what you need to understand to use it well.
 
-Al cargar, la pantalla arranca con un filtro por defecto que arma sola:
+On load, the screen starts with a default filter it builds on its own:
 
 ```
-project = <tablero de bugs> AND status = <bugUnderReviewStatusId> ORDER BY priority DESC, created DESC
+project = <bug board> AND status = <bugUnderReviewStatusId> ORDER BY priority DESC, created DESC
 ```
 
-Es decir, muestra los bugs de tu tablero de bugs que están en el estado "en revisión" que
-configuraste. Ese es el fallback y funciona sin tocar nada.
+That is, it shows the bugs from your bug board that are in the "under review" status you
+configured. That's the fallback and it works without touching anything.
 
-Pero además lee la descripción del epic (`epics.verification`) y busca ahí bloques de código
-con consultas JQL. Cada bloque de JQL que encuentre, precedido por un encabezado, se convierte
-en una opción del selector de filtros: el encabezado es el nombre que ves en el desplegable y
-el bloque es la consulta que se ejecuta. Así el equipo define sus propias vistas de
-verificación escribiéndolas en el epic, sin tocar la herramienta. Si mañana querés una vista
-nueva ("bugs críticos de la última release", por ejemplo), agregás un encabezado y su bloque
-JQL en la descripción del epic y aparece como filtro.
+But it also reads the epic's description (`epics.verification`) and looks there for code blocks
+with JQL queries. Each JQL block it finds, preceded by a heading, becomes an option in the
+filter selector: the heading is the name you see in the dropdown and the block is the query
+that gets executed. This way the team defines its own verification views by writing them in the
+epic, without touching the tool. If tomorrow you want a new view ("critical bugs from the last
+release", for example), you add a heading and its JQL block in the epic's description and it
+shows up as a filter.
 
-Un par de comportamientos que conviene saber:
+A couple of behaviors worth knowing:
 
-- El proyecto destino de cada filtro se deduce leyendo el `project = XXX` de su propia JQL. Por
-  eso un mismo selector puede alternar entre el tablero de bugs y el técnico según qué filtro
-  elijas.
-- Cuando el filtro activo apunta al tablero de bugs, se le suma la cláusula del filtro de epics
-  del encabezado (el componente `epic-filter.js`), para poder acotar por epic sin reescribir la
-  JQL.
-- Los resultados se piden trayendo, entre otros campos, el de dependencia bug↔caso
-  (`fields.bgDependency`), que es el que mantiene el vínculo entre el bug y el caso de prueba de
-  origen.
+- The target project of each filter is inferred by reading the `project = XXX` of its own JQL.
+  That's why the same selector can alternate between the bug board and the technical one
+  depending on which filter you pick.
+- When the active filter points to the bug board, the header's epic filter clause is added to
+  it (the `epic-filter.js` component), so you can narrow by epic without rewriting the JQL.
+- The results are requested bringing, among other fields, the bug↔case dependency one
+  (`fields.bgDependency`), which is the one that keeps the link between the bug and the
+  originating test case.
 
-En resumen: el estado por defecto sale de tu configuración, y las vistas adicionales son
-datos que vos escribís en el epic. La herramienta solo las interpreta.
+In short: the default state comes from your configuration, and the additional views are data
+you write in the epic. The tool just interprets them.
 
-### Documentación técnica
+### Technical documentation
 
-Para arquitectura interna, flujos y convenciones de código, ver el directorio `context/`:
-`README.md` (índice), `architecture.md`, `jira.md`, `flows.md`, `conventions.md`, `config.md`
-y `current-state.md`.
+For internal architecture, flows, and code conventions, see the `context/` directory:
+`README.md` (index), `architecture.md`, `jira.md`, `flows.md`, `conventions.md`, `config.md`,
+and `current-state.md`.
 
 </details>
 
 ---
 
 <details>
-<summary><h2>Configuración de la conexión con Jira (.env y token)</h2></summary>
+<summary><h2>Jira connection configuration (.env and token)</h2></summary>
 
-Las credenciales de Jira son secretos y viven únicamente en el archivo `.env`, local y fuera
-de git. No salen al navegador ni se comparten. Se cargan desde la pantalla `/connect`, que
-aparece automáticamente al arrancar cuando faltan.
+Jira credentials are secrets and live only in the `.env` file, local and out of git. They
+don't leave for the browser nor are they shared. They're loaded from the `/connect` screen,
+which appears automatically on startup when they're missing.
 
-### Variables del `.env`
+### `.env` variables
 
-| Variable     | Qué es                                        | Ejemplo                    |
+| Variable     | What it is                                    | Example                    |
 |--------------|-----------------------------------------------|----------------------------|
-| `JIRA_HOST`  | Dominio de tu Jira Cloud, sin `https://`      | `tu-empresa.atlassian.net` |
-| `JIRA_EMAIL` | Email de la cuenta                            | `vos@tu-empresa.com`       |
-| `JIRA_TOKEN` | API token (secreto)                           | `ATATT3xFfGF0...`          |
-| `PORT`       | Puerto del servidor (opcional)                | `8080` (por defecto)       |
+| `JIRA_HOST`  | Your Jira Cloud domain, without `https://`    | `tu-empresa.atlassian.net` |
+| `JIRA_EMAIL` | The account's email                           | `vos@tu-empresa.com`       |
+| `JIRA_TOKEN` | API token (secret)                            | `ATATT3xFfGF0...`          |
+| `PORT`       | Server port (optional)                        | `8080` (default)           |
 
-El `.env` lo escribe la pantalla `/connect`. No hace falta crearlo a mano.
+The `.env` is written by the `/connect` screen. There's no need to create it by hand.
 
-### Cómo obtener el API token
+### How to get the API token
 
-1. Entrar a id.atlassian.com, sección Security, API tokens
+1. Go to id.atlassian.com, Security section, API tokens
    (`https://id.atlassian.com/manage-profile/security/api-tokens`).
-2. Crear un token, ponerle un nombre y copiarlo.
-3. Pegarlo en el campo correspondiente de la pantalla `/connect`.
+2. Create a token, give it a name, and copy it.
+3. Paste it into the corresponding field of the `/connect` screen.
 
-### La pantalla `/connect`
+### The `/connect` screen
 
-- El botón de probar conexión valida host, email y token contra Jira y devuelve tu nombre si
-  todo está bien.
-- El botón de guardar escribe el `.env` y entra a la aplicación.
-- Podés dejar el token vacío para conservar el que ya estaba cargado; es útil cuando solo
-  cambiás el dominio.
+- The test connection button validates host, email, and token against Jira and returns your
+  name if everything is fine.
+- The save button writes the `.env` and enters the application.
+- You can leave the token empty to keep the one already loaded; it's useful when you only
+  change the domain.
 
-### Sobre la seguridad
+### About security
 
-- El token no se serializa nunca a `/config.js` ni llega al navegador: se queda en el servidor.
-- `.env` y `qa-config.json` están en `.gitignore` y no se versionan.
-- Todas las llamadas a Jira pasan por el proxy del servidor, que agrega la autenticación del
-  lado del servidor. El cliente nunca manda el header de autorización.
+- The token is never serialized to `/config.js` nor reaches the browser: it stays on the
+  server.
+- `.env` and `qa-config.json` are in `.gitignore` and are not versioned.
+- All calls to Jira go through the server's proxy, which adds authentication server-side. The
+  client never sends the authorization header.
 
-### Cambiar la conexión más adelante
+### Changing the connection later on
 
-Volvé a `/connect` en cualquier momento. Si cambiás el puerto, hay que reiniciar el servidor;
-la app lo avisa en pantalla.
+Go back to `/connect` at any time. If you change the port, the server must be restarted; the
+app warns you on screen.
 
 </details>
 
 ---
 
-## Pantallas y componentes
+## Pages and components
 
-| Ruta o archivo                    | Qué hace                                                              |
+| Route or file                     | What it does                                                         |
 |-----------------------------------|----------------------------------------------------------------------|
-| `/` (`Qa_form.html`)              | Formulario de creación de casos de prueba y reporte de bugs          |
-| `/history` (`history.html`)       | Historial filtrable, con edición inline y panel de casos faltantes   |
-| `/actividades` (`actividades.html`)| Registro de actividades y tareas técnicas                           |
-| `/bg-verificacion` (`bg_verificacion.html`) | Verificación de bugs en cola de revisión                   |
-| `/jira-editor` (`jira_editor.html`)| Editor JSON del `QA_STRUCTURE` de los epics                         |
-| `/setup` (`setup.html`)           | Asistente de configuración del proyecto                              |
-| `/connect` (`connect.html`)       | Pantalla de conexión con Jira                                        |
-| `bg_reporter.js`                  | Reporte de bugs y tareas técnicas vinculadas                        |
-| `bulk-epic.js`                    | Generación de casos en lote a partir de `QA_STRUCTURE`              |
-| `releases.js`                     | Gestión de versiones y publicación en Confluence                    |
-| `epic-filter.js`, `board-switcher.js`, `labels.js` | Filtro de epics, selector de tablero y textos configurables |
-| `mcp-confluence/`                 | Servidor MCP con operaciones de Confluence, en Python               |
+| `/` (`Qa_form.html`)              | Form for creating test cases and reporting bugs                     |
+| `/history` (`history.html`)       | Filterable history, with inline editing and a missing-cases panel   |
+| `/actividades` (`actividades.html`)| Log of activities and technical tasks                              |
+| `/bg-verificacion` (`bg_verificacion.html`) | Verification of bugs in the review queue                   |
+| `/jira-editor` (`jira_editor.html`)| JSON editor for the epics' `QA_STRUCTURE`                          |
+| `/setup` (`setup.html`)           | Project configuration wizard                                        |
+| `/connect` (`connect.html`)       | Jira connection screen                                              |
+| `bg_reporter.js`                  | Reporting of bugs and linked technical tasks                        |
+| `bulk-epic.js`                    | Bulk case generation from `QA_STRUCTURE`                            |
+| `releases.js`                     | Version management and publishing to Confluence                     |
+| `epic-filter.js`, `board-switcher.js`, `labels.js` | Epic filter, board selector, and configurable texts |
+| `icons.js`                        | SVG line-icon system that replaces emojis (`data-icon` + `Icons.svg()`) |
+| `mcp-confluence/`                 | MCP server with Confluence operations, in Python                    |
 
-## Stack y requisitos
+## Stack and requirements
 
-- Node.js, cualquier versión LTS reciente. Sin dependencias de npm.
-- HTML, CSS y JavaScript sin framework ni build.
-- Una cuenta de Jira Cloud con un API token.
-- Opcionalmente Python 3 para el servidor MCP de Confluence.
+- Node.js, any recent LTS version. No npm dependencies.
+- HTML, CSS, and JavaScript with no framework or build.
+- A Jira Cloud account with an API token.
+- Optionally Python 3 for the Confluence MCP server.
 
-## Problemas frecuentes
+## Common issues
 
-- **Cambié algo y la app se ve igual.** Es caché del navegador. Forzá la recarga con
-  Ctrl+Shift+R. Si tocaste `Server.JS`, además reiniciá el servidor.
-- **El botón de finalizar da error.** Revisá `workflow.finalizeTransitionId` en `/setup`: es
-  un ID propio de tu workflow de Jira.
-- **No crea el issue o dice que el tipo es inválido.** Revisá `issueTypes` en `/setup`: los
-  tipos deben existir en tu Jira (por ejemplo "Task" si tu instancia está en inglés).
-- **Saqué el `qa-config.json` y me manda al asistente.** Es el comportamiento esperado. Ese
-  archivo es la única fuente de la configuración del proyecto; sin él, la app pide configurarse.
+- **I changed something and the app looks the same.** It's the browser cache. Force a reload
+  with Ctrl+Shift+R. If you touched `Server.JS`, also restart the server.
+- **The finalize button errors out.** Check `workflow.finalizeTransitionId` in `/setup`: it's
+  an ID from your own Jira workflow.
+- **It doesn't create the issue or says the type is invalid.** Check `issueTypes` in `/setup`:
+  the types must exist in your Jira (for example "Task" if your instance is in English).
+- **I removed the `qa-config.json` and it sends me to the wizard.** That's the expected
+  behavior. That file is the single source of the project configuration; without it, the app
+  asks to be configured.

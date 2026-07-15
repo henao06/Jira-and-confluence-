@@ -155,9 +155,9 @@
         body: JSON.stringify({ JIRA_HOST: host, JIRA_EMAIL: email, JIRA_TOKEN: token }),
       });
       const d = await r.json();
-      if (d.ok) show('ok', '✓ Conectado como ' + (d.displayName || email));
-      else show('err', '✗ ' + (d.message || 'No se pudo conectar'));
-    } catch (e) { show('err', '✗ ' + e.message); }
+      if (d.ok) show('ok', 'Conectado como ' + (d.displayName || email));
+      else show('err', (d.message || 'No se pudo conectar'));
+    } catch (e) { show('err', e.message); }
     busy(false);
   });
 
@@ -171,13 +171,13 @@
         body: JSON.stringify(p),
       });
       const d = await r.json();
-      if (!d.ok) { overlay(false); show('err', '✗ ' + (d.error || d.message || 'No se pudo guardar')); busy(false); return; }
-      if (d.needsRestart) { overlay(false); show('ok', '✓ Guardado. Cambiaste el puerto → reiniciá el servidor.'); busy(false); return; }
+      if (!d.ok) { overlay(false); show('err', (d.error || d.message || 'No se pudo guardar')); busy(false); return; }
+      if (d.needsRestart) { overlay(false); show('ok', 'Guardado. Cambiaste el puerto: reiniciá el servidor.'); busy(false); return; }
       if ((d.missingSecrets || []).length) { overlay(false); show('err', 'Todavía falta: ' + d.missingSecrets.join(', ')); busy(false); return; }
       // Éxito: mantenemos el overlay y actualizamos el texto hasta la redirección.
       overlay(true, 'Iniciando la aplicación…', 'Un momento, preparando todo');
       setTimeout(() => { window.location = '/'; }, 800);
-    } catch (e) { overlay(false); show('err', '✗ ' + e.message); busy(false); }
+    } catch (e) { overlay(false); show('err', e.message); busy(false); }
   });
 })();
 </script>

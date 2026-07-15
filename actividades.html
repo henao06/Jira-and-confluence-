@@ -8,6 +8,7 @@
 <script src="/config.js"></script>
 <script src="/board-switcher.js"></script>
 <script src="/labels.js"></script>
+<script src="/icons.js"></script>
 <script src="/bg_reporter.js?v=20260513"></script>
 <script src="/releases.js?v=20260513"></script>
 <style>
@@ -469,7 +470,7 @@ async function loadBgVersions() {
       .sort((a, b) => b.name.localeCompare(a.name));
     if (!versions.length) throw new Error('Sin versiones');
     sel.innerHTML = '<option value="">Sin versión</option>' +
-      versions.map(v => `<option value="${v.name}">${v.name}${v.released ? '' : ' ✦'}</option>`).join('');
+      versions.map(v => `<option value="${v.name}">${v.name}${v.released ? '' : ' (sin liberar)'}</option>`).join('');
     // Pre-seleccionar la versión activa (test-v más reciente no publicada)
     const activa = window.versionActual
       || versions.find(v => !v.released && v.name.startsWith(APP_CONFIG.workflow.versionPrefix))?.name;

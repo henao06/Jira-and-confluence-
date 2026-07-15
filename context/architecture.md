@@ -1,112 +1,231 @@
-# Arquitectura
+# Architecture
 
 ## Server.JS (proxy + static server)
 
-Servidor HTTP de Node.js puro (sin Express, sin dependencias). 600 líneas.
+Pure Node.js HTTP server (no Express, no dependencies). ~737 lines.
 
-### Responsabilidades
+### Responsibilities
 
-1. **Servir archivos estáticos** del directorio raíz con MIME apropiados (.html, .js, .css, .png, .jpg, .ico)
-2. **Proxy `/jira/*` → `https://<JIRA_HOST>/*`** (el host sale de `.env`, ej. `tu-empresa.atlassian.net`):
-   - Inyecta header `Authorization: Basic <base64(email:token)>`
-   - Para POST/PUT a `/issue`: inyecta automáticamente el custom field de email (`FIELD_REPORTER_EMAIL`, ej. `customfield_10271`) y el de displayName (`FIELD_REPORTER_NAME`, ej. `customfield_10337`) si no vienen
-3. **Routing de paths bonitos** (sin extensión):
+1. **Serve static files** from the root directory with the right MIME types (.html, .js, .css, .png, .jpg, .ico)
+2. **Proxy `/jira/*` → `https://<JIRA_HOST>/*`** (the host comes from `.env`, e.g. `tu-empresa.atlassian.net`):
+   - Injects the `Authorization: Basic <base64(email:token)>` header
+   - For POST/PUT to `/issue`: automatically injects the reporter email custom field (`fields.reporterEmail`, e.g. `customfield_10271`) and the displayName custom field (`fields.reporterName`, e.g. `customfield_10337`) when they are not present. The actual field IDs are resolved from config, not hardcoded.
+3. **Pretty-path routing** (extensionless):
    - `/` → `Qa_form.html`
    - `/history` → `history.html`
    - `/jira-editor` → `jira_editor.html`
    - `/bg-verificacion` → `bg_verificacion.html`
    - `/actividades` → `actividades.html`
-4. **CORS abierto** (`*`) para desarrollo
-5. **Cache-Control: no-cache** para `.js` (importante: los cambios en JS se ven sin hard-refresh)
-6. **Servir `/config.js`**: arma un objeto `CONFIG` desde `.env` y lo expone como `window.APP_CONFIG` (endpoint dinámico, no archivo). Es lo que vuelve la app org-neutral — ver `config.md`.
+   - `/connect` → `connect.html`
+   - `/setup` → `setup.html`
+4. **Open CORS** (`*`) for development
+5. **Cache-Control: no-cache** for `.js` (important: JS changes show up without a hard refresh)
+6. **Serve `/config.js`**: builds a `CONFIG` object from `.env` and exposes it as `window.APP_CONFIG` (dynamic endpoint, not a file). This is what makes the app org-neutral — see `config.md`.
 
-### Variables de entorno (al iniciar)
+### The server always starts (DEFAULT_PORT)
 
-La app se configura enteramente por `.env`. Requeridas mínimas: `PORT`, `JIRA_HOST`, `JIRA_EMAIL`, `JIRA_TOKEN`, `QA_PROJECT`. Hay muchas más (proyectos, custom fields, epics, workflow, Confluence, branding) — **el listado completo con descripciones y el mapeo a `APP_CONFIG` está en `config.md`** y en `.env.example`.
+The server is designed to **never crash for missing configuration**. It always boots so it can serve `/connect` and let the user generate the `.env` from the UX.
 
-- `JIRA_HOST` — host de la instancia Jira Cloud (ej. `tu-empresa.atlassian.net`)
-- `JIRA_EMAIL` — email del bot/usuario de Jira
-- `JIRA_TOKEN` — API token de Atlassian
-- `PORT` — puerto
-- `QA_PROJECT` — key del proyecto de test cases (gate del fail-fast)
-
-**Fail-fast**: si falta alguna requerida (incluida `QA_PROJECT`), el server NO arranca y muestra una página 503 de config-error con HTML explicativo.
-
-### Inyección de custom fields (importante)
-
-Lines 475-476 del Server.JS:
 ```js
-if (!payload.fields.customfield_10271) payload.fields.customfield_10271 = JIRA_EMAIL;
-if (!payload.fields.customfield_10337) payload.fields.customfield_10337 = myDisplayName || JIRA_EMAIL;
+const DEFAULT_PORT = 8080;
+let PORT = Number.isInteger(parseInt(process.env.PORT, 10)) ? parseInt(process.env.PORT, 10) : DEFAULT_PORT;
 ```
 
-Estos NO los pone el cliente. Por eso si ves un POST y aparecen estos campos en el payload, es el server.
+If `PORT` is missing or NaN, it falls back to `8080`. Even with no `.env` at all, the server comes up on port 8080 so the connection gate (`/connect`) can be reached and the `.env` written from the browser.
 
-## Data flow general
+### Environment variables (at startup)
+
+The app is configured entirely through `.env`. Minimum required for a fully working instance: `PORT`, `JIRA_HOST`, `JIRA_EMAIL`, `JIRA_TOKEN`, `QA_PROJECT`. There are many more (projects, custom fields, epics, workflow, Confluence, branding) — **the full list with descriptions and the mapping to `APP_CONFIG` lives in `config.md`** and in `.env.example`.
+
+- `JIRA_HOST` — Jira Cloud instance host (e.g. `tu-empresa.atlassian.net`)
+- `JIRA_EMAIL` — Jira bot/user email
+- `JIRA_TOKEN` — Atlassian API token
+- `PORT` — port
+- `QA_PROJECT` — test-case project key
+
+**Fail-soft, not fail-fast**: unlike an earlier design, the server no longer refuses to start when config is missing. Instead it boots on `DEFAULT_PORT` and drives the user to the appropriate setup gate:
+
+- **Missing secrets** (host/email/token) → any app route redirects to `/connect` (the minimal startup gate — only what's missing).
+- **Missing config** (boards/fields not yet resolved, `setupRequired = true`) → app routes redirect to `/setup` (the personalization wizard, no connection needed).
+- `/setup/*`, `/connect`, `/config.js`, `/jira`, and `/wiki` always pass through so the gates and the proxy keep working.
+
+### Config resolution (resolveConfig)
+
+`resolveConfig(raw)` turns the raw config (from `qa-config.json` / `.env`) into the object exposed as `window.APP_CONFIG`. Besides `jira`, `projects`, `fields`, `epics`, `workflow`, `confluence`, and `branding`, it resolves:
+
+- **`boards`** — active board per type (`qa`, `bug`, `tech`), each with `id`/`name`/`projectKey` (no secrets). Used by `board-switcher.js`.
+- **`issueTypes`** — the Jira issue types used when creating issues:
+
+```js
+issueTypes: {
+  testCase: (raw.issueTypes && raw.issueTypes.testCase) || 'Tarea',
+  techTask: (raw.issueTypes && raw.issueTypes.techTask) || 'Tech Task',
+  options:  [ /* string list of selectable types */ ],
+}
+```
+
+`APP_CONFIG.issueTypes` is used in the issue-creation payloads and to populate the "change issue type" menu in `history.html`. Defaults are Spanish-friendly (`'Tarea'`) but any org overrides them from `qa-config.json → issueTypes`.
+
+### Custom field injection (important)
+
+Around lines 594-599 of Server.JS:
+```js
+if (payload.fields) {
+  const flds   = getConfig().config.fields;
+  const fEmail = flds.reporterEmail;
+  const fName  = flds.reporterName;
+  if (fEmail && !payload.fields[fEmail]) payload.fields[fEmail] = JIRA_EMAIL;
+  if (fName  && !payload.fields[fName])  payload.fields[fName]  = myDisplayName || JIRA_EMAIL;
+}
+```
+
+The client does NOT set these. So if you see a POST and these fields appear in the payload, it's the server. The field IDs come from resolved config (`config.fields.reporterEmail` / `reporterName`), not from hardcoded `customfield_*` numbers.
+
+### Setup / connection endpoints
+
+Server.JS exposes a small API used by the two gates:
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/setup/status` | GET | Current config/connection state (drives both gates) |
+| `/setup/secrets` | POST | Writes ONLY the connection secrets (host/email/token) to `.env`. Used by `/connect`. |
+| `/setup/test-connection` | POST | Validates the supplied credentials against Jira |
+| `/setup/detect-fields` | GET | Auto-detects Jira custom field IDs |
+| `/setup/save` | POST | Persists the full wizard config. Used by `/setup`. |
+| `/setup/active-board` | POST | Switches the active board for a given type. Used by `board-switcher.js`. |
+
+## General data flow
 
 ```
-Cliente (Browser)
+Client (Browser)
   │
   │  fetch('/jira/rest/api/3/issue', { method: 'POST', body: {...} })
   ↓
 Server.JS
-  ├─ inyecta Authorization
-  ├─ inyecta custom fields de reporter (IDs configurables, ej. _10271 / _10337)
-  └─ proxy → https://<JIRA_HOST>/rest/api/3/issue   (host de .env)
+  ├─ injects Authorization
+  ├─ injects reporter custom fields (configurable IDs, e.g. _10271 / _10337)
+  └─ proxy → https://<JIRA_HOST>/rest/api/3/issue   (host from .env)
                   ↓
               Atlassian Jira Cloud
                   ↓
-              Response → Cliente
+              Response → Client
 ```
 
-## Estructura de cada página HTML
+## Startup / gate flow
 
-Patrón típico (Qa_form.html, bg_verificacion.html, etc.):
+```
+node Server.JS  (always boots — DEFAULT_PORT 8080 if PORT is missing/NaN)
+  │
+  ├─ secrets missing?  → app routes 302 → /connect  (connect.html)
+  │                         POST /setup/secrets → writes .env → reload
+  │
+  ├─ config missing (setupRequired)? → app routes 302 → /setup  (setup.html)
+  │                         4-step wizard → POST /setup/save → reload
+  │
+  └─ fully configured → serves the app pages normally
+```
+
+## Structure of each HTML page
+
+Typical pattern (Qa_form.html, bg_verificacion.html, etc.):
 
 ```html
 <head>
-  <script src="/config.js"></script>   <!-- SIEMPRE primero: define window.APP_CONFIG -->
+  <script src="/config.js"></script>   <!-- ALWAYS first: defines window.APP_CONFIG -->
   <style>
-    /* CSS inline — variables CSS en :root, layout, componentes */
+    /* inline CSS — CSS variables in :root, layout, components */
   </style>
 </head>
 <body>
   <div class="page">
-    <div class="hdr">…</div>  <!-- Header con nav buttons -->
-    <main>…</main>            <!-- Contenido principal -->
+    <div class="hdr">…</div>  <!-- Header with nav buttons + board switcher -->
+    <main>…</main>            <!-- Main content -->
   </div>
 
-  <script src="/epic-filter.js"></script>     <!-- Módulos compartidos -->
-  <script src="/bulk-epic.js"></script>       <!-- (sólo bg_verificacion) -->
+  <script src="/epic-filter.js"></script>     <!-- Shared modules -->
+  <script src="/board-switcher.js"></script>
+  <script src="/labels.js"></script>
+  <script src="/icons.js"></script>
+  <script src="/bulk-epic.js"></script>       <!-- (bg_verificacion only) -->
 
   <script>
-    /* JS inline grande — funciones del page */
+    /* large inline JS — page functions */
     const JIRA_BASE = window.location.origin + '/jira';
     // ...
   </script>
 </body>
 ```
 
-## Módulos JS externos compartidos
+## Shared external JS modules
 
-| Archivo | Expone | Lo usa |
-|---------|--------|--------|
-| `epic-filter.js` | `EpicFilter.init`, `setEpics`, `loadEpicsFromJira`, `getJqlClause`, `getIgnoredEpics` | bg_verificacion, history, actividades |
-| `bulk-epic.js` | `bulkState`, `cargarBulkEpics`, `renderBulkEpicList`, `seleccionarBulkEpic`, `completarBulk`, `setBulkResultado`, `setBulkFinalizar`, `setBulkPrioridad`, `agregarImagenesBulk`, `quitarImagenBulk` | bg_verificacion (tab Bulk) |
-| `releases.js` | Funciones de releases/versions | history (probablemente) |
-| `bg_reporter.js` | Helper para reportar bugs BG | Qa_form |
+| File | Exposes | Used by |
+|------|---------|---------|
+| `epic-filter.js` | `EpicFilter.init`, `setEpics`, `loadEpicsFromJira`, `getJqlClause`, `getIgnoredEpics` | bg_verificacion, history, jira_editor |
+| `bulk-epic.js` | `bulkState`, `cargarBulkEpics`, `renderBulkEpicList`, `seleccionarBulkEpic`, `completarBulk`, `setBulkResultado`, `setBulkFinalizar`, `setBulkPrioridad`, `agregarImagenesBulk`, `quitarImagenBulk` | bg_verificacion (Bulk tab) |
+| `releases.js` | Releases/versions functions | Qa_form, actividades |
+| `bg_reporter.js` | Helper to report BG bugs | actividades |
+| `icons.js` | `window.Icons` (`Icons.svg`) — SVG line-icon system | all 7 pages |
+| `labels.js` | `window.Labels` (`Labels.get`) — configurable UI text | all 7 pages |
+| `board-switcher.js` | `window.BoardSwitcher` (`BoardSwitcher.init`) — active-board selector | all app pages |
 
-## Dependencias del JS externo
+### icons.js — SVG line-icon system
 
-`bulk-epic.js` depende de globales que define el inline script de bg_verificacion.html:
+IIFE that exposes `window.Icons`. A set of line SVG icons (Lucide-style) that replaces the old emojis, for a clean, commercial look. All icons use `currentColor` and inherit the font size via the `.ico` CSS class (defined in `styles.css`) unless you pass an explicit size.
+
+Two ways to use it:
+
+- **From JS-generated HTML** — `Icons.svg(name, { size, cls })` returns the `<svg>` markup:
+  ```js
+  el.innerHTML = Icons.svg('bug', { size: 14 });
+  ```
+- **In static HTML** — on load it auto-replaces any placeholder:
+  ```html
+  <span class="ico" data-icon="check"></span>
+  ```
+
+Included in all 7 pages. Available icons: `check`, `check-circle`, `x`, `settings`, `refresh`, `bug`, `alert`, `link`, `clock`, `star`, `external`, `plus`, `search`, `filter`, `list`, `edit`, `code`, `clipboard`.
+
+### labels.js — configurable UI text
+
+IIFE that exposes `window.Labels`. It replaces UI text via the `data-label` attribute, reading values from `APP_CONFIG.labels` (resolved by the server from `qa-config.json → "labels"`, with generic defaults). On load it walks the DOM and replaces the text of every element marked with `data-label="key"` with the configured value; `data-label-title` does the same for `title` attributes. Nothing is hardcoded — whoever installs the app sees the default and overrides it with THEIR board's name from the wizard.
+
+- **In HTML**: `<span data-label="finalizeTestCase">Finalize case</span>`
+- **From JS**: `Labels.get(key, fallback)` for text generated in JS (tooltips, dynamic strings, etc.).
+
+### board-switcher.js — active-board selector
+
+IIFE that exposes `window.BoardSwitcher`. It reads `APP_CONFIG.boards` (id/name/projectKey per type — `qa`, `bug`, `tech` — with no secrets) and shows the active QA board in the header plus a panel to switch it. On change it does `POST /setup/active-board` and reloads the page so every query uses the new board. All config comes from the JSON — nothing hardcoded.
+
+```js
+BoardSwitcher.init({ container: document.getElementById('board-switcher-container') })
+```
+
+## The two setup pages
+
+### connect.html — connection gate (secrets)
+
+Minimal connection screen. Appears at startup whenever the connection secrets are missing. It loads `/config.js`, reads `/setup/status`, lets the user test the credentials via `POST /setup/test-connection`, and finally `POST /setup/secrets` — which writes the `.env`. Once secrets exist, the user is routed onward (to `/setup` if config is still missing, or to the app if complete).
+
+### setup.html — project configuration wizard (4 steps)
+
+The personalization wizard, reachable at `/setup` once secrets exist. It never touches the connection itself; it configures the project. Four steps:
+
+1. **Boards** — one board per type (qa / bug / tech) with project keys and epics.
+2. **Fields** — auto-detects/sets the Jira custom field IDs (via `/setup/detect-fields`).
+3. **Workflow / Confluence** — finalize transition, statuses, version prefix, and the optional Confluence integration.
+4. **Summary** — review, then `POST /setup/save` persists everything and reloads the app.
+
+## External JS dependencies
+
+`bulk-epic.js` depends on globals defined by the inline script of bg_verificacion.html:
 - `JIRA_BASE`, `versionActual`
 - `esc()`, `mkH()`, `mkP()`, `mkRule()`
 - `_parseJiraError()`
 
-Por eso bulk-epic.js no se puede usar standalone — necesita el host.
+That's why bulk-epic.js can't run standalone — it needs its host page.
 
-## Configuración del proyecto
+## Project configuration
 
-No hay `package.json`. No hay `node_modules`. No hay build.
+No `package.json`. No `node_modules`. No build step.
 
-El server se corre con `node Server.JS` directamente. Sólo necesita Node 18+ (porque usa fetch nativo? hay que verificar).
+The server runs with `node Server.JS` directly. It only needs Node 18+ (uses native `fetch`). Then open `http://localhost:8080` (or the `PORT` from `.env`).

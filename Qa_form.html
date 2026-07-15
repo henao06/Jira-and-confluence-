@@ -9,6 +9,7 @@
 <script src="/epic-filter.js"></script>
 <script src="/board-switcher.js"></script>
 <script src="/labels.js"></script>
+<script src="/icons.js"></script>
 <script>document.title = window.APP_CONFIG.branding.appName;</script>
 </head>
 <body>
@@ -71,7 +72,7 @@
     <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
   </svg>
   <span style="font-size:13px;color:#a5b4fc;font-weight:600">Modo edición — <span id="edit-banner-key"></span></span>
-  <a href="/" style="margin-left:auto;font-size:12px;color:var(--g5);text-decoration:none;padding:4px 10px;border:1px solid var(--border);border-radius:6px">✕ Cancelar</a>
+  <a href="/" style="margin-left:auto;font-size:12px;color:var(--g5);text-decoration:none;padding:4px 10px;border:1px solid var(--border);border-radius:6px"><span class="ico" data-icon="x"></span> Cancelar</a>
 </div>
 
 <!-- ── Form card ── -->
@@ -428,11 +429,11 @@
     <button class="btn-reset" onclick="resetForm()">Limpiar formulario</button>
     <label class="config-check-label">
       <input type="checkbox" id="requiere-config" onchange="toggleConfigSection(this)">
-      <span>⚙️ <span data-label="requiresConfig">Requiere configuración</span></span>
+      <span><span class="ico" data-icon="settings"></span> <span data-label="requiresConfig">Requiere configuración</span></span>
     </label>
     <label class="config-check-label" id="bug-check-label" style="opacity:.4;cursor:not-allowed" title="Solo disponible cuando el resultado es Fail">
       <input type="checkbox" id="reportar-bug" disabled onchange="toggleBgAssignee(this)">
-      <span>🐛 <span data-label="reportBug">Reportar como bug</span></span>
+      <span><span class="ico" data-icon="bug"></span> <span data-label="reportBug">Reportar como bug</span></span>
     </label>
     <label class="checkbox-label">
       <input type="checkbox" id="registrarEnBG"> <span data-label="finalizeBug">Finalizar bug</span>
@@ -979,7 +980,7 @@ async function loadIssueForEdit(key, forceRetest = false) {
     const labels = f.labels || [];
 
     // ── 2. Guardar TC prefix del summary ──
-    const tcPrefixMatch = (f.summary || '').match(/^(?:[⚙️\s]*)?([A-Za-z]+-\d+)\s*[—\-]/);
+    const tcPrefixMatch = (f.summary || '').match(/^[^A-Za-z]*([A-Za-z]+-\d+)\s*[—\-]/);
     if (tcPrefixMatch) window.editMode.tcPrefix = tcPrefixMatch[1];
 
     // ── 3. Seleccionar módulo y cargar sus TCs (sin que pise los campos después) ──
@@ -1005,7 +1006,7 @@ async function loadIssueForEdit(key, forceRetest = false) {
     // ── 5. Campos simples ──
     const setV = (id, v) => { if (v != null && v !== '') { const el = document.getElementById(id); if (el) el.value = v; } };
 
-    const summaryDesc = (f.summary || '').replace(/^[⚙️\s]*[A-Za-z]+-\d+\s*[—\-]+\s*/, '');
+    const summaryDesc = (f.summary || '').replace(/^[^A-Za-z]*[A-Za-z]+-\d+\s*[—\-]+\s*/, '');
     setV('descripcion', summaryDesc);
     if (kv['Tester'])          setV('tester',        kv['Tester']);
     if (kv['Fecha'])           setV('fecha',         kv['Fecha']);
@@ -1254,7 +1255,7 @@ async function loadIssueForEdit(key, forceRetest = false) {
   } catch(e) {
     console.error('[loadIssueForEdit]', e.message);
     const banner = document.getElementById('edit-banner');
-    if (banner) banner.innerHTML += `<span style="color:#f87171;margin-left:8px">⚠ ${e.message}</span>`;
+    if (banner) banner.innerHTML += `<span style="color:#f87171;margin-left:8px">${Icons.svg('alert',{size:14})} ${e.message}</span>`;
   }
 }
 
@@ -1390,7 +1391,7 @@ async function onModuloChange() {
     if (tcIdField) { tcIdField.value = estado.siguienteId; tcIdField.removeAttribute('readonly'); tcIdField.style.opacity = '1'; }
 
     if (estado.cicloCompleto) {
-      if (banner) { banner.textContent = `Siguiente: ${estado.siguienteId} · Ciclo completo ✓ — iniciando ciclo 2`; banner.style.background = '#10b981'; }
+      if (banner) { banner.textContent = `Siguiente: ${estado.siguienteId} · Ciclo completo — iniciando ciclo 2`; banner.style.background = '#10b981'; }
     }
 
     if (estado.siguienteTC) {
@@ -1470,7 +1471,7 @@ function onTestCaseChange() {
 
   // Auto-detectar re-test: ¿ya se ejecutó este TC en la versión actual?
   const tcIssues = (window.moduloIssues || []).filter(i => {
-    const s = (i.fields?.summary || '').replace(/^[⚙️\s]+/, '').trim();
+    const s = (i.fields?.summary || '').replace(/^[^A-Za-z]+/, '').trim();
     return s.startsWith(tc.id + ' —') || s.startsWith(tc.id + '—');
   });
   const enVersionActual = versionActual
@@ -1980,7 +1981,7 @@ function showSuccess(tcId, issueKey, issueUrl, moduloNombre, tipoLabel, entorno,
 
   const bugRow = bugKey ? `
     <div class="modal-key" style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
-      🐛 Bug: <a href="${bugUrl}" target="_blank" style="color:#dc2626;font-weight:700">${bugKey}</a>
+      ${Icons.svg('bug',{size:14})} Bug: <a href="${bugUrl}" target="_blank" style="color:#dc2626;font-weight:700">${bugKey}</a>
     </div>` : '';
 
   const body = `
@@ -2693,7 +2694,7 @@ async function submitForm() {
       // ══ MODO EDICIÓN: PUT sobre el issue existente ══════════════════════════
       const editKey  = window.editMode.key;
       const tcPrefix = window.editMode.tcPrefix || tcId;
-      const summary  = `${requiereConfig ? '⚙️ ' : ''}${tcPrefix} — ${desc}`;
+      const summary  = `${tcPrefix} — ${desc}`;
       const issueUrl = `${APP_CONFIG.jira.browseUrl}${editKey}`;
 
       const r = await fetch(`/jira/rest/api/3/issue/${editKey}`, {
@@ -2848,7 +2849,7 @@ async function submitForm() {
     } else {
       // ══ MODO CREACIÓN: POST normal ══════════════════════════════════════════
 
-      const summary = `${requiereConfig ? '⚙️ ' : ''}${esRetest ? ' ' : ''}${tcId} — ${desc}`;
+      const summary = `${tcId} — ${desc}`;
 
       // ── 1. Crear bug en BG primero (bloquea si falla) ──
       let bugKey = null, bugUrl = null;

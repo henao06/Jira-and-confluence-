@@ -886,7 +886,7 @@ input.wz-err, select.wz-err { border-color: var(--red) !important; box-shadow: 0
       var b = cfg.boards[type];
       if (!b) return;
       b.items.forEach(function (it) {
-        var mark = (it.id === b.activeBoardId) ? ' ★' : '';
+        var mark = (it.id === b.activeBoardId) ? ' (activo)' : '';
         var extra = (type === 'qa' && (it.epics.verification || it.epics.activities))
           ? ('  [ver:' + (it.epics.verification || '—') + ' / act:' + (it.epics.activities || '—') + ']') : '';
         boardRows.push([type.toUpperCase() + mark, (it.name || it.projectKey) + ' · ' + it.projectKey + extra, false]);

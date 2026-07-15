@@ -20,6 +20,18 @@
   --r: 10px; --rl: 16px;
 }
 
+/* ── Íconos (SVG de línea, reemplazan a los emojis) ── */
+.ico {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1em; height: 1em; line-height: 0; vertical-align: -0.125em;
+  color: inherit; flex-shrink: 0;
+}
+.ico svg { width: 100%; height: 100%; display: block; }
+/* Tamaños utilitarios cuando el ícono no debe seguir a la fuente */
+.ico-sm { width: 13px; height: 13px; }
+.ico-md { width: 16px; height: 16px; }
+.ico-lg { width: 20px; height: 20px; }
+
 /* ── Base ── */
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;

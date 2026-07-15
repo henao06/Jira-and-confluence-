@@ -1,123 +1,131 @@
-# Estado actual
+# Current state
 
-> Última actualización: 2026-07-15
+> Last updated: 2026-07-15
 
-## En qué estamos trabajando
+## What we are working on
 
-**Feature activa**: Tab "Bulk Epic" en `bg_verificacion.html` — generación masiva de TCs faltantes por Epic.
+**Active feature**: "Bulk Epic" tab in `bg_verificacion.html` — bulk generation of an Epic's missing TCs.
 
-**Estado**: Funcional, probado parcialmente. Quedan pendientes algunos ajustes finos según uso real.
+**Status**: Functional, partially tested. Some fine-tuning remains pending based on real usage.
 
-## Cambios recientes (orden cronológico inverso)
+## Recent changes (reverse chronological order)
 
-### 2026-07-15 — Fase 3: textos configurables + separación conexión/config
-- **Qué**: (a) nueva **capa de textos de interfaz configurables**; (b) se separó **conexión** de **configuración** en dos portones distintos.
-- **(a) Textos configurables (labels)**: `Server.JS` define `LABEL_DEFAULTS` (defaults **genéricos**, sin valores de ninguna org) y `resolveLabels()`, que los expone en `window.APP_CONFIG.labels`. El front usa el atributo `data-label="clave"` en el HTML + el aplicador `labels.js` (reemplaza el texto del elemento por el valor configurado) y `window.Labels.get(clave, fallback)` para textos generados por JS. Claves: `reportBug`, `finalizeBug`, `finalizeTestCase`, `requiresConfig`. Cada instancia las pisa desde `qa-config.json` → `labels` (ej. default `finalizeTestCase` = "Finalizar caso"; Liceo lo pisa a "Finalizar TC").
-- **(b) Separación conexión/config**: la conexión salió del wizard. Ahora hay un **portón `/connect` mínimo** (`connect.html`) que aparece SOLO al arrancar si faltan secretos; endpoint `POST /setup/secrets` guarda **solo secretos** (upsert `.env` + rebuild de AUTH en memoria, **sin reiniciar**). El wizard `/setup` quedó reducido a **personalización**, ahora de **4 pasos** (Tableros/Proyectos · Campos · Workflow+Confluence+Branding+Textos · Revisar y guardar); `POST /setup/save` manda **solo `{config}`** (ya no incluye secretos). El token NUNCA se serializa a `/config.js`.
-- **Portones fail-soft** (`Server.JS`): faltan secretos → 302 a `/connect`; falta config válida → 302 a `/setup`; todo ok → app corre. Solo se interceptan las páginas de la app; assets estáticos (css/js), `/config.js`, `/setup/*`, `/connect`, `/jira/*`, `/wiki/*` pasan siempre. Precedence de config: `qa-config.json` válido → se usa; falta/inválido → config neutro vacío (`setupRequired=true`) → wizard `/setup`. **NO hay fallback por variables `.env`.**
-- **Eliminado el fallback legacy** `resolveFromEnv`/`envBoardMeta` — `qa-config.json` es la **fuente única** de config estructural; sin JSON = **wizard forzado**. El `.env` ahora solo guarda secretos de conexión (`JIRA_HOST/JIRA_EMAIL/JIRA_TOKEN/PORT`); las variables estructurales viejas (`QA_PROJECT`, `FIELD_*`, `EPIC_*`, etc.) quedaron obsoletas y ya **no se leen**.
-- **Verificado end-to-end**: fresh (sin secretos) → `/connect` → `/setup` → la app corre; el token no se filtra a `APP_CONFIG`/`config.js`.
-- **Archivos nuevos**: `connect.html`, `labels.js`. **Editados**: `Server.JS`, `setup.html`, `qa-config.json` (+bloque `labels`), y las 5 páginas HTML (`Qa_form.html`, `actividades.html`, `history.html`, `bg_verificacion.html`, `jira_editor.html`) con `data-label` y/o include de `labels.js`. Doc: `context/config.md` (sección "Configuración en 3 capas").
+### 2026-07-15 — Commercial UX phase: icons, issue types, boot hardening
+- **What**: a round of commercial-grade UX polish to make the tool presentable and org-neutral out of the box.
+- **(a) Icon system (`icons.js`)**: line-style SVG icons (Lucide-style) that replaced the **116 emojis** across the 7 pages (**0 emojis remaining**). The front uses the `data-icon` attribute in the HTML + `Icons.svg()` for JS-generated icons, plus a shared CSS class `.ico`. One consistent, professional icon set instead of platform-dependent emoji glyphs.
+- **(b) Issue-type config (`issueTypes`)**: `Server.JS` now exposes a configurable `issueTypes` object (`testCase` / `techTask` / `options`) fed from the wizard, replacing the hardcoded `issuetype:{name:'Tarea'}` scattered through the code. Each instance picks its own issue-type names.
+- **(c) Boot hardening**: `DEFAULT_PORT=8080` — the server **starts without `.env`** (no crash on missing secrets/config; the fail-soft gates then route to `/connect` or `/setup`).
+- **(d) Dead code removed**: deleted `cfg.js` (a dead file that still carried a hardcoded `APP_CONFIG`).
+- **(e) Docs in English**: `README.md` and the docs were translated to English.
 
-### 2026-07-15 — Fase 2: Selector de tablero activo en el header
-- **Qué**: `board-switcher.js` (módulo IIFE, espejo de `epic-filter.js`) en el `.hdr-right` de las 5 páginas. Muestra el tablero QA activo (nombre) y un panel para cambiar el activo por tipo (QA/Bug/Tech) en vivo.
-- **Cómo**: `Server.JS` expone `APP_CONFIG.boards` (id/name/projectKey por tipo + activeBoardId, SIN secretos ni epics). Nuevo endpoint `POST /setup/active-board {type,boardId}` que actualiza `activeBoardId` en `qa-config.json`, valida e invalida cache. Al cambiar, el switcher recarga la página → `/config.js` re-resuelve el activo → las ~70 consultas usan el nuevo tablero. **Nada hardcodeado: todo sale del JSON.**
-- **Perfiles (uno activo a la vez)**: definís N tableros en el wizard, el header cambia cuál está activo. Sin tope.
-- **Archivos**: `board-switcher.js` (nuevo), `Server.JS` (boardMeta/envBoardMeta + `boards` en resolve + endpoint), los 5 HTML (include + `#board-switcher-container` + `BoardSwitcher.init`).
+### 2026-07-15 — Phase 3: configurable labels + connection/config separation
+- **What**: (a) a new **configurable UI text (labels) layer**; (b) **connection** was split from **configuration** into two separate gates.
+- **(a) Configurable labels**: `Server.JS` defines `LABEL_DEFAULTS` (**generic** defaults, with no org-specific values) and `resolveLabels()`, which exposes them in `window.APP_CONFIG.labels`. The front uses the `data-label="key"` attribute in the HTML + the applier `labels.js` (replaces the element's text with the configured value) and `window.Labels.get(key, fallback)` for JS-generated text. Keys: `reportBug`, `finalizeBug`, `finalizeTestCase`, `requiresConfig`. Each instance overrides them from `qa-config.json` → `labels` (e.g. default `finalizeTestCase` = "Finalizar caso"; an instance can override it to "Finalizar TC").
+- **(b) Connection/config separation**: the connection left the wizard. There is now a **minimal `/connect` gate** (`connect.html`) that appears ONLY on boot if secrets are missing; endpoint `POST /setup/secrets` saves **only secrets** (upsert `.env` + rebuild of AUTH in memory, **without restarting**). The `/setup` wizard was reduced to **customization**, now **4 steps** (Boards/Projects · Fields · Workflow+Confluence+Branding+Labels · Review and save); `POST /setup/save` sends **only `{config}`** (no longer includes secrets). The token is NEVER serialized to `/config.js`.
+- **Fail-soft gates** (`Server.JS`): missing secrets → 302 to `/connect`; missing valid config → 302 to `/setup`; all ok → the app runs. Only the app pages are intercepted; static assets (css/js), `/config.js`, `/setup/*`, `/connect`, `/jira/*`, `/wiki/*` always pass. Config precedence: valid `qa-config.json` → used; missing/invalid → empty neutral config (`setupRequired=true`) → `/setup` wizard. **There is NO fallback via `.env` variables.**
+- **Legacy fallback removed**: `resolveFromEnv`/`envBoardMeta` — `qa-config.json` is the **single source** of structural config; no JSON = **forced wizard**. `.env` now only holds connection secrets (`JIRA_HOST/JIRA_EMAIL/JIRA_TOKEN/PORT`); the old structural variables (`QA_PROJECT`, `FIELD_*`, `EPIC_*`, etc.) are obsolete and are **no longer read**.
+- **Verified end-to-end**: fresh (no secrets) → `/connect` → `/setup` → the app runs; the token does not leak into `APP_CONFIG`/`config.js`.
+- **New files**: `connect.html`, `labels.js`. **Edited**: `Server.JS`, `setup.html`, `qa-config.json` (+`labels` block), and the 5 HTML pages (`Qa_form.html`, `actividades.html`, `history.html`, `bg_verificacion.html`, `jira_editor.html`) with `data-label` and/or the `labels.js` include. Doc: `context/config.md` ("Configuración en 3 capas" section).
 
-### 2026-07-15 — Fase 1: Setup Wizard + capa de config JSON
-- **Qué**: wizard de primer arranque (`setup.html`, 5 pasos) + una capa de config en JSON (`qa-config.json`). La app ahora se configura **org-neutral desde la UI del browser**, sin editar archivos a mano.
-- **Por qué**: hacer el setup fácil, rápido e intuitivo — cualquier org configura la herramienta desde una pantalla (Conexión con test, Tableros, Campos con detección, Workflow/Confluence/Branding, Revisar+Guardar) en vez de tocar `.env` a ojo.
-- **Precedencia de config** (`Server.JS`, en su forma original de Fase 1): `qa-config.json` válido → fallback legacy por `.env` → defaults neutros. **(Obsoleto — ver entrada Fase 3: el fallback legacy `resolveFromEnv`/`envBoardMeta` fue eliminado; hoy sin JSON válido = wizard forzado, sin lectura de variables estructurales del `.env`.)**
-- **`qa-config.json`** (gitignoreado, generado por el wizard, **SIN secretos**): config estructural con `boards` como **arrays** (1 o N, sin tope) y `activeBoardId` por tipo; QA requerido (≥1 item con `projectKey`), el resto opcional; los epics viven en el board QA activo. `Server.JS` lo aplana al mismo `window.APP_CONFIG` de siempre vía `resolveConfig()` — los ~70 consumidores del front NO cambiaron.
-- **Fail-soft** (reemplaza el viejo 503): si faltan secretos o falta/invalid `qa-config.json`, el server hace **302 → `/setup`** (allowlist `/setup`, `/setup/*`, `/config.js`, `/jira/*`, `/wiki/*`). Ya no hay página 503 muerta.
-- **Secretos**: `JIRA_HOST/JIRA_EMAIL/JIRA_TOKEN/PORT` siguen SOLO en `.env`; el token NUNCA se serializa a `APP_CONFIG` ni a `qa-config.json`. Hot-reload de `/config.js` por `mtime` (sin reiniciar, salvo cambio de `PORT`). Endpoints nuevos: `GET /setup/status`, `POST /setup/save`, `POST /setup/test-connection`, `GET /setup/detect-fields`.
-- **Archivos clave**: `Server.JS`, `setup.html`, `qa-config.json`, `.gitignore`, `context/config.md` (ver sección "Setup wizard + qa-config.json (Fase 1)").
-- **Nota**: el multi-tablero en vivo (selector en el header para cambiar de board activo sin re-guardar) queda para **Fase 2**.
+### 2026-07-15 — Phase 2: active-board selector in the header
+- **What**: `board-switcher.js` (IIFE module, mirror of `epic-filter.js`) in the `.hdr-right` of the 5 pages. Shows the active QA board (name) and a panel to change the active one per type (QA/Bug/Tech) live.
+- **How**: `Server.JS` exposes `APP_CONFIG.boards` (id/name/projectKey per type + activeBoardId, WITHOUT secrets or epics). New endpoint `POST /setup/active-board {type,boardId}` that updates `activeBoardId` in `qa-config.json`, validates and invalidates cache. On change, the switcher reloads the page → `/config.js` re-resolves the active one → the ~70 queries use the new board. **Nothing hardcoded: everything comes from the JSON.**
+- **Profiles (one active at a time)**: you define N boards in the wizard, the header changes which one is active. No cap.
+- **Files**: `board-switcher.js` (new), `Server.JS` (boardMeta/envBoardMeta + `boards` in resolve + endpoint), the 5 HTML files (include + `#board-switcher-container` + `BoardSwitcher.init`).
 
-### 2026-07-15 — Responsive: tablet + celular (hasta ~360px)
-- **Qué**: se hizo responsive toda la app (5 pantallas) para tablet y celular, no solo desktop.
-- **Fundación compartida (`styles.css`)**: `.hdr` con `flex-wrap` (evita overflow del nav en la banda tablet), utility `.table-scroll` (scroll horizontal para contenido ancho), `@media (max-width:820px/560px)` para el header, `@media (pointer:coarse)` para touch targets mínimos (40px), y fix de las variables `--g3`/`--g5` que estaban indefinidas.
-- **Reflows por página** (media queries en el `<style>` inline; desktop sin cambios, todo gateado):
-  - `history.html`: tabla de 12 columnas envuelta en `.table-scroll`; en celular se ocultan 2 columnas de baja prioridad (Prioridad, Fecha) y se contiene el popover al viewport.
-  - `bg_verificacion.html`: colapsa `.bulk-layout` (sidebar fijo 320px → 1 columna) y el board `.two-col`; fix de alturas `calc(100vh-…)`. **Botón "→ Mover a la cola"** en cada card pending: el drag&drop HTML5 NO funciona en touch, así que este botón llama a `addToQueue(key)` (misma función que el drop) como alternativa táctil.
-  - `actividades.html` / `jira_editor.html`: selects fijos pasan a ancho completo, filas flex envuelven.
-  - `Qa_form.html`: sin `<style>` propio, cubierto por la fundación compartida.
-- **Breakpoints**: se reusaron los existentes (640px principal, 720px board) + 480px para celular chico. Coherencia, no un sistema paralelo.
-- **Pendiente (Nivel 2, para fase de escalado)**: el board sigue sin drag&drop táctil real (solo el botón de fallback); un touch-DnD completo es un cambio de JS aparte.
-- **Archivos**: `styles.css`, `history.html`, `bg_verificacion.html`, `actividades.html`, `jira_editor.html`.
+### 2026-07-15 — Phase 1: Setup Wizard + JSON config layer
+- **What**: first-boot wizard (`setup.html`, 5 steps) + a JSON config layer (`qa-config.json`). The app is now configured **org-neutral from the browser UI**, without editing files by hand.
+- **Why**: make setup easy, fast and intuitive — any org configures the tool from a screen (Connection with test, Boards, Fields with detection, Workflow/Confluence/Branding, Review+Save) instead of editing `.env` blindly.
+- **Config precedence** (`Server.JS`, in its original Phase 1 form): valid `qa-config.json` → legacy `.env` fallback → neutral defaults. **(Obsolete — see the Phase 3 entry: the legacy fallback `resolveFromEnv`/`envBoardMeta` was removed; today no valid JSON = forced wizard, with no reading of structural `.env` variables.)**
+- **`qa-config.json`** (gitignored, generated by the wizard, **WITHOUT secrets**): structural config with `boards` as **arrays** (1 or N, no cap) and `activeBoardId` per type; QA required (≥1 item with `projectKey`), the rest optional; the epics live in the active QA board. `Server.JS` flattens it to the same `window.APP_CONFIG` as always via `resolveConfig()` — the ~70 front consumers did NOT change.
+- **Fail-soft** (replaces the old 503): if secrets are missing or `qa-config.json` is missing/invalid, the server does a **302 → `/setup`** (allowlist `/setup`, `/setup/*`, `/config.js`, `/jira/*`, `/wiki/*`). There is no longer a dead 503 page.
+- **Secrets**: `JIRA_HOST/JIRA_EMAIL/JIRA_TOKEN/PORT` stay ONLY in `.env`; the token is NEVER serialized into `APP_CONFIG` nor `qa-config.json`. Hot-reload of `/config.js` by `mtime` (without restarting, except on a `PORT` change). New endpoints: `GET /setup/status`, `POST /setup/save`, `POST /setup/test-connection`, `GET /setup/detect-fields`.
+- **Key files**: `Server.JS`, `setup.html`, `qa-config.json`, `.gitignore`, `context/config.md` (see the "Setup wizard + qa-config.json (Fase 1)" section).
+- **Note**: live multi-board (header selector to change the active board without re-saving) is left for **Phase 2**.
 
-### 2026-07-15 — Neutralización: app org-neutral vía config externalizada
-- **Qué**: se sacó TODO lo específico de una organización del código (dominio Jira, keys de proyecto QAA/BG/SP, epics QAA-172/QAA-179, custom field IDs, transition IDs, prefijo de versión, branding). Ahora todo sale de `.env`.
-- **Por qué**: volver la herramienta reusable por cualquier organización sin tocar código — solo configurar `.env`.
-- **Nuevo sistema de config** (ver `context/config.md` — doc de referencia completa):
-  - `Server.JS` arma un objeto `CONFIG` desde `.env` y lo sirve en `GET /config.js` como `window.APP_CONFIG` (agrupado en: `jira`, `projects`, `fields`, `epics`, `workflow`, `confluence`, `branding`).
-  - Cada HTML carga `/config.js` como **primer `<script>` del `<head>`**; el front-end lee de `APP_CONFIG` en vez de hardcodear.
-  - **Fail-fast**: si falta `PORT`/`JIRA_HOST`/`JIRA_EMAIL`/`JIRA_TOKEN`/`QA_PROJECT`, el server sirve una página 503 de config-error y no arranca.
-- **Schema `.env` ampliado** (ver `.env.example`): `QA_PROJECT, BUG_PROJECT, TECH_PROJECT, FIELD_REPORTER_EMAIL, FIELD_REPORTER_NAME, FIELD_CATEGORY, FIELD_EPIC_LINK, FIELD_BG_DEPENDENCY, EPIC_VERIFICATION, EPIC_ACTIVITIES, TRANSITION_FINALIZE, STATUS_BUG_UNDER_REVIEW, VERSION_PREFIX, CONFLUENCE_HISTORY_PAGE_ID, CONFLUENCE_SPACE, ORG_NAME, APP_NAME` (+ los originales `PORT, JIRA_HOST, JIRA_EMAIL, JIRA_TOKEN`). Opcional vacía = feature apagada.
-- **Archivos clave**: `Server.JS` (objeto CONFIG + endpoint `/config.js` + fail-fast), todos los HTML y `.js` compartidos (ahora leen `APP_CONFIG`), `.env` / `.env.example`, `context/config.md` (nuevo).
-- Los valores tipo QAA/BG/SP y QAA-172 que aparecen en el resto de la doc quedan como **ejemplos**, no como hechos fijos.
+### 2026-07-15 — Responsive: tablet + phone (down to ~360px)
+- **What**: the whole app (5 screens) was made responsive for tablet and phone, not just desktop.
+- **Shared foundation (`styles.css`)**: `.hdr` with `flex-wrap` (avoids nav overflow in the tablet band), utility `.table-scroll` (horizontal scroll for wide content), `@media (max-width:820px/560px)` for the header, `@media (pointer:coarse)` for minimum touch targets (40px), and a fix for the `--g3`/`--g5` variables that were undefined.
+- **Per-page reflows** (media queries in the inline `<style>`; desktop unchanged, everything gated):
+  - `history.html`: 12-column table wrapped in `.table-scroll`; on phone 2 low-priority columns are hidden (Prioridad, Fecha) and the popover is contained to the viewport.
+  - `bg_verificacion.html`: collapses `.bulk-layout` (fixed 320px sidebar → 1 column) and the `.two-col` board; fix of `calc(100vh-…)` heights. **"→ Mover a la cola" button** on each pending card: HTML5 drag&drop does NOT work on touch, so this button calls `addToQueue(key)` (same function as the drop) as a touch alternative.
+  - `actividades.html` / `jira_editor.html`: fixed selects become full-width, flex rows wrap.
+  - `Qa_form.html`: no own `<style>`, covered by the shared foundation.
+- **Breakpoints**: the existing ones were reused (640px main, 720px board) + 480px for small phones. Coherence, not a parallel system.
+- **Pending (Level 2, for the scaling phase)**: the board still has no real touch drag&drop (only the fallback button); a full touch-DnD is a separate JS change.
+- **Files**: `styles.css`, `history.html`, `bg_verificacion.html`, `actividades.html`, `jira_editor.html`.
 
-### 2026-06-17 — Qa_form.html + actividades.html: preview de videos en adjuntos
-- Los inputs de adjuntos/evidencia ya tenían `accept="*/*"` (los videos siempre se pudieron SUBIR). El gap era el preview: un video se mostraba como ícono genérico.
-- Ahora los previews detectan `video/*` y renderizan un `<video controls muted playsinline preload="metadata">` (reproducible inline). Aplica a: subidas nuevas (`renderPreviews` en ambos) y adjuntos existentes al re-abrir (evidencia + BG vinculado en Qa_form).
-- `styles.css`: regla `.preview-item video` gemela a `.preview-item img` (90×72, fondo negro).
-- Qa_form paste handler: además de `image/*` ahora acepta `video/*` pegado (nombre `video-<ts>.<ext>`).
-- Caveat: Jira tiene límite de tamaño de adjunto (por defecto ~10MB, configurable por admin); videos grandes pueden ser rechazados por el server, no por el form.
-- Archivos: `Qa_form.html`, `actividades.html`, `styles.css`.
+### 2026-07-15 — Neutralization: org-neutral app via externalized config
+- **What**: EVERYTHING org-specific was pulled out of the code (Jira domain, project keys QAA/BG/SP, epics QAA-172/QAA-179, custom field IDs, transition IDs, version prefix, branding). Everything now comes from `.env`.
+- **Why**: make the tool reusable by any organization without touching code — just configure `.env`.
+- **New config system** (see `context/config.md` — full reference doc):
+  - `Server.JS` builds a `CONFIG` object from `.env` and serves it at `GET /config.js` as `window.APP_CONFIG` (grouped into: `jira`, `projects`, `fields`, `epics`, `workflow`, `confluence`, `branding`).
+  - Each HTML loads `/config.js` as the **first `<script>` in the `<head>`**; the front-end reads from `APP_CONFIG` instead of hardcoding.
+  - **Fail-fast**: if `PORT`/`JIRA_HOST`/`JIRA_EMAIL`/`JIRA_TOKEN`/`QA_PROJECT` is missing, the server serves a 503 config-error page and does not start.
+- **Expanded `.env` schema** (see `.env.example`): `QA_PROJECT, BUG_PROJECT, TECH_PROJECT, FIELD_REPORTER_EMAIL, FIELD_REPORTER_NAME, FIELD_CATEGORY, FIELD_EPIC_LINK, FIELD_BG_DEPENDENCY, EPIC_VERIFICATION, EPIC_ACTIVITIES, TRANSITION_FINALIZE, STATUS_BUG_UNDER_REVIEW, VERSION_PREFIX, CONFLUENCE_HISTORY_PAGE_ID, CONFLUENCE_SPACE, ORG_NAME, APP_NAME` (+ the originals `PORT, JIRA_HOST, JIRA_EMAIL, JIRA_TOKEN`). Empty optional = feature off.
+- **Key files**: `Server.JS` (CONFIG object + `/config.js` endpoint + fail-fast), all HTML and shared `.js` (now read `APP_CONFIG`), `.env` / `.env.example`, `context/config.md` (new).
+- The QAA/BG/SP and QAA-172 style values that appear in the rest of the docs remain **examples**, not fixed facts.
 
-### 2026-06-17 — bg_verificacion.html: auto-limpieza de la Cola al recargar
-- Al cambiar el estado de una tarjeta en la Cola (select de transición), el flag `item.bgTransitionAplicada` ya se seteaba. Ahora, en `cargarPendientes` (Recarga), las tarjetas de la Cola con `bgTransitionAplicada` que **ya no están en el resultado del filtro** se sacan solas — no reaparecen ni en Pendientes ni en Cola ("ya no son para mí").
-- `removeFromQueue(key, volverAPendientes = true)`: nuevo segundo parámetro. La limpieza usa `removeFromQueue(key, false)` para NO devolver el item a Pendientes.
-- Aplica a BG y SP. Edge conocido: el filtro trae `maxResults: 50`; si hubiera >50 matches, un item con estado cambiado más allá de la página 1 podría limpiarse aunque siguiera en el filtro (cola de verificación realista es chica).
-- Archivo: `bg_verificacion.html`.
+### 2026-06-17 — Qa_form.html + actividades.html: video preview in attachments
+- The attachment/evidence inputs already had `accept="*/*"` (videos could always be UPLOADED). The gap was the preview: a video showed as a generic icon.
+- Now the previews detect `video/*` and render a `<video controls muted playsinline preload="metadata">` (playable inline). Applies to: new uploads (`renderPreviews` in both) and existing attachments on re-open (evidence + linked BG in Qa_form).
+- `styles.css`: `.preview-item video` rule twinned with `.preview-item img` (90×72, black background).
+- Qa_form paste handler: besides `image/*` it now accepts pasted `video/*` (name `video-<ts>.<ext>`).
+- Caveat: Jira has an attachment size limit (default ~10MB, admin-configurable); large videos may be rejected by the server, not by the form.
+- Files: `Qa_form.html`, `actividades.html`, `styles.css`.
 
-### 2026-06-17 — bg_verificacion.html: flujo de verificación generalizado a SP
-- El filtro "Mis tareas TECH" (SP) dejó de ser solo-lectura: ahora tiene el **flujo completo Pendientes → Cola → evidencia en QAA-172**, igual que BG (se revirtió la decisión de solo-lectura).
-- `proyectoFiltroActivo()` lee el proyecto destino de la JQL activa; `esModoVerificacion()` ahora habilita la Cola para **BG y SP** (cualquier otro filtro queda solo-lectura).
-- Labels de trazabilidad **derivados del proyecto origen** (no hardcodeados): `verificacion-<proj>` + `<proj>-<key>` (ej. `verificacion-sp`, `sp-sp-12`). Afecta `sincronizarSubtareaQAA` (baseLabels) y `buscarSubtareaQAAExistente` (labelKey).
-- `EpicFilter.getJqlClause()` (exclusión de módulos) solo se aplica si el filtro es BG.
-- Cosméticos generalizados al prefijo del proyecto: `buildDescription` ("Detalles del origen", "Estado" con status real en vez de "Under Review" fijo), modal preview, label de estado en la cola card ("SP (estado):").
-- `abrirRetest`: rutea a /bg-verificacion para cualquier label `verificacion-*` (antes solo `verificacion-bg`).
-- La sub-feature "Agregar tarea en BG" del queue card se **oculta** si el filtro no es BG.
-- `sincronizarSubtareaQAA` ya era casi genérica (usa `issue.key`); el resto del flujo (crear hijo QAA, links, adjuntos, transición) funciona igual para SP.
-- Archivo: `bg_verificacion.html`.
+### 2026-06-17 — bg_verificacion.html: auto-cleanup of the Queue on reload
+- On changing a card's status in the Queue (transition select), the `item.bgTransitionAplicada` flag was already set. Now, in `cargarPendientes` (Reload), the Queue cards with `bgTransitionAplicada` that are **no longer in the filter result** are removed on their own — they do not reappear in Pendientes or Cola ("no longer mine").
+- `removeFromQueue(key, volverAPendientes = true)`: new second parameter. The cleanup uses `removeFromQueue(key, false)` to NOT return the item to Pendientes.
+- Applies to BG and SP. Known edge: the filter brings `maxResults: 50`; if there were >50 matches, an item with a changed status beyond page 1 could be cleaned up even if still in the filter (a realistic verification queue is small).
+- File: `bg_verificacion.html`.
 
-### 2026-06-17 — bg_verificacion.html: selector multi-filtro desde el epic
-- La columna "Pendientes" ahora tiene un **selector de filtro** (`#filtro-selector`) que se puebla desde la descripción del epic QAA-172. Se oculta si hay un solo filtro.
-- El parser pasó de `extraerJqlDeADF` (primer bloque) a **`extraerFiltrosDeADF`**: toma cada code block con `project` cuyo **nodo ADF inmediatamente anterior es un heading**. El heading da el nombre del filtro. Así las JQL de la sección "Métricas" (precedidas por texto, no heading) quedan fuera del selector.
-- Estado: `filtros[]` + `filtroActivoIdx`; `jqlActivo()`; `esModoVerificacion()` = la JQL activa apunta a `project = BG`.
-- **Modo vista (filtro no-BG)**: `aplicarModoVista()` oculta la columna "Cola QAA" (`#cola-qaa-col`), la lista ocupa todo el ancho, y `makePendingCard` hace early-return (tarjeta de solo lectura: sin drag, sin "Cambiar estado"). La cláusula `EpicFilter.getJqlClause()` solo se aplica en modo BG.
-- **Epic QAA-172 (editado en vivo)**: en la descripción se renombró `### Filtro JQL:` → `### Verificación BG` y se agregó `### Mis tareas TECH` con `project = SP AND assignee = currentUser() ORDER BY cf[10019] ASC`. Convención: cada filtro del selector = heading `###` + code block inmediatamente debajo.
-- OJO: `currentUser()` resuelve al dueño del token que inyecta Server.JS. Si ese token no es la cuenta personal del usuario, el filtro TECH no mostrará "sus" tareas → en ese caso usar el accountId fijo.
-- Archivos: `bg_verificacion.html` + descripción de QAA-172 en Jira.
+### 2026-06-17 — bg_verificacion.html: verification flow generalized to SP
+- The "Mis tareas TECH" (SP) filter is no longer read-only: it now has the **full Pendientes → Cola → evidence in QAA-172 flow**, same as BG (the read-only decision was reverted).
+- `proyectoFiltroActivo()` reads the target project from the active JQL; `esModoVerificacion()` now enables the Queue for **BG and SP** (any other filter stays read-only).
+- Traceability labels **derived from the source project** (not hardcoded): `verificacion-<proj>` + `<proj>-<key>` (e.g. `verificacion-sp`, `sp-sp-12`). Affects `sincronizarSubtareaQAA` (baseLabels) and `buscarSubtareaQAAExistente` (labelKey).
+- `EpicFilter.getJqlClause()` (module exclusion) is only applied if the filter is BG.
+- Cosmetics generalized to the project prefix: `buildDescription` ("Detalles del origen", "Estado" with the real status instead of the fixed "Under Review"), preview modal, status label in the queue card ("SP (estado):").
+- `abrirRetest`: routes to /bg-verificacion for any `verificacion-*` label (previously only `verificacion-bg`).
+- The "Agregar tarea en BG" sub-feature of the queue card is **hidden** if the filter is not BG.
+- `sincronizarSubtareaQAA` was already nearly generic (uses `issue.key`); the rest of the flow (create QAA child, links, attachments, transition) works the same for SP.
+- File: `bg_verificacion.html`.
 
-### 2026-06-17 — actividades.html: reporte dual BG + TECH (SP)
-- Checkbox "🐛 Reportar como bug en BG" renombrado a "🐛 BG"; agregado nuevo checkbox "🛠️ TECH".
-- TECH crea una **Tech Task** en el proyecto **SP** (LPV Tech, id 10303, cloudId d4aeb06d-33c0-40d9-b9c1-ed860026cfcf), vinculada al QAA con link `Relates`, mismo panel/descripción estilo reporte que BG.
-- Se pueden marcar BG, TECH, ambos o ninguno. El `result-box` muestra los links según lo creado (QAA siempre · BG en rojo · Tech SP en azul).
-- Panel de campos (Asignar a / Versión / Entorno) **compartido**: aparece si BG o TECH está marcado. `bg_reporter.js` ahora carga asignables vía `user/assignable/multiProjectSearch?projectKeys=...` (intersección de los proyectos activos).
-- `bg_reporter.js`: lógica de creación generalizada en `_crearReporteIssue()`; `crearBugBG` (BG) y `crearTechSP` (SP) son envoltorios. `toggleBgAssignee()` ya no recibe `chk` (lee los checkboxes). Removido `bgUsersLoaded` → reemplazado por `_assigneeKey`.
-- **Tipo de issue por tablero**: cada proyecto tiene su propio catálogo de issuetypes (QAA/BG: Tarea·Historia·Error; SP: Tarea·Tech Task·Feature·Error). Antes un único selector servía a QAA+BG (bug latente: funcionaba sólo porque comparten catálogo). Ahora hay un selector por tablero activo: `tipo-actividad` (QAA, siempre), `bg-tipo` (aparece con BG, default `Error`), `tech-tipo` (aparece con TECH, default `Tech Task`). `loadTiposActividad` se generalizó en `loadTiposProyecto(projectKey, selId, preferido)` que filtra nivel 0 no-subtarea de `/project/{key}`. `crearTechSP` ahora respeta `opts.tipo`.
-- Archivos: `actividades.html`, `bg_reporter.js`.
+### 2026-06-17 — bg_verificacion.html: multi-filter selector from the epic
+- The "Pendientes" column now has a **filter selector** (`#filtro-selector`) populated from the QAA-172 epic description. It is hidden if there is a single filter.
+- The parser moved from `extraerJqlDeADF` (first block) to **`extraerFiltrosDeADF`**: it takes each code block with `project` whose **immediately preceding ADF node is a heading**. The heading gives the filter name. This way the JQLs in the "Métricas" section (preceded by text, not a heading) stay out of the selector.
+- State: `filtros[]` + `filtroActivoIdx`; `jqlActivo()`; `esModoVerificacion()` = the active JQL points to `project = BG`.
+- **View mode (non-BG filter)**: `aplicarModoVista()` hides the "Cola QAA" column (`#cola-qaa-col`), the list takes the full width, and `makePendingCard` early-returns (read-only card: no drag, no "Cambiar estado"). The `EpicFilter.getJqlClause()` clause is only applied in BG mode.
+- **Epic QAA-172 (edited live)**: in the description `### Filtro JQL:` was renamed → `### Verificación BG` and `### Mis tareas TECH` was added with `project = SP AND assignee = currentUser() ORDER BY cf[10019] ASC`. Convention: each selector filter = `###` heading + code block immediately below.
+- WATCH OUT: `currentUser()` resolves to the owner of the token Server.JS injects. If that token is not the user's personal account, the TECH filter will not show "their" tasks → in that case use the fixed accountId.
+- Files: `bg_verificacion.html` + the QAA-172 description in Jira.
 
-### 2026-06-02 — MCP server INSTALADO y funcional (Python)
-- `pip install -e .` ejecutado en `/home/sebastian/QA/mcp-confluence/.venv/`
-- Dependencias instaladas: mcp 1.27.2, httpx 0.28.1, python-dotenv 1.2.2 + transitivos (pydantic, starlette, uvicorn, jsonschema, etc.)
-- Comando `confluence-mcp` disponible en `.venv/bin/confluence-mcp`
-- 29 tools verificadas (FastMCP las registró correctamente al importar el módulo)
-- Falta para que funcione: crear `.env` con CONFLUENCE_TOKEN real (el usuario lo debe completar manualmente — el archivo .env está protegido por permisos de Claude)
+### 2026-06-17 — actividades.html: dual BG + TECH (SP) reporting
+- Checkbox "🐛 Reportar como bug en BG" renamed to "🐛 BG"; new checkbox "🛠️ TECH" added.
+- TECH creates a **Tech Task** in the **SP** project (LPV Tech, id 10303, cloudId d4aeb06d-33c0-40d9-b9c1-ed860026cfcf), linked to the QAA with a `Relates` link, same panel/report-style description as BG.
+- You can mark BG, TECH, both, or neither. The `result-box` shows the links according to what was created (QAA always · BG in red · Tech SP in blue).
+- Fields panel (Assign to / Version / Environment) **shared**: appears if BG or TECH is checked. `bg_reporter.js` now loads assignables via `user/assignable/multiProjectSearch?projectKeys=...` (intersection of the active projects).
+- `bg_reporter.js`: creation logic generalized into `_crearReporteIssue()`; `crearBugBG` (BG) and `crearTechSP` (SP) are wrappers. `toggleBgAssignee()` no longer receives `chk` (it reads the checkboxes). `bgUsersLoaded` removed → replaced by `_assigneeKey`.
+- **Issue type per board**: each project has its own issuetype catalog (QAA/BG: Tarea·Historia·Error; SP: Tarea·Tech Task·Feature·Error). Previously a single selector served QAA+BG (latent bug: it worked only because they share a catalog). Now there is a selector per active board: `tipo-actividad` (QAA, always), `bg-tipo` (appears with BG, default `Error`), `tech-tipo` (appears with TECH, default `Tech Task`). `loadTiposActividad` was generalized into `loadTiposProyecto(projectKey, selId, preferido)` which filters level-0 non-subtask from `/project/{key}`. `crearTechSP` now respects `opts.tipo`.
+- Files: `actividades.html`, `bg_reporter.js`.
 
-### 2026-06-02 — MCP server de Confluence (Python, standalone)
-- Nuevo directorio `/home/sebastian/QA/mcp-confluence/`
-- Archivos:
-  - `pyproject.toml` — dependencias (mcp, httpx, python-dotenv) + entry point `confluence-mcp`
-  - `env.example.txt` — template de .env (renombrar a .env y completar token)
+### 2026-06-02 — MCP server INSTALLED and functional (Python)
+- `pip install -e .` run in `/home/sebastian/QA/mcp-confluence/.venv/`
+- Dependencies installed: mcp 1.27.2, httpx 0.28.1, python-dotenv 1.2.2 + transitives (pydantic, starlette, uvicorn, jsonschema, etc.)
+- Command `confluence-mcp` available at `.venv/bin/confluence-mcp`
+- 29 tools verified (FastMCP registered them correctly on module import)
+- Still needed to run: create `.env` with a real CONFLUENCE_TOKEN (the user must fill it in manually — the .env file is protected by Claude's permissions)
+
+### 2026-06-02 — Confluence MCP server (Python, standalone)
+- New directory `/home/sebastian/QA/mcp-confluence/`
+- Files:
+  - `pyproject.toml` — dependencies (mcp, httpx, python-dotenv) + entry point `confluence-mcp`
+  - `env.example.txt` — .env template (rename to .env and fill in the token)
   - `confluence_mcp/__init__.py` — package init
-  - `confluence_mcp/client.py` — HTTP client con Basic auth, soporta v1 (/wiki/rest/api) y v2 (/wiki/api/v2)
-  - `confluence_mcp/server.py` — MCP server con 25+ tools (FastMCP)
-  - `README.md` — instalación, config para Claude Desktop / Claude Code / Cursor / Cline
-- Tools incluidas:
+  - `confluence_mcp/client.py` — HTTP client with Basic auth, supports v1 (/wiki/rest/api) and v2 (/wiki/api/v2)
+  - `confluence_mcp/server.py` — MCP server with 25+ tools (FastMCP)
+  - `README.md` — installation, config for Claude Desktop / Claude Code / Cursor / Cline
+- Tools included:
   - **Pages** (9): search_pages, get_page, get_page_by_title, create_page, update_page, append_to_page, delete_page, list_page_versions, get_page_children
   - **Spaces** (4): list_spaces, get_space, list_space_content, get_space_id_from_key
   - **Attachments** (3): list_attachments, upload_attachment, delete_attachment
@@ -126,30 +134,30 @@
   - **Whiteboards** (4): list_whiteboards, get_whiteboard, create_whiteboard, delete_whiteboard (v2 API)
   - **Users** (2): get_current_user, search_users
   - **CQL** (1): cql_search (raw CQL)
-- Limitaciones documentadas: contenido INTERNO de whiteboards (formas, sticky notes) no editable vía REST pública — solo se crea/elimina el contenedor
+- Documented limitations: the INTERNAL content of whiteboards (shapes, sticky notes) is not editable via the public REST — only the container is created/deleted
 
-### 2026-06-01 — history.html: editar issuetype inline
-- Agregada capacidad de cambiar el tipo de tarea (issuetype) directamente desde la tabla del historial
-- Cambios:
-  - `issuetype` agregado al fetch de fields en los 3 lugares de JQL (search principal + paginaciones)
-  - En cada fila Issue cell: pill compacto con el nombre del issuetype (Tarea/Subtarea/Historia/Error/Epic) + botón `↕` debajo del key
-  - Nueva función `openIssuetypePicker(event, key)` con 4 opciones (Tarea, Historia, Error, Subtarea) — patrón clonado de `openEstadoPicker`
-  - Nueva función `applyIssuetypeChange(key, name)` que hace PUT `/issue/{key}` con `fields: { issuetype: { name } }`
-  - Manejo de error con alert si Jira rechaza (ej. cambiar a Subtarea sin parent válido)
-- CSS nuevo: `.p-it-tarea`, `.p-it-subtarea`, `.p-it-historia`, `.p-it-error`, `.p-it-epic` con paleta del proyecto
+### 2026-06-01 — history.html: edit issuetype inline
+- Added the ability to change the task type (issuetype) directly from the history table
+- Changes:
+  - `issuetype` added to the fields fetch in the 3 JQL spots (main search + paginations)
+  - In each Issue cell row: compact pill with the issuetype name (Tarea/Subtarea/Historia/Error/Epic) + `↕` button below the key
+  - New function `openIssuetypePicker(event, key)` with 4 options (Tarea, Historia, Error, Subtarea) — pattern cloned from `openEstadoPicker`
+  - New function `applyIssuetypeChange(key, name)` that does a PUT `/issue/{key}` with `fields: { issuetype: { name } }`
+  - Error handling with alert if Jira rejects (e.g. changing to Subtarea without a valid parent)
+- New CSS: `.p-it-tarea`, `.p-it-subtarea`, `.p-it-historia`, `.p-it-error`, `.p-it-epic` with the project palette
 
-### 2026-05-28 — Defaults de motivo/sesión que van a Confluence (parche)
-- Encontré 3 strings en español que NO había traducido en la primera pasada porque eran VALORES por defecto (no labels):
-  - `iniciarSesion(motivo = 'Nueva sesión')` → `'New session'` — usado si el flow llama sin argumento
-  - `iniciarSesion(motivo.trim() || 'Nueva sesión')` → `'New session'` — fallback del prompt
-  - `ejecutarPublicacion`: `'Sin motivo'` → `'No reason provided'` (motivo) y `'Nueva sesión'` → `'New session'` (motivoSig)
-- Estos defaults se propagan a la página de Confluence cuando el usuario no escribe nada en el modal
-- Ahora el reporte sale 100% en inglés salvo lo que el usuario tipea (motivo/observaciones) y los summaries originales de los issues (data Jira)
+### 2026-05-28 — Reason/session defaults that go to Confluence (patch)
+- Found 3 Spanish strings I had NOT translated in the first pass because they were default VALUES (not labels):
+  - `iniciarSesion(motivo = 'Nueva sesión')` → `'New session'` — used if the flow calls without an argument
+  - `iniciarSesion(motivo.trim() || 'Nueva sesión')` → `'New session'` — prompt fallback
+  - `ejecutarPublicacion`: `'Sin motivo'` → `'No reason provided'` (motivo) and `'Nueva sesión'` → `'New session'` (motivoSig)
+- These defaults propagate to the Confluence page when the user writes nothing in the modal
+- Now the report comes out 100% in English except for what the user types (reason/observations) and the issues' original summaries (Jira data)
 
-### 2026-05-28 — Confluence content traducido a inglés
-- Todo el texto que `releases.js` genera para Confluence quedó en inglés
-- Mantuve en español: nombres de funciones internas, comentarios de código, modal de publicación local (UI app)
-- Cambios principales:
+### 2026-05-28 — Confluence content translated to English
+- All the text that `releases.js` generates for Confluence is now in English
+- Kept in Spanish: internal function names, code comments, the local publish modal (app UI)
+- Main changes:
   - Date format: `'es-CO'` → `'en-US'`
   - Info macro title: `Sesion QA` → `QA Session`
   - Labels: `Versión/Fecha/Modulos cubiertos/Motivo de cierre/BG Bugs reportados` → `Version/Date/Modules covered/Closing reason/BG Bugs reported`
@@ -163,210 +171,210 @@
   - Section titles: `Desglose por Modulo` → `Module Breakdown`, `Cadena de Re-tests` → `Re-test Chain`, `Requiere Configuracion de Servidor` → `Server Configuration Required`, `Sin cambios de configuracion` → `No configuration changes`, `Observaciones del QA Senior` → `Senior QA Observations`
   - Inline messages: `Ver todos en Jira` → `View all in Jira`, `Coordinar con infraestructura antes del despliegue` → `Coordinate with infrastructure before deployment`, `El servidor no requiere ajustes adicionales para esta version` → `The server requires no additional adjustments for this version`
   - Page title: `Historial de Versiones Publicadas` → `Published Versions History`
-- IMPORTANTE: Cambiar el `title` en el PUT a Confluence **renombra** la página existente (la próxima publicación). Si querés mantener el title viejo por compat, hay que revertir solo esa línea.
+- IMPORTANT: Changing the `title` in the PUT to Confluence **renames** the existing page (on the next publish). To keep the old title for compatibility, revert only that line.
 
-### 2026-05-27 — onTestCaseChange: auto-fill completo + reset residual
-- En `Qa_form.html` función `onTestCaseChange()`:
-  - Agregado bloque de RESET al inicio que limpia todo lo residual del TC anterior:
-    - estado / severidad / frecuencia (vars + botones .e-btn/.sev-btn)
+### 2026-05-27 — onTestCaseChange: full auto-fill + residual reset
+- In `Qa_form.html` function `onTestCaseChange()`:
+  - Added a RESET block at the start that clears everything residual from the previous TC:
+    - estado / severidad / frecuencia (vars + buttons .e-btn/.sev-btn)
     - row-severity, row-frecuencia (visibility)
     - checkboxes: reportar-bug, requiere-config, registrarEnBG, registrarEnQAAFinalizada
     - bg-assignee-wrap (visibility)
-    - uploadedFiles + configFiles (con re-render)
-    - obtenido-wrap, soluc-wrap, sugg-wrap (rebuild a una fila vacía)
-  - Agregado `setVal('url-pantalla', tc.urlPantalla)` que faltaba — ya está documentado en el schema (jira_editor.html)
-- Preserva: módulo, tester, fecha, versión (cosas globales que no cambian entre TCs)
-- Trigger: al seleccionar otro TC del select, no quedan rastros del anterior
+    - uploadedFiles + configFiles (with re-render)
+    - obtenido-wrap, soluc-wrap, sugg-wrap (rebuild to a single empty row)
+  - Added `setVal('url-pantalla', tc.urlPantalla)` that was missing — already documented in the schema (jira_editor.html)
+- Preserves: module, tester, date, version (global things that do not change between TCs)
+- Trigger: on selecting another TC from the select, no traces of the previous one remain
 
-### 2026-05-27 — Auditoría schema QA_STRUCTURE + fix doc
-- Verificación: cada campo del ejemplo en jira_editor.html (schema hint) SÍ se usa en el código
-- Encontrado UN campo usado pero no documentado: `tc.urlPantalla` (lo lee bulk-epic.js:_buildTCDescription → row "URL / Pantalla")
-- Fix: agregado a jira_editor.html schema hint con comentario "opcional → URL clickeable en la tabla de identificación"
-- Resto del schema confirmado correcto
+### 2026-05-27 — QA_STRUCTURE schema audit + doc fix
+- Verification: every field of the example in jira_editor.html (schema hint) IS used in the code
+- Found ONE field used but not documented: `tc.urlPantalla` (read by bulk-epic.js:_buildTCDescription → "URL / Pantalla" row)
+- Fix: added to the jira_editor.html schema hint with the comment "opcional → URL clickeable en la tabla de identificación"
+- The rest of the schema confirmed correct
 
-### 2026-05-26 — Resumen Confluence: links + quitar columnas duplicadas
-- En `agregarAlHistorialConfluence`:
-  - Removida la columna **Version** del cuadro métrica (ya está en el título de la macro y en la 1ra línea del body)
-  - Removida la columna **Fecha** (idem, ya está en el body)
-  - Tabla ahora arranca directamente con Total | Pass | Fail | Blocked | Retest | Actividades | Vinculados | Tasa
-  - Body del resumen agregada línea "Versión: <link>test-v003</link>" — link a la release page del proyecto QAA
-  - "BG Bugs reportados: N" → el N ahora es link clickeable a JQL `key in (...)` con todos los bugs reportados
-- URLs nuevas:
+### 2026-05-26 — Confluence summary: links + remove duplicate columns
+- In `agregarAlHistorialConfluence`:
+  - Removed the **Version** column from the metrics table (already in the macro title and the 1st line of the body)
+  - Removed the **Fecha** column (idem, already in the body)
+  - The table now starts directly with Total | Pass | Fail | Blocked | Retest | Actividades | Vinculados | Tasa
+  - Body of the summary got a "Versión: <link>test-v003</link>" line — link to the QAA project release page
+  - "BG Bugs reportados: N" → the N is now a clickable link to JQL `key in (...)` with all reported bugs
+- New URLs:
   - releasesUrl: `${JIRA_UI}/projects/QAA?selectedItem=com.atlassian.jira.jira-projects-plugin%3Arelease-page&status=no-filter`
-  - bgBugsJqlUrl: usa `key in (BG-XX,...)` con los bgIssues.key list
+  - bgBugsJqlUrl: uses `key in (BG-XX,...)` with the bgIssues.key list
 
-### 2026-05-26 — Fix paginación en obtenerDatosVersion (releases.js)
-- BUG: el modal de publicar versión mostraba Total=100, pero el filtro de history mostraba 118
-- ROOT CAUSE: el código usaba `startAt += 100` y `d.total` para paginar. La nueva API `/search/jql` de Jira Cloud:
-  - **Ignora `startAt`** (siempre devuelve la primera página)
-  - **No devuelve `total`** (es `undefined`)
-- Como `d.total = undefined`, `allIssues.length >= 0` era siempre true → salía del loop después de la primera página con 100 issues
-- FIX: cambiar a `nextPageToken` + `isLast` (igual que history.html). Es el mecanismo correcto de la API nueva.
-- Validado: test-v003 ahora devuelve 118 issues (100 + 18 en segunda página)
-- Impacta: Total / Pass / Fail / Blocked / Retest / Tasa / Actividades / Vinculados — todas las métricas del reporte Confluence
+### 2026-05-26 — Fix pagination in obtenerDatosVersion (releases.js)
+- BUG: the publish-version modal showed Total=100, but the history filter showed 118
+- ROOT CAUSE: the code used `startAt += 100` and `d.total` to paginate. The new Jira Cloud `/search/jql` API:
+  - **Ignores `startAt`** (always returns the first page)
+  - **Does not return `total`** (it is `undefined`)
+- Since `d.total = undefined`, `allIssues.length >= 0` was always true → it left the loop after the first page with 100 issues
+- FIX: switch to `nextPageToken` + `isLast` (same as history.html). It is the correct mechanism of the new API.
+- Validated: test-v003 now returns 118 issues (100 + 18 on the second page)
+- Impacts: Total / Pass / Fail / Blocked / Retest / Tasa / Actividades / Vinculados — all the Confluence report metrics
 
-### 2026-05-26 — Columna "Vinculados" en cuadro Confluence
-- Nueva columna entre Actividades y Tasa en la tabla métrica del reporte
-- En `obtenerDatosVersion`: nuevo bloque que hace 2 fetches
-  - GET QAA-172?fields=issuelinks → extrae BG keys enlazados al Epic
-  - JQL `key in (linked) AND labels = "{version}"` → cruza por label de versión
-  - Resultado: `stats.vinculados` (count) + `stats.vinculadosKeys` (array)
-- En `agregarAlHistorialConfluence`: columna nueva con color morado (#7c3aed) y link a JQL `key in (...)` para abrir esos BGs en Jira UI
-- Sin emojis (a pedido)
-- Validado: test-v003 → 9 vinculados (los 10 del Epic, menos BG-117 que es de versión anterior)
+### 2026-05-26 — "Vinculados" column in the Confluence table
+- New column between Actividades and Tasa in the report metrics table
+- In `obtenerDatosVersion`: new block that does 2 fetches
+  - GET QAA-172?fields=issuelinks → extracts BG keys linked to the Epic
+  - JQL `key in (linked) AND labels = "{version}"` → crosses by version label
+  - Result: `stats.vinculados` (count) + `stats.vinculadosKeys` (array)
+- In `agregarAlHistorialConfluence`: new column with purple color (#7c3aed) and link to JQL `key in (...)` to open those BGs in the Jira UI
+- No emojis (as requested)
+- Validated: test-v003 → 9 linked (the 10 of the Epic, minus BG-117 which is from a previous version)
 
-### 2026-05-26 — Filtro Enlazadas + Version combinados (history.html)
-- Investigación previa (vía curl): 9 de 10 BGs enlazados al Epic ya tenían label `test-v003`, BG-117 tenía `test-v002` (de versión anterior). 25 BGs totales con label test-v003 en general.
-- Mod en `buildJQL`: cuando `f-enlazadas` está activo Y hay versión en `f-version`, suma al JQL `AND labels = "{version}"`. Así combina enlazadas-al-Epic con versión sin pelearse con `project=QAA` (que sigue desactivado).
-- Validado vía curl:
-  - Solo enlazadas → 10
-  - Enlazadas + test-v003 → 9
-  - Enlazadas + test-v002 → 1 (BG-117)
+### 2026-05-26 — Combined Enlazadas + Version filter (history.html)
+- Prior investigation (via curl): 9 of 10 BGs linked to the Epic already had label `test-v003`, BG-117 had `test-v002` (previous version). 25 total BGs with label test-v003 overall.
+- Mod in `buildJQL`: when `f-enlazadas` is active AND there is a version in `f-version`, it adds `AND labels = "{version}"` to the JQL. This combines linked-to-Epic with version without fighting `project=QAA` (which stays disabled).
+- Validated via curl:
+  - Only linked → 10
+  - Linked + test-v003 → 9
+  - Linked + test-v002 → 1 (BG-117)
 
-### 2026-05-26 — bg_verificacion: agregar label de versión al BG
-- DESCUBRIMIENTO: el proyecto BG no tiene versiones definidas (versions son por-proyecto en Jira, no globales). Por eso los BGs no quedaban "asociados" a la versión del QA cycle.
-- Decisión: en vez de `fixVersions` (requeriría admin para crear la versión en BG project), usamos un LABEL en el BG con el mismo nombre que `versionActual` (ej. "test-v003")
-- En `sincronizarSubtareaQAA`: tras crear/actualizar QAA y la descripción del BG, ahora también:
-  - Lee `labels` del BG (nueva field en el fetch existente)
-  - Si `versionActual` no está como label, agrega un label nuevo y PUTea
-- Idempotente: skip si el label ya está
-- Beneficio: permite filtrar BGs por versión en history.html (vía `labels = "test-v003"`) y agruparlos en reportes Confluence
+### 2026-05-26 — bg_verificacion: add version label to the BG
+- DISCOVERY: the BG project has no versions defined (versions are per-project in Jira, not global). That is why BGs were not "associated" with the QA cycle version.
+- Decision: instead of `fixVersions` (which would require admin to create the version in the BG project), we use a LABEL on the BG with the same name as `versionActual` (e.g. "test-v003")
+- In `sincronizarSubtareaQAA`: after creating/updating QAA and the BG description, it now also:
+  - Reads the BG's `labels` (new field in the existing fetch)
+  - If `versionActual` is not present as a label, adds a new label and PUTs
+- Idempotent: skip if the label is already there
+- Benefit: allows filtering BGs by version in history.html (via `labels = "test-v003"`) and grouping them in Confluence reports
 
-### 2026-05-26 — buildJQL: short-circuit cuando f-enlazadas activo
-- v6 traía las 10 keys BG bien, pero buildJQL las combinaba con otros filtros QAA-específicos (fixVersion=test-vN, project=QAA) que filtraban los BGs fuera
-- Fix: cuando `f-enlazadas` está activo, buildJQL **short-circuita** y devuelve SOLO `key in (...) ORDER BY created DESC`, ignorando todos los otros filtros
-- Si el usuario quiere combinar con otros filtros, debe desactivar este checkbox (trade-off documentado en el código)
-- Validado: 10 BGs visibles en la tabla con summaries reales
+### 2026-05-26 — buildJQL: short-circuit when f-enlazadas active
+- v6 brought the 10 BG keys correctly, but buildJQL combined them with other QAA-specific filters (fixVersion=test-vN, project=QAA) that filtered the BGs out
+- Fix: when `f-enlazadas` is active, buildJQL **short-circuits** and returns ONLY `key in (...) ORDER BY created DESC`, ignoring all other filters
+- If the user wants to combine with other filters, they must uncheck this checkbox (trade-off documented in the code)
+- Validated: 10 BGs visible in the table with real summaries
 
-### 2026-05-26 — fetchEnlazadasKeys: v6 = simple, devuelve TODAS las linked
-- El usuario quería filtrar TODAS las Actividades vinculadas (incluyendo BG-, no solo QAA-)
-- Saqué el two-hop: vuelve a 1 sola request
-- `fetchEnlazadasKeys` ahora devuelve todas las keys del field `issuelinks` de QAA-172 (sin filtrar prefijo) excepto QAA-172 mismo
-- `buildJQL` ajustado: cuando `f-enlazadas` está activo, saca el `project = QAA` del base. El `key in (...)` ya limita el universo
-- Validado vía curl: 10 keys (todas BG- en este Jira)
+### 2026-05-26 — fetchEnlazadasKeys: v6 = simple, returns ALL linked
+- The user wanted to filter ALL linked Activities (including BG-, not just QAA-)
+- Removed the two-hop: back to a single request
+- `fetchEnlazadasKeys` now returns all keys of QAA-172's `issuelinks` field (without prefix filtering) except QAA-172 itself
+- `buildJQL` adjusted: when `f-enlazadas` is active, it removes `project = QAA` from the base. The `key in (...)` already limits the universe
+- Validated via curl: 10 keys (all BG- in this Jira)
 
-### 2026-05-26 — fetchEnlazadasKeys: v5 con two-hop (DESCARTADA)
-- Iteraciones del checkbox `#f-enlazadas` en `history.html`:
-  - v1: walk de TODOS los BG paginados (lento)
-  - v2: JQL `linkedIssues("QAA-172", "relates to")` — devolvía 0
-  - v3: `GET /issue/QAA-172?fields=issuelinks` filtrando QAA — devolvía 0
-  - v4: igual que v3 sin filtro de tipo — seguía 0
-  - **v5 (actual)**: two-hop lookup
-- DESCUBRIMIENTO clave (vía curl directo al server proxy): QAA-172 NO tiene links a QAAs. Solo a BGs (10 BGs, vienen del checkbox "Agregar al Epic")
-- El link Relates QAA-task ↔ QAA-172 que mencionaba el comentario de bg_verificacion.html EN LA PRÁCTICA NO se crea (o se borró). El POST puede estar fallando silenciosamente
-- v5 hace:
-  - Hop 1: GET /issue/QAA-172?fields=issuelinks → extrae BG keys
-  - Hop 2: Promise.all() de GETs a cada BG → extrae QAA keys de sus issuelinks
-- 1 + N requests pero todo paralelo. Total ~1-2s
-- Validado: 10 BGs → 7 QAAs únicas (verificado vía `node` + curl)
+### 2026-05-26 — fetchEnlazadasKeys: v5 with two-hop (DISCARDED)
+- Iterations of the `#f-enlazadas` checkbox in `history.html`:
+  - v1: walk of ALL paginated BGs (slow)
+  - v2: JQL `linkedIssues("QAA-172", "relates to")` — returned 0
+  - v3: `GET /issue/QAA-172?fields=issuelinks` filtering QAA — returned 0
+  - v4: same as v3 without type filter — still 0
+  - **v5 (current)**: two-hop lookup
+- Key DISCOVERY (via direct curl to the proxy server): QAA-172 has NO links to QAAs. Only to BGs (10 BGs, coming from the "Agregar al Epic" checkbox)
+- The Relates QAA-task ↔ QAA-172 link mentioned in the bg_verificacion.html comment IN PRACTICE is NOT created (or was deleted). The POST may be failing silently
+- v5 does:
+  - Hop 1: GET /issue/QAA-172?fields=issuelinks → extracts BG keys
+  - Hop 2: Promise.all() of GETs to each BG → extracts QAA keys from their issuelinks
+- 1 + N requests but all parallel. Total ~1-2s
+- Validated: 10 BGs → 7 unique QAAs (verified via `node` + curl)
 
-### 2026-05-26 — Columna "Actividades" en cuadro Confluence
-- En `releases.js` (`obtenerDatosVersion`): agregado `actividadIssues = allIssues.filter(i => i.fields.parent?.key === 'QAA-179')` y `stats.actividades`
-- En `agregarAlHistorialConfluence`: nueva columna "Actividades" entre Retest y Tasa, con count clickeable que linkea a JQL `parent = QAA-179` filtrado por versión
-- Color azul (#0369a1) para distinguir de las otras métricas
-- Las actividades ya aparecían en `total` y en `byModule` (bajo QAA-179), pero invisible en el resumen de métricas — ahora se ven
+### 2026-05-26 — "Actividades" column in the Confluence table
+- In `releases.js` (`obtenerDatosVersion`): added `actividadIssues = allIssues.filter(i => i.fields.parent?.key === 'QAA-179')` and `stats.actividades`
+- In `agregarAlHistorialConfluence`: new "Actividades" column between Retest and Tasa, with a clickable count that links to JQL `parent = QAA-179` filtered by version
+- Blue color (#0369a1) to distinguish it from the other metrics
+- The activities already appeared in `total` and in `byModule` (under QAA-179), but invisible in the metrics summary — now they show
 
-### 2026-05-26 — Crear estructura `context/` y `CLAUDE.md`
-- Establecida la documentación maestra del proyecto en `/home/sebastian/QA/context/`
-- Creado `/home/sebastian/QA/CLAUDE.md` como entry point automático para Claude
-- Obligación: leer context/ al inicio de cada sesión, actualizar tras cambios significativos
+### 2026-05-26 — Create the `context/` structure and `CLAUDE.md`
+- Established the project's master documentation in `/home/sebastian/QA/context/`
+- Created `/home/sebastian/QA/CLAUDE.md` as the automatic entry point for Claude
+- Obligation: read context/ at the start of each session, update after significant changes
 
-### 2026-05-26 — Links clickeables en descripción ADF de bulk
-- En `bulk-epic.js`, la tabla "Identificación del Test Case" ahora linkea:
-  - Módulo → Epic en Jira (browse)
-  - Versión → página de releases QAA
-  - Historia → autodetect: si es Jira key → browse, si es URL → URL, sino texto plano
-  - URL / Pantalla → si es URL, link
-- Helpers nuevos en bulk-epic.js: `_esJiraKey`, `_esUrl`, `_mkLinkText`, `_mkTableCellLink`, `_mkTableRowLink`, `_mkTableRowSmart`
-- Constantes: `_JIRA_BROWSE`, `_JIRA_VERSIONS`
+### 2026-05-26 — Clickable links in the bulk ADF description
+- In `bulk-epic.js`, the "Identificación del Test Case" table now links:
+  - Módulo → Epic in Jira (browse)
+  - Versión → QAA releases page
+  - Historia → autodetect: if a Jira key → browse, if a URL → URL, else plain text
+  - URL / Pantalla → if a URL, link
+- New helpers in bulk-epic.js: `_esJiraKey`, `_esUrl`, `_mkLinkText`, `_mkTableCellLink`, `_mkTableRowLink`, `_mkTableRowSmart`
+- Constants: `_JIRA_BROWSE`, `_JIRA_VERSIONS`
 
-### 2026-05-26 — Quitar panel "Resultado" del ADF bulk
-- En `_buildTCDescription` de `bulk-epic.js`, removido el panel con heading "Resultado" + "Estado: Pass" + tc.impacto
-- Razón: el usuario no quería ver "Los usuarios no pueden..." en la descripción (era del `impacto` del structure JSON)
-- El estado pasa/falla queda reflejado solo en los **labels** del issue
+### 2026-05-26 — Remove the "Resultado" panel from the bulk ADF
+- In `_buildTCDescription` of `bulk-epic.js`, removed the panel with heading "Resultado" + "Estado: Pass" + tc.impacto
+- Reason: the user did not want to see "Los usuarios no pueden..." in the description (it came from the `impacto` of the structure JSON)
+- The pass/fail state is reflected only in the issue's **labels**
 
-### 2026-05-26 — Banner con links de issues creados
-- Tras bulk creation, el banner ahora muestra cada issue creado como link: `TC-01 → QAA-200`
-- Errores individuales debajo si hubo
-- Cambio de `textContent` a `innerHTML` (todo escapeado con `esc()`)
+### 2026-05-26 — Banner with links of created issues
+- After bulk creation, the banner now shows each created issue as a link: `TC-01 → QAA-200`
+- Individual errors below if any
+- Changed from `textContent` to `innerHTML` (all escaped with `esc()`)
 
-### 2026-05-26 — Fix priority 400 + select de Prioridad
-- `tc.prioridad` del structure JSON podía traer cualquier valor → Jira rechazaba
-- Solución: agregar SELECT de Prioridad en el form bulk (Medium / Highest / High / Low / Lowest), igual que Qa_form
-- `bulkState.prioridad` reemplaza el uso de `tc.prioridad` en el POST
-- Removido el helper `_normalizarPriority` (innecesario con el select)
+### 2026-05-26 — Fix priority 400 + Priority select
+- `tc.prioridad` from the structure JSON could bring any value → Jira rejected it
+- Solution: add a Priority SELECT in the bulk form (Medium / Highest / High / Low / Lowest), same as Qa_form
+- `bulkState.prioridad` replaces the use of `tc.prioridad` in the POST
+- Removed the helper `_normalizarPriority` (unnecessary with the select)
 
-### 2026-05-26 — Botón "Finalizar en QAA" → checkbox FN QAA
-- Reemplazado el botón morado "Finalizar en QAA" por un checkbox con clase `checkbox-label`
-- Funciona como el `registrarEnQAAFinalizada` de Qa_form: al marcar + Generar, transiciona cada TC creado a Finalizada
-- `bulkState.finalizar` (boolean) controla el comportamiento
+### 2026-05-26 — "Finalizar en QAA" button → FN QAA checkbox
+- Replaced the purple "Finalizar en QAA" button with a checkbox with class `checkbox-label`
+- Works like Qa_form's `registrarEnQAAFinalizada`: on check + Generate, it transitions each created TC to Finalizada
+- `bulkState.finalizar` (boolean) controls the behavior
 
-### 2026-05-26 — Reescribir bulk para filtrar como `missing-panel`
-- Cambio fundamental: el bulk ahora no muestra "tareas QAA no-Done", sino **TCs definidos en `estructura.testCases` que NO tienen issue todavía**
-- Mismo algoritmo que `missing-panel` en history.html
-- Construye descripción ADF idéntica a Qa_form (panel info → tabla → precondiciones → datos → pasos → esperado → obtenido → postcondiciones)
-- POST a `/issue` con parent=epic, customfield_10014=epic, labels, fixVersion, etc.
+### 2026-05-26 — Rewrite bulk to filter like `missing-panel`
+- Fundamental change: the bulk now does not show "non-Done QAA tasks", but **TCs defined in `estructura.testCases` that do NOT have an issue yet**
+- Same algorithm as `missing-panel` in history.html
+- Builds an ADF description identical to Qa_form (info panel → table → preconditions → data → steps → expected → obtained → postconditions)
+- POST to `/issue` with parent=epic, customfield_10014=epic, labels, fixVersion, etc.
 
-### 2026-05-26 — Extraer bulk a `bulk-epic.js`
-- Movida toda la lógica del modo bulk de bg_verificacion.html a un archivo separado
-- Incluido vía `<script src="/bulk-epic.js"></script>` en el head
-- Depende de globales del host (JIRA_BASE, esc, mk*, etc.)
+### 2026-05-26 — Extract bulk to `bulk-epic.js`
+- Moved all the bulk-mode logic out of bg_verificacion.html into a separate file
+- Included via `<script src="/bulk-epic.js"></script>` in the head
+- Depends on host globals (JIRA_BASE, esc, mk*, etc.)
 
-### 2026-05-26 — Tab system → botones en header
-- En vez de barra de tabs separada, los dos modos son botones en `.hdr-right`: "Verificación" y "Bulk Epic"
-- Estilo `btn-hdr-history` + `btn-hdr-tab.active` con gradient verde
-- `cambiarTab(name)` usa selector `[data-tab]` (universal)
+### 2026-05-26 — Tab system → header buttons
+- Instead of a separate tab bar, the two modes are buttons in `.hdr-right`: "Verificación" and "Bulk Epic"
+- Style `btn-hdr-history` + `btn-hdr-tab.active` with a green gradient
+- `cambiarTab(name)` uses selector `[data-tab]` (universal)
 
-### 2026-05-26 — Comprobador idempotente en sincronizarSubtareaQAA
-- Cambio mayor en bg_verificacion.html: `crearSubtareaEnQAA` → `sincronizarSubtareaQAA`
-- Busca subtarea existente por label `bg-{key}` (JQL) o issueLinks (fallback)
-- Si existe: PUT solo del diff (description, priority, labels, fixVersions, summary)
-- Adjuntos: diff por filename, copia los faltantes
-- Links: chequea con `_existeLink` antes de crear
-- Description BG: chequea con `_adfContieneKey(adf, qaaKey)` antes de append
-- Retry sin priority si PUT da 400 (porque screen de edit no acepta priority)
-- Badge azul `↻ Actualizada` vs verde `✓ Creada`
+### 2026-05-26 — Idempotent checker in sincronizarSubtareaQAA
+- Major change in bg_verificacion.html: `crearSubtareaEnQAA` → `sincronizarSubtareaQAA`
+- Looks up an existing subtask by label `bg-{key}` (JQL) or issueLinks (fallback)
+- If it exists: PUT only the diff (description, priority, labels, fixVersions, summary)
+- Attachments: diff by filename, copies the missing ones
+- Links: checks with `_existeLink` before creating
+- BG description: checks with `_adfContieneKey(adf, qaaKey)` before appending
+- Retry without priority if the PUT returns 400 (because the edit screen does not accept priority)
+- Blue badge `↻ Actualizada` vs green `✓ Creada`
 
-### Anterior — Real-time BG state changes
-- Select `BG:` en cada card de la cola ahora hace POST a `/transitions` en tiempo real al cambiar
-- Flag `item.bgTransitionAplicada` evita doble transición en submit
-- Label muestra estado actual: `BG (Under Review):` → al cambiar → `BG (Done) ✓`
+### Earlier — Real-time BG state changes
+- The `BG:` select on each queue card now POSTs to `/transitions` in real time on change
+- Flag `item.bgTransitionAplicada` avoids a double transition on submit
+- Label shows the current status: `BG (Under Review):` → on change → `BG (Done) ✓`
 
-### Anterior — Unificar GET en addToQueue
-- Antes: 2 fetches (transitions + issuelinks)
-- Ahora: 1 fetch con `?fields=status,issuelinks&expand=transitions`
-- Trae también el estado actual del BG para mostrarlo en el label
+### Earlier — Unify GET in addToQueue
+- Before: 2 fetches (transitions + issuelinks)
+- Now: 1 fetch with `?fields=status,issuelinks&expand=transitions`
+- Also brings the BG's current status to show it in the label
 
-### Anterior — Badge-key clickeable
-- Los `<span class="badge-key">` (BG-123, QAA-XX) ahora son `<a>` con link a Jira
-- `target="_blank"` + `rel="noopener noreferrer"` + `event.stopPropagation()` (para drag)
+### Earlier — Clickable badge-key
+- The `<span class="badge-key">` (BG-123, QAA-XX) are now `<a>` with a link to Jira
+- `target="_blank"` + `rel="noopener noreferrer"` + `event.stopPropagation()` (for drag)
 
-## Bugs conocidos / TODOs
+## Known bugs / TODOs
 
-- [ ] **Idempotencia parcial en bulk**: el `_buildTCDescription` siempre crea desde cero. Si se vuelve a generar el mismo TC (forzando con label match), se duplica el issue. Mitigado porque el filtro `missing` ya skipea TCs con issue existente — pero si la versión cambia, podría duplicar.
-- [ ] **Severidad/Frecuencia en Bulk**: no se aplica si es "Falla". El flow de bulk pierde esa info que sí tiene Qa_form.
-- [ ] **BG bug auto-crear en Falla bulk**: el bulk no crea BG bugs cuando es Fail (a diferencia de Qa_form con checkbox "reportar-bug"). Si se necesita, agregar.
-- [ ] **User link en "Tester"**: actualmente "QA Bulk" texto plano. Si se obtiene accountId, podría linkear a `/jira/people/{accountId}`.
+- [ ] **Partial idempotency in bulk**: `_buildTCDescription` always creates from scratch. If the same TC is generated again (forcing via label match), the issue is duplicated. Mitigated because the `missing` filter already skips TCs with an existing issue — but if the version changes, it could duplicate.
+- [ ] **Severity/Frequency in Bulk**: not applied when it is "Fail". The bulk flow loses that info that Qa_form does have.
+- [ ] **Auto-create BG bug on bulk Fail**: the bulk does not create BG bugs when it is Fail (unlike Qa_form with the "reportar-bug" checkbox). Add it if needed.
+- [ ] **User link in "Tester"**: currently "QA Bulk" plain text. If the accountId is obtained, it could link to `/jira/people/{accountId}`.
 
-## Archivos modificados en esta sesión
+## Files modified in this session
 
-- `bg_verificacion.html` — múltiples (real-time, idempotencia, badge-key links, tab header, CSS tabs, CSS checkbox-label)
-- `bulk-epic.js` — creado y reescrito varias veces (filtro missing, ADF builder, priority select, FN QAA checkbox, banner con links, ADF links)
-- `CLAUDE.md` — creado
-- `context/` — creado completo
+- `bg_verificacion.html` — multiple (real-time, idempotency, badge-key links, tab header, CSS tabs, CSS checkbox-label)
+- `bulk-epic.js` — created and rewritten several times (missing filter, ADF builder, priority select, FN QAA checkbox, banner with links, ADF links)
+- `CLAUDE.md` — created
+- `context/` — created in full
 
-## Cosas a no olvidar para la próxima sesión
+## Things not to forget for the next session
 
-1. **Hard refresh** después de tocar JS — el server pone `Cache-Control: no-cache` pero por las dudas
-2. **versionActual** se auto-detecta solo en bg_verificacion.html — si se rompe, ahí está la lógica
-3. **Los customfields 10271 y 10337** los inyecta Server.JS, NO mandarlos desde el cliente
-4. **Priority en PUT** suele fallar — retry sin priority es el patrón
-5. **ADF orderedList vacía** rechazada por Jira — siempre con al menos un item
+1. **Hard refresh** after touching JS — the server sets `Cache-Control: no-cache` but just in case
+2. **versionActual** is auto-detected only in bg_verificacion.html — if it breaks, the logic is there
+3. **Custom fields 10271 and 10337** are injected by Server.JS, do NOT send them from the client
+4. **Priority in PUT** usually fails — retry without priority is the pattern
+5. **Empty ADF orderedList** is rejected by Jira — always with at least one item
 
-## Para actualizar este archivo
+## To update this file
 
-Tras cualquier cambio significativo:
-1. Agregar nueva entrada al inicio de "Cambios recientes" con fecha
-2. Mover items completados de TODO a "Cambios recientes"
-3. Sumar bugs nuevos a "Bugs conocidos / TODOs" si los hay
-4. Actualizar el header "Última actualización" con la fecha de hoy
+After any significant change:
+1. Add a new entry at the top of "Recent changes" with the date
+2. Move completed items from TODO to "Recent changes"
+3. Add new bugs to "Known bugs / TODOs" if any
+4. Update the "Last updated" header with today's date
